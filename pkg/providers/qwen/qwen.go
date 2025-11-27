@@ -1,0 +1,896 @@
+// Package qwen provides integration with Qwen (Alibaba Cloud) AI models
+// supporting both API key and OAuth authentication, streaming, and tool calling.
+package qwen
+
+import (
+	"bufio"
+	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"log"
+	"net/http"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/base"
+	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common"
+	"github.com/cecil-the-coder/ai-provider-kit/pkg/ratelimit"
+	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
+	"github.com/google/uuid"
+	"golang.org/x/time/rate"
+)
+
+// QwenOAuthToken represents an OAuth token for Qwen API
+type QwenOAuthToken struct {
+	AccessToken  string `json:"access_token"`
+	RefreshToken string `json:"refresh_token"`
+	TokenType    string `json:"token_type"`
+	ExpiresAt    int64  `json:"expires_at"`
+}
+
+// QwenProvider implements Provider interface for Qwen (Alibaba Cloud)
+type QwenProvider struct {
+	*base.BaseProvider
+	mu                sync.RWMutex
+	httpClient        *http.Client
+	authHelper        *common.AuthHelper
+	rateLimitHelper   *common.RateLimitHelper
+	rateLimitMutex    sync.RWMutex
+	clientSideLimiter *rate.Limiter // Client-side rate limiting (Qwen doesn't provide headers)
+}
+
+// NewQwenProvider creates a new Qwen provider
+func NewQwenProvider(config types.ProviderConfig) *QwenProvider {
+	// Use explicit timeout like the working debug implementation
+	client := &http.Client{
+		Timeout: 10 * time.Second,
+	}
+
+	// Create auth helper
+	authHelper := common.NewAuthHelper("qwen", config, client)
+
+	// Setup API keys using shared helper
+	authHelper.SetupAPIKeys()
+
+	p := &QwenProvider{
+		BaseProvider:    base.NewBaseProvider("qwen", config, client, log.Default()),
+		httpClient:      client,
+		authHelper:      authHelper,
+		rateLimitHelper: common.NewRateLimitHelper(ratelimit.NewQwenParser(true)), // Enable logging to capture real headers
+		// Client-side rate limiting (Qwen free tier: 60 requests/minute, 2000/day)
+		// NOTE: Qwen API does NOT provide rate limit headers, so we use client-side token bucket
+		clientSideLimiter: rate.NewLimiter(rate.Every(time.Minute/60), 60),
+	}
+
+	// Setup OAuth using shared helper with refresh function (now that provider is created)
+	p.authHelper.SetupOAuth(p.refreshOAuthTokenForMulti)
+
+	return p
+}
+
+// Name returns the provider name
+func (p *QwenProvider) Name() string {
+	return "Qwen"
+}
+
+// Type returns the provider type
+func (p *QwenProvider) Type() types.ProviderType {
+	return types.ProviderTypeQwen
+}
+
+// Description returns the provider description
+func (p *QwenProvider) Description() string {
+	return "Qwen (Alibaba Cloud) with multi-OAuth failover and load balancing"
+}
+
+// GetModels returns available Qwen models
+func (p *QwenProvider) GetModels(ctx context.Context) ([]types.Model, error) {
+	if !p.IsAuthenticated() {
+		return nil, fmt.Errorf("not authenticated")
+	}
+
+	// Return static list of known Qwen models
+	models := []types.Model{
+		{
+			ID:                  "qwen-turbo",
+			Name:                "Qwen Turbo",
+			Provider:            p.Type(),
+			MaxTokens:           8192,
+			SupportsStreaming:   true,
+			SupportsToolCalling: true,
+			Description:         "Qwen's fast and efficient model for general tasks",
+		},
+		{
+			ID:                  "qwen-plus",
+			Name:                "Qwen Plus",
+			Provider:            p.Type(),
+			MaxTokens:           32768,
+			SupportsStreaming:   true,
+			SupportsToolCalling: true,
+			Description:         "Qwen's balanced model with improved capabilities",
+		},
+		{
+			ID:                  "qwen-max",
+			Name:                "Qwen Max",
+			Provider:            p.Type(),
+			MaxTokens:           8192,
+			SupportsStreaming:   true,
+			SupportsToolCalling: true,
+			Description:         "Qwen's most capable model for complex tasks",
+		},
+		{
+			ID:                  "qwen-max-longcontext",
+			Name:                "Qwen Max Long Context",
+			Provider:            p.Type(),
+			MaxTokens:           32768,
+			SupportsStreaming:   true,
+			SupportsToolCalling: true,
+			Description:         "Qwen's model with extended context window",
+		},
+		{
+			ID:                  "qwen-coder-turbo",
+			Name:                "Qwen Coder Turbo",
+			Provider:            p.Type(),
+			MaxTokens:           8192,
+			SupportsStreaming:   true,
+			SupportsToolCalling: true,
+			Description:         "Qwen's fast model specialized for code generation",
+		},
+		{
+			ID:                  "qwen-coder-plus",
+			Name:                "Qwen Coder Plus",
+			Provider:            p.Type(),
+			MaxTokens:           32768,
+			SupportsStreaming:   true,
+			SupportsToolCalling: true,
+			Description:         "Qwen's balanced code generation model",
+		},
+	}
+	return models, nil
+}
+
+// GetDefaultModel returns the default model
+func (p *QwenProvider) GetDefaultModel() string {
+	config := p.GetConfig()
+	if config.DefaultModel != "" {
+		return config.DefaultModel
+	}
+	return "qwen-turbo" // Default to qwen-turbo
+}
+
+// GenerateChatCompletion generates a chat completion
+func (p *QwenProvider) GenerateChatCompletion(
+	ctx context.Context,
+	options types.GenerateOptions,
+) (types.ChatCompletionStream, error) {
+	// Increment request count at the start
+	p.IncrementRequestCount()
+
+	// Track start time for latency measurement
+	startTime := time.Now()
+
+	// Client-side rate limiting (Qwen doesn't provide rate limit headers)
+	// Use token bucket algorithm to enforce free tier limits: 60 RPM, 2000/day
+	waitCtx, cancel := context.WithTimeout(ctx, time.Second*10)
+	defer cancel()
+
+	p.rateLimitMutex.RLock()
+	limiter := p.clientSideLimiter
+	p.rateLimitMutex.RUnlock()
+
+	if err := limiter.Wait(waitCtx); err != nil {
+		p.RecordError(err)
+		return nil, fmt.Errorf("rate limit wait: %w", err)
+	}
+
+	// Check if streaming is requested
+	if options.Stream {
+		// Handle streaming with authentication method selection
+		var stream types.ChatCompletionStream
+		var err error
+
+		switch {
+		case p.authHelper.OAuthManager != nil:
+			stream, err = p.executeStreamWithOAuth(ctx, options)
+		case p.authHelper.KeyManager != nil:
+			stream, err = p.executeStreamWithAPIKey(ctx, options)
+		default:
+			err = fmt.Errorf("no authentication method configured")
+		}
+
+		if err != nil {
+			p.RecordError(err)
+			return nil, err
+		}
+		latency := time.Since(startTime)
+		p.RecordSuccess(latency, 0) // Tokens will be counted as stream is consumed
+		return stream, nil
+	}
+
+	// Non-streaming path
+	var responseMessage types.ChatMessage
+	var usage *types.Usage
+	var err error
+
+	switch {
+	case p.authHelper.OAuthManager != nil:
+		// Use OAuth with automatic failover and refresh
+		responseMessage, usage, _, err = p.executeWithOAuthMessage(ctx, options)
+	case p.authHelper.KeyManager != nil:
+		// Use API key authentication
+		responseMessage, usage, _, err = p.executeWithAPIKeyMessage(ctx, options)
+	default:
+		err = fmt.Errorf("no authentication method configured")
+	}
+
+	if err != nil {
+		p.RecordError(err)
+		return nil, err
+	}
+
+	// Record success with latency and token usage
+	latency := time.Since(startTime)
+	var tokensUsed int64
+	if usage != nil {
+		tokensUsed = int64(usage.TotalTokens)
+	}
+	p.RecordSuccess(latency, tokensUsed)
+
+	// Return stream with full message support (including tool calls)
+	var usageValue types.Usage
+	if usage != nil {
+		usageValue = *usage
+	}
+
+	chunk := types.ChatCompletionChunk{
+		Content: responseMessage.Content,
+		Done:    true,
+		Usage:   usageValue,
+	}
+
+	// Include tool calls if present
+	if len(responseMessage.ToolCalls) > 0 {
+		chunk.Choices = []types.ChatChoice{
+			{
+				Message: responseMessage,
+			},
+		}
+	}
+
+	return &QwenStreamWithMessage{
+		chunk:  chunk,
+		closed: false,
+	}, nil
+}
+
+// buildQwenRequest builds a Qwen API request from GenerateOptions
+func (p *QwenProvider) buildQwenRequest(options types.GenerateOptions) QwenRequest {
+	// Determine which model to use: options.Model takes precedence over default
+	model := options.Model
+	if model == "" {
+		config := p.GetConfig()
+		model = config.DefaultModel
+		if model == "" {
+			model = p.GetDefaultModel()
+		}
+	}
+
+	// Convert messages to Qwen format
+	messages := []QwenMessage{}
+	if len(options.Messages) > 0 {
+		for _, msg := range options.Messages {
+			qwenMsg := QwenMessage{
+				Role:    msg.Role,
+				Content: msg.Content,
+			}
+
+			// Convert tool calls if present
+			if len(msg.ToolCalls) > 0 {
+				qwenMsg.ToolCalls = convertToQwenToolCalls(msg.ToolCalls)
+			}
+
+			// Include tool call ID for tool response messages
+			if msg.ToolCallID != "" {
+				qwenMsg.ToolCallID = msg.ToolCallID
+			}
+
+			messages = append(messages, qwenMsg)
+		}
+	} else if options.Prompt != "" {
+		// Legacy prompt support
+		messages = append(messages, QwenMessage{
+			Role:    "user",
+			Content: options.Prompt,
+		})
+	}
+
+	// Set default values for temperature and max tokens if not provided
+	temperature := options.Temperature
+	if temperature == 0 {
+		temperature = 0.7
+	}
+
+	maxTokens := options.MaxTokens
+	if maxTokens == 0 {
+		maxTokens = 4096
+	}
+
+	request := QwenRequest{
+		Model:       model,
+		Messages:    messages,
+		MaxTokens:   maxTokens,
+		Temperature: temperature,
+		Stream:      options.Stream,
+	}
+
+	// Convert tools if provided
+	if len(options.Tools) > 0 {
+		request.Tools = convertToQwenTools(options.Tools)
+		// ToolChoice defaults to "auto" when tools are provided (Qwen's default behavior)
+	}
+
+	return request
+}
+
+// executeWithOAuthMessage executes a request using OAuth authentication and returns full message
+func (p *QwenProvider) executeWithOAuthMessage(ctx context.Context, options types.GenerateOptions) (types.ChatMessage, *types.Usage, string, error) {
+	providerConfig := p.GetConfig()
+
+	// Get model and base URL
+	model := p.GetDefaultModel()
+	baseURL := providerConfig.BaseURL
+	if baseURL == "" {
+		baseURL = "https://portal.qwen.ai/v1"
+	}
+
+	// Build request using the new helper
+	request := p.buildQwenRequest(options)
+
+	// Use auth helper OAuth manager for automatic failover and refresh
+	var responseMessage types.ChatMessage
+	_, usage, err := p.authHelper.OAuthManager.ExecuteWithFailover(ctx,
+		func(ctx context.Context, cred *types.OAuthCredentialSet) (string, *types.Usage, error) {
+			// Make API call with this credential's access token
+			msg, u, err := p.makeAPICallWithMessage(ctx, baseURL+"/chat/completions", request, cred.AccessToken)
+			if err != nil {
+				return "", nil, err
+			}
+			responseMessage = msg
+			return msg.Content, u, nil
+		})
+
+	if err != nil {
+		return types.ChatMessage{}, nil, "", err
+	}
+
+	return responseMessage, usage, model, nil
+}
+
+// executeWithAPIKeyMessage executes a request using API key authentication and returns full message
+func (p *QwenProvider) executeWithAPIKeyMessage(ctx context.Context, options types.GenerateOptions) (types.ChatMessage, *types.Usage, string, error) {
+	providerConfig := p.GetConfig()
+
+	// Determine API key to use
+	var authToken string
+	switch {
+	case p.authHelper.KeyManager != nil && len(p.authHelper.KeyManager.GetKeys()) > 0:
+		authToken = p.authHelper.KeyManager.GetKeys()[0]
+	case providerConfig.APIKey != "":
+		authToken = providerConfig.APIKey
+	default:
+		return types.ChatMessage{}, nil, "", fmt.Errorf("no API key configured for qwen")
+	}
+
+	// Get model and base URL
+	model := p.GetDefaultModel()
+	baseURL := providerConfig.BaseURL
+	if baseURL == "" {
+		baseURL = "https://portal.qwen.ai/v1"
+	}
+
+	// Build request using the new helper
+	request := p.buildQwenRequest(options)
+
+	// Make API call with message support
+	message, usage, err := p.makeAPICallWithMessage(ctx, baseURL+"/chat/completions", request, authToken)
+	if err != nil {
+		return types.ChatMessage{}, nil, "", fmt.Errorf("qwen API call failed: %w", err)
+	}
+
+	return message, usage, model, nil
+}
+
+// makeAPICallWithMessage makes an API call to Qwen and returns a ChatMessage with tool call support
+func (p *QwenProvider) makeAPICallWithMessage(ctx context.Context, url string, request QwenRequest, authToken string) (types.ChatMessage, *types.Usage, error) {
+	response, err := p.makeAPICall(ctx, url, request, authToken)
+	if err != nil {
+		return types.ChatMessage{}, nil, err
+	}
+
+	if len(response.Choices) == 0 {
+		return types.ChatMessage{}, nil, fmt.Errorf("no choices in Qwen API response")
+	}
+
+	// Extract message from response
+	qwenMsg := response.Choices[0].Message
+
+	// Convert to universal format
+	message := types.ChatMessage{
+		Role:    qwenMsg.Role,
+		Content: qwenMsg.Content,
+	}
+
+	// Convert tool calls if present
+	if len(qwenMsg.ToolCalls) > 0 {
+		message.ToolCalls = convertQwenToolCallsToUniversal(qwenMsg.ToolCalls)
+	}
+
+	// Convert usage
+	usage := &types.Usage{
+		PromptTokens:     response.Usage.PromptTokens,
+		CompletionTokens: response.Usage.CompletionTokens,
+		TotalTokens:      response.Usage.TotalTokens,
+	}
+
+	return message, usage, nil
+}
+
+// makeAPICall makes an API call to Qwen
+func (p *QwenProvider) makeAPICall(ctx context.Context, url string, request QwenRequest, authToken string) (*QwenResponse, error) {
+	jsonBody, err := json.Marshal(request)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonBody))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", authToken))
+
+	// Log the request
+	p.LogRequest("POST", url, map[string]string{
+		"Content-Type":  "application/json",
+		"Authorization": "Bearer ***",
+	}, request)
+
+	startTime := time.Now()
+	resp, err := p.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("request failed: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }() //nolint:staticcheck // Empty branch is intentional - we ignore close errors
+
+	duration := time.Since(startTime)
+	p.LogResponse(resp, duration)
+
+	// Parse rate limit headers (flexible multi-format parser)
+	p.rateLimitHelper.ParseAndUpdateRateLimits(resp.Header, request.Model)
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(body))
+	}
+
+	var response QwenResponse
+	if err := json.Unmarshal(body, &response); err != nil {
+		return nil, fmt.Errorf("failed to parse API response: %w", err)
+	}
+
+	return &response, nil
+}
+
+// refreshOAuthTokenForMulti implements Qwen OAuth token refresh for multi-OAuth
+func (p *QwenProvider) refreshOAuthTokenForMulti(ctx context.Context, cred *types.OAuthCredentialSet) (*types.OAuthCredentialSet, error) {
+	log.Printf("Qwen: Refreshing OAuth token for credential %s", cred.ID)
+
+	// Use Qwen's hardcoded client ID if no custom client_id is provided
+	clientID := cred.ClientID
+	if clientID == "" {
+		clientID = "f0304373b74a44d2b584a3fb70ca9e56" // Qwen's public client ID
+	}
+
+	// Use direct string formatting like the working debug tool (not url.Values)
+	data := fmt.Sprintf("grant_type=refresh_token&refresh_token=%s&client_id=%s", cred.RefreshToken, clientID)
+
+	// Only include client_secret if it's not empty (Qwen device flow doesn't use it)
+	if cred.ClientSecret != "" {
+		data += fmt.Sprintf("&client_secret=%s", cred.ClientSecret)
+	}
+
+	// Use Qwen OAuth endpoint
+	//nolint:gosec // This is a public OAuth endpoint, not a credential
+	tokenURL := "https://chat.qwen.ai/api/v1/oauth2/token"
+
+	// Create request
+	req, err := http.NewRequest("POST", tokenURL, strings.NewReader(data))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create token refresh request: %w", err)
+	}
+
+	// Add headers
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("x-request-id", uuid.New().String())
+	req.Header.Set("User-Agent", "AI-Provider-Kit/1.0")
+
+	// Create a fresh HTTP client for OAuth refresh
+	oauthClient := &http.Client{
+		Timeout: 10 * time.Second,
+	}
+
+	resp, err := oauthClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to refresh token: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }() //nolint:staticcheck // Empty branch is intentional - we ignore close errors
+
+	if resp.StatusCode != http.StatusOK {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("token refresh failed with status %d: %s", resp.StatusCode, string(bodyBytes))
+	}
+
+	var refreshResponse struct {
+		AccessToken  string `json:"access_token"`
+		RefreshToken string `json:"refresh_token"`
+		ExpiresIn    int64  `json:"expires_in"`
+		TokenType    string `json:"token_type"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&refreshResponse); err != nil {
+		return nil, fmt.Errorf("failed to decode token response: %w", err)
+	}
+
+	if refreshResponse.AccessToken == "" {
+		return nil, fmt.Errorf("refresh response missing access token")
+	}
+
+	// Create updated credential set
+	updated := *cred
+	updated.AccessToken = refreshResponse.AccessToken
+	if refreshResponse.RefreshToken != "" {
+		updated.RefreshToken = refreshResponse.RefreshToken
+	}
+
+	// Calculate new expiry time
+	if refreshResponse.ExpiresIn > 0 {
+		updated.ExpiresAt = time.Now().Add(time.Duration(refreshResponse.ExpiresIn) * time.Second)
+	} else {
+		// Default to 1 hour if no expiry provided
+		updated.ExpiresAt = time.Now().Add(time.Hour)
+	}
+
+	updated.LastRefresh = time.Now()
+	updated.RefreshCount++
+
+	return &updated, nil
+}
+
+// Authenticate handles authentication (API key and OAuth)
+func (p *QwenProvider) Authenticate(ctx context.Context, authConfig types.AuthConfig) error {
+	if authConfig.Method == types.AuthMethodAPIKey {
+		// Handle API key authentication
+		if authConfig.APIKey == "" {
+			return fmt.Errorf("API key is required")
+		}
+		newConfig := p.GetConfig()
+		newConfig.APIKey = authConfig.APIKey
+		return p.Configure(newConfig)
+	}
+
+	// Handle OAuth authentication
+	if authConfig.Method == types.AuthMethodOAuth {
+		return fmt.Errorf("legacy OAuth authentication not supported - use multi-OAuth via OAuthCredentials")
+	}
+
+	return fmt.Errorf("unknown authentication method: %s", authConfig.Method)
+}
+
+// IsAuthenticated checks if the provider is authenticated
+func (p *QwenProvider) IsAuthenticated() bool {
+	return p.authHelper.IsAuthenticated()
+}
+
+// Logout handles logout (clears API key and OAuth token)
+func (p *QwenProvider) Logout(ctx context.Context) error {
+	// Clear authentication first while holding lock
+	p.mu.Lock()
+	p.authHelper.ClearAuthentication()
+	newConfig := p.GetConfig()
+	newConfig.APIKey = ""
+	p.mu.Unlock()
+
+	// Configure outside the lock to avoid deadlock
+	return p.Configure(newConfig)
+}
+
+// Configure updates the provider configuration
+func (p *QwenProvider) Configure(config types.ProviderConfig) error {
+	if config.Type != types.ProviderTypeQwen {
+		return fmt.Errorf("invalid provider type for Qwen: %s", config.Type)
+	}
+
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	// Update auth helper configuration
+	p.authHelper.Config = config
+
+	// Re-setup authentication with new config
+	p.authHelper.SetupAPIKeys()
+	p.authHelper.SetupOAuth(p.refreshOAuthTokenForMulti)
+
+	return p.BaseProvider.Configure(config)
+}
+
+// SupportsToolCalling returns whether the provider supports tool calling
+func (p *QwenProvider) SupportsToolCalling() bool {
+	return true
+}
+
+// SupportsStreaming returns whether the provider supports streaming
+func (p *QwenProvider) SupportsStreaming() bool {
+	return true
+}
+
+// SupportsResponsesAPI returns whether the provider supports Responses API
+func (p *QwenProvider) SupportsResponsesAPI() bool {
+	return false
+}
+
+// GetToolFormat returns the tool format used by this provider
+func (p *QwenProvider) GetToolFormat() types.ToolFormat {
+	// Qwen uses OpenAI-compatible tool format
+	return types.ToolFormatOpenAI
+}
+
+// InvokeServerTool invokes a server tool
+func (p *QwenProvider) InvokeServerTool(
+	ctx context.Context,
+	toolName string,
+	params interface{},
+) (interface{}, error) {
+	return nil, fmt.Errorf("tool invocation not yet implemented for Qwen provider")
+}
+
+// executeStreamWithOAuth executes a streaming request using OAuth authentication
+func (p *QwenProvider) executeStreamWithOAuth(ctx context.Context, options types.GenerateOptions) (types.ChatCompletionStream, error) {
+	providerConfig := p.GetConfig()
+
+	baseURL := providerConfig.BaseURL
+	if baseURL == "" {
+		baseURL = "https://portal.qwen.ai/v1"
+	}
+
+	// Build request using the new helper
+	request := p.buildQwenRequest(options)
+	request.Stream = true
+
+	// Use auth helper OAuth manager for automatic failover
+	var lastErr error
+	if p.authHelper.OAuthManager != nil {
+		creds := p.authHelper.OAuthManager.GetCredentials()
+		for _, cred := range creds {
+			stream, err := p.makeStreamingAPICall(ctx, baseURL+"/chat/completions", request, cred.AccessToken)
+			if err != nil {
+				lastErr = err
+				continue
+			}
+			return stream, nil
+		}
+	}
+	return nil, lastErr
+}
+
+// executeStreamWithAPIKey executes a streaming request using API key authentication
+func (p *QwenProvider) executeStreamWithAPIKey(ctx context.Context, options types.GenerateOptions) (types.ChatCompletionStream, error) {
+	providerConfig := p.GetConfig()
+
+	var authToken string
+	switch {
+	case p.authHelper.KeyManager != nil && len(p.authHelper.KeyManager.GetKeys()) > 0:
+		authToken = p.authHelper.KeyManager.GetKeys()[0]
+	case providerConfig.APIKey != "":
+		authToken = providerConfig.APIKey
+	default:
+		return nil, fmt.Errorf("no API key configured for qwen")
+	}
+
+	baseURL := providerConfig.BaseURL
+	if baseURL == "" {
+		baseURL = "https://portal.qwen.ai/v1"
+	}
+
+	// Build request using the new helper
+	request := p.buildQwenRequest(options)
+	request.Stream = true
+
+	return p.makeStreamingAPICall(ctx, baseURL+"/chat/completions", request, authToken)
+}
+
+// makeStreamingAPICall makes a streaming API call to Qwen
+func (p *QwenProvider) makeStreamingAPICall(ctx context.Context, url string, request QwenRequest, authToken string) (types.ChatCompletionStream, error) {
+	jsonBody, err := json.Marshal(request)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonBody))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", authToken))
+
+	// Log the request
+	p.LogRequest("POST", url, map[string]string{
+		"Content-Type":  "application/json",
+		"Authorization": "Bearer ***",
+	}, request)
+
+	startTime := time.Now()
+	resp, err := p.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("request failed: %w", err)
+	}
+
+	duration := time.Since(startTime)
+	p.LogResponse(resp, duration)
+
+	// Parse rate limit headers from streaming response (flexible multi-format parser)
+	p.rateLimitHelper.ParseAndUpdateRateLimits(resp.Header, request.Model)
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		func() { _ = resp.Body.Close() }() //nolint:staticcheck // Empty branch is intentional - we ignore close errors
+		return nil, fmt.Errorf("qwen API error: %d - %s", resp.StatusCode, string(body))
+	}
+
+	return &QwenRealStream{
+		response: resp,
+		reader:   bufio.NewReader(resp.Body),
+		done:     false,
+	}, nil
+}
+
+// QwenRealStream implements ChatCompletionStream for real streaming responses
+type QwenRealStream struct {
+	response *http.Response
+	reader   *bufio.Reader
+	done     bool
+	mutex    sync.Mutex
+}
+
+func (s *QwenRealStream) Next() (types.ChatCompletionChunk, error) {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+
+	if s.done {
+		return types.ChatCompletionChunk{Done: true}, io.EOF
+	}
+
+	for {
+		line, err := s.reader.ReadString('\n')
+		if err != nil {
+			if err == io.EOF {
+				s.done = true
+				return types.ChatCompletionChunk{Done: true}, io.EOF
+			}
+			return types.ChatCompletionChunk{}, err
+		}
+
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue // Skip empty lines
+		}
+
+		if !strings.HasPrefix(line, "data: ") {
+			continue // Skip non-data lines
+		}
+
+		data := strings.TrimPrefix(line, "data: ")
+
+		// Check for stream end
+		if data == "[DONE]" {
+			s.done = true
+			return types.ChatCompletionChunk{Done: true}, io.EOF
+		}
+
+		var streamResp QwenResponse
+		if err := json.Unmarshal([]byte(data), &streamResp); err != nil {
+			continue // Skip malformed chunks
+		}
+
+		if len(streamResp.Choices) > 0 {
+			choice := streamResp.Choices[0]
+			chunk := types.ChatCompletionChunk{
+				Content: choice.Delta.Content,
+				Done:    choice.FinishReason != "",
+			}
+
+			// Add usage if present
+			if streamResp.Usage.TotalTokens > 0 {
+				chunk.Usage = types.Usage{
+					PromptTokens:     streamResp.Usage.PromptTokens,
+					CompletionTokens: streamResp.Usage.CompletionTokens,
+					TotalTokens:      streamResp.Usage.TotalTokens,
+				}
+			}
+
+			if chunk.Done {
+				s.done = true
+				return chunk, io.EOF
+			}
+
+			return chunk, nil
+		}
+	}
+}
+
+func (s *QwenRealStream) Close() error {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	s.done = true
+	if s.response != nil {
+		return s.response.Body.Close()
+	}
+	return nil
+}
+
+// convertToQwenTools converts universal tools to Qwen format
+func convertToQwenTools(tools []types.Tool) []QwenTool {
+	qwenTools := make([]QwenTool, len(tools))
+	for i, tool := range tools {
+		qwenTools[i] = QwenTool{
+			Type: "function",
+			Function: QwenFunctionDef{
+				Name:        tool.Name,
+				Description: tool.Description,
+				Parameters:  tool.InputSchema,
+			},
+		}
+	}
+	return qwenTools
+}
+
+// convertToQwenToolCalls converts universal tool calls to Qwen format
+func convertToQwenToolCalls(toolCalls []types.ToolCall) []QwenToolCall {
+	qwenToolCalls := make([]QwenToolCall, len(toolCalls))
+	for i, tc := range toolCalls {
+		qwenToolCalls[i] = QwenToolCall{
+			ID:   tc.ID,
+			Type: tc.Type,
+			Function: QwenToolCallFunction{
+				Name:      tc.Function.Name,
+				Arguments: tc.Function.Arguments,
+			},
+		}
+	}
+	return qwenToolCalls
+}
+
+// convertQwenToolCallsToUniversal converts Qwen tool calls to universal format
+func convertQwenToolCallsToUniversal(toolCalls []QwenToolCall) []types.ToolCall {
+	universal := make([]types.ToolCall, len(toolCalls))
+	for i, tc := range toolCalls {
+		universal[i] = types.ToolCall{
+			ID:   tc.ID,
+			Type: tc.Type,
+			Function: types.ToolCallFunction{
+				Name:      tc.Function.Name,
+				Arguments: tc.Function.Arguments,
+			},
+		}
+	}
+	return universal
+}

@@ -1,0 +1,212 @@
+# Example configuration file for AI Provider Kit
+# This demonstrates the various authentication methods and provider configurations
+
+providers:
+    # List of enabled providers
+    enabled:
+        - openai
+        - anthropic
+        - gemini
+        - cerebras
+        - qwen
+        - groq
+        - synthetic
+
+    # Preferred order for provider selection (optional)
+    preferred_order:
+        - anthropic
+        - openai
+        - gemini
+        - cerebras
+        - qwen
+        - groq
+        - synthetic
+
+    # =========================================================================
+    # Built-in Providers
+    # =========================================================================
+
+    # OpenAI - Single API key authentication
+    openai:
+        type: ""
+        default_model: gpt-4o
+        base_url: ""
+        api_key: sk-proj-YOUR_OPENAI_API_KEY_HERE
+        api_keys: []
+        project_id: ""
+        max_tokens: 4096
+        temperature: 0.7
+        oauth_credentials: []
+
+    # Anthropic - OAuth authentication example
+    anthropic:
+        type: ""
+        default_model: claude-sonnet-4-5
+        base_url: ""
+        api_key: ""
+        api_keys: []
+        project_id: ""
+        max_tokens: 8192
+        temperature: 0.7
+        oauth_credentials:
+            - id: default
+              client_id: your_anthropic_client_id
+              client_secret: your_anthropic_client_secret
+              access_token: sk-ant-oat01-YOUR_ACCESS_TOKEN_HERE
+              refresh_token: sk-ant-ort01-YOUR_REFRESH_TOKEN_HERE
+              expires_at: "2025-12-31T23:59:59-07:00"
+              scopes: []
+
+    # Cerebras - Multiple API keys for load balancing
+    cerebras:
+        type: ""
+        default_model: llama3.1-8b
+        base_url: ""
+        api_key: ""
+        api_keys:
+            - csk-YOUR_FIRST_CEREBRAS_KEY
+            - csk-YOUR_SECOND_CEREBRAS_KEY
+            - csk-YOUR_THIRD_CEREBRAS_KEY
+        project_id: ""
+        max_tokens: 131072
+        temperature: 0.6
+        oauth_credentials: []
+
+    # Gemini - OAuth with project ID and scopes
+    gemini:
+        type: ""
+        default_model: gemini-2.5-pro
+        base_url: ""
+        api_key: ""
+        api_keys: []
+        project_id: your-gcp-project-id
+        max_tokens: 0
+        temperature: 0.7
+        oauth_credentials:
+            - id: default
+              client_id: YOUR_CLIENT_ID.apps.googleusercontent.com
+              client_secret: YOUR_CLIENT_SECRET
+              access_token: ya29.YOUR_ACCESS_TOKEN_HERE
+              refresh_token: 1//YOUR_REFRESH_TOKEN_HERE
+              expires_at: "2025-12-31T23:59:59-07:00"
+              scopes:
+                - https://www.googleapis.com/auth/cloud-platform
+
+    # Qwen - OAuth with custom scopes
+    qwen:
+        type: ""
+        default_model: qwen3-coder-plus
+        base_url: https://portal.qwen.ai/v1
+        api_key: ""
+        api_keys: []
+        project_id: ""
+        max_tokens: 8192
+        temperature: 0.7
+        oauth_credentials:
+            - id: default
+              client_id: your_qwen_client_id
+              client_secret: ""
+              access_token: YOUR_QWEN_ACCESS_TOKEN
+              refresh_token: YOUR_QWEN_REFRESH_TOKEN
+              expires_at: "2025-12-31T23:59:59-07:00"
+              scopes:
+                - model.completion
+
+    # OpenRouter - Simple API key
+    openrouter:
+        type: ""
+        default_model: anthropic/claude-3.5-sonnet
+        base_url: https://openrouter.ai/api/v1
+        api_key: sk-or-YOUR_OPENROUTER_KEY
+        api_keys: []
+        project_id: ""
+        max_tokens: 0
+        temperature: 0.7
+        oauth_credentials: []
+
+    # =========================================================================
+    # Custom Providers (OpenAI-compatible APIs)
+    # =========================================================================
+    custom:
+        # Groq - OpenAI-compatible API
+        groq:
+            type: openai
+            base_url: https://api.groq.com/openai/v1
+            api_key: gsk_YOUR_GROQ_API_KEY
+            api_keys: []
+            project_id: ""
+            max_tokens: 8192
+            temperature: 0.7
+            oauth_credentials: []
+            default_model: llama-3.3-70b-versatile
+            models:
+                - llama-3.3-70b-versatile
+                - llama-3.1-8b-instant
+                - mixtral-8x7b-32768
+
+        # Synthetic - OpenAI-compatible API
+        synthetic:
+            type: openai
+            base_url: https://api.synthetic.new/openai/v1
+            api_key: syn_YOUR_SYNTHETIC_API_KEY
+            api_keys: []
+            project_id: ""
+            max_tokens: 8192
+            temperature: 0.7
+            oauth_credentials: []
+            default_model: hf:zai-org/GLM-4.6
+            models:
+                - hf:zai-org/GLM-4.6
+                - hf:MiniMaxAI/MiniMax-M2
+
+        # Another custom provider example with multiple auth methods
+        custom-provider-1:
+            type: openai
+            base_url: https://api.example.com/v1
+            api_key: ""
+            api_keys:
+                - key1_YOUR_API_KEY
+                - key2_YOUR_API_KEY
+            project_id: ""
+            max_tokens: 4096
+            temperature: 0.5
+            oauth_credentials: []
+            default_model: example-model-1
+
+        # Example with OAuth credentials
+        custom-provider-2:
+            type: openai
+            base_url: https://api.another-example.com/v1
+            api_key: ""
+            api_keys: []
+            project_id: "my-project"
+            max_tokens: 8192
+            temperature: 0.8
+            oauth_credentials:
+                - id: primary
+                  client_id: client_id_1
+                  client_secret: client_secret_1
+                  access_token: access_token_1
+                  refresh_token: refresh_token_1
+                  expires_at: "2025-12-31T23:59:59-07:00"
+                  scopes:
+                    - read
+                    - write
+                - id: backup
+                  client_id: client_id_2
+                  client_secret: client_secret_2
+                  access_token: access_token_2
+                  refresh_token: refresh_token_2
+                  expires_at: "2026-01-31T23:59:59-07:00"
+                  scopes:
+                    - read
+            default_model: custom-model-1
+
+# Optional metrics configuration
+metrics:
+    enabled: true
+    port: 8888
+
+# Optional async configuration
+async:
+    enabled: true

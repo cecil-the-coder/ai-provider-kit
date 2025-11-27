@@ -1,0 +1,87 @@
+run:
+  timeout: 5m
+  modules-download-mode: readonly
+  go: "1.24"
+
+linters-settings:
+  errcheck:
+    check-type-assertions: false
+    check-blank: false
+
+  gocyclo:
+    min-complexity: 20
+
+  revive:
+    rules:
+      - name: exported
+        severity: warning
+      - name: var-naming
+        severity: warning
+      - name: errorf
+        severity: warning
+      - name: error-strings
+        severity: warning
+
+issues:
+  exclude-rules:
+    # Allow ignoring errors in defer cleanup functions
+    - path: "_test\\.go"
+      linters: [errcheck]
+      text: "Error return value of `.*\\.Close\\(\\)` is not checked"
+    - path: "_test\\.go"
+      linters: [errcheck]
+      text: "Error return value of `.*\\.Body\\.Close\\(\\)` is not checked"
+    - path: "_test\\.go"
+      linters: [errcheck]
+      text: "Error return value of `.*\\.WriteFile.*` is not checked"
+    - path: "pkg/auth/error_handling_test.go"
+      linters: [errcheck]
+      text: "Error return value of `.*\\.RemoveAll` is not checked"
+    - path: "pkg/providers/common/testing/"
+      linters: [errcheck]
+      text: "Error return value of `.*\\.WriteFile.*` is not checked"
+
+    # Allow underscore assignments for explicitly ignored returns
+    - path: ".*\\.go"
+      linters: [errcheck]
+      text: "assigning to _ .*"
+
+    # Allow higher complexity for test functions and complex business logic
+    - path: "_test\\.go"
+      linters: [gocyclo]
+      text: "cyclomatic complexity .* is high"
+    - path: "pkg/auth/oauth\\.go"
+      linters: [gocyclo]
+      text: "cyclomatic complexity .* is high"
+    - path: "pkg/factory/.*_integration_test\\.go"
+      linters: [gocyclo]
+      text: "cyclomatic complexity .* is high"
+    - path: "pkg/ratelimit/.*\\.go"
+      linters: [gocyclo]
+      text: "cyclomatic complexity .* is high"
+
+  exclude-use-default: false
+  max-issues-per-linter: 0
+  max-same-issues: 0
+
+linters:
+  enable:
+    - errcheck
+    - unused
+    - gosimple
+    - staticcheck
+    - ineffassign
+    - govet
+    - gocyclo
+    - gocritic
+    - dupl
+    - gosec
+    - misspell
+    - unconvert
+    - unparam
+    - nakedret
+    - prealloc
+    - goimports
+    - gofmt
+    - stylecheck
+    - gci

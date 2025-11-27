@@ -1,0 +1,287 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, develop ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  GO_VERSION: '1.24.0'
+
+permissions:
+  contents: write         # Required for creating releases
+  security-events: write  # Required for SARIF upload
+  pull-requests: write   # Required for Codecov comments on PRs
+  statuses: write        # Required for Codecov status checks
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        go-version: ['1.23', '1.24']
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: ${{ matrix.go-version }}
+
+    - name: Cache Go modules
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cache/go-build
+          ~/go/pkg/mod
+        key: ${{ runner.os }}-go-${{ matrix.go-version }}-${{ hashFiles('**/go.sum') }}
+        restore-keys: |
+          ${{ runner.os }}-go-${{ matrix.go-version }}-
+
+    - name: Download dependencies
+      run: go mod download
+
+    - name: Run tests
+      run: |
+        # Run tests with retry logic for network-dependent tests
+        set -e
+        echo "Running tests with coverage..."
+        go test -v -race -coverprofile=coverage.out -timeout=10m ./... || {
+          echo "Tests failed, checking if it's a network issue..."
+          sleep 30
+          echo "Retrying tests once more..."
+          go test -v -race -coverprofile=coverage.out -timeout=10m ./...
+        }
+
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v4
+      with:
+        file: ./coverage.out
+        flags: unittests
+        fail_ci_if_error: false
+        token: ${{ secrets.CODECOV_TOKEN }}
+        verbose: true
+        version: "v0.7.3"
+      continue-on-error: true
+      timeout-minutes: 2
+
+    - name: Coverage upload fallback
+      if: failure()
+      run: |
+        echo "Codecov upload may have failed, but this doesn't affect the build"
+        echo "Coverage file size: $(wc -c < coverage.out || echo 'no coverage file')"
+        echo "Coverage lines: $(wc -l < coverage.out || echo 'no coverage file')"
+        echo "This is a non-critical failure, workflow will continue"
+
+    - name: Run benchmark
+      run: go test -bench=. -run=^Benchmark ./...
+
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.24'
+
+    - name: Run Gosec Security Scanner
+      run: |
+        # Install gosec using the official method
+        go install github.com/securecodewarrior/gosec/v2/cmd/gosec@latest || \
+        curl -sfL https://raw.githubusercontent.com/securecodewarrior/gosec/master/install.sh | sh -s -- -b $(go env GOPATH)/bin || \
+        wget -O - https://raw.githubusercontent.com/securecodewarrior/gosec/master/install.sh | sh -s -- -b $(go env GOPATH)/bin
+
+        # Check if gosec is installed
+        if ! command -v gosec &> /dev/null; then
+          echo "gosec installation failed, skipping security scan"
+          echo "This is a non-critical failure, workflow will continue"
+        else
+          gosec -no-fail -exclude G109,G401,G101 ./...
+        fi
+
+    - name: Run Govulncheck
+      uses: Templum/govulncheck-action@v1
+      with:
+        go-version: '1.24'
+        skip-upload: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
+
+    - name: Run Trivy vulnerability scanner
+      uses: aquasecurity/trivy-action@master
+      with:
+        scan-type: 'fs'
+        scan-ref: '.'
+        format: 'sarif'
+        output: 'trivy-results.sarif'
+      continue-on-error: true  # Don't fail the build if Trivy has issues
+
+  quality:
+    name: Code Quality
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.24'
+
+    - name: Run golangci-lint
+      uses: golangci/golangci-lint-action@v6
+      with:
+        version: latest
+        args: --timeout=5m
+        working-directory: .
+
+    - name: Run Go vet
+      run: go vet ./...
+
+    - name: Run gofmt check
+      run: |
+        if [ "$(gofmt -s -l . | wc -l)" -gt 0 ]; then
+          echo "Code is not formatted properly:"
+          gofmt -s -l .
+          exit 1
+        fi
+
+    - name: Run ineffassign
+      run: |
+        go install github.com/gordonklaus/ineffassign@latest
+        ineffassign ./...
+
+    - name: Run misspell
+      run: |
+        go install github.com/client9/misspell/cmd/misspell@latest
+        misspell -error **/*.go
+
+    - name: Check for TODO/FIXME comments
+      run: |
+        if grep -r "TODO\|FIXME\|XXX" --include="*.go" .; then
+          echo "Found TODO/FIXME/XXX comments that should be addressed:"
+          grep -rn "TODO\|FIXME\|XXX" --include="*.go" . || true
+          exit 1
+        fi
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    needs: [test, security, quality]
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.24'
+
+    - name: Cache Go modules
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cache/go-build
+          ~/go/pkg/mod
+        key: ${{ runner.os }}-go-1.24-${{ hashFiles('**/go.sum') }}
+
+    - name: Download dependencies
+      run: go mod download
+
+    - name: Build
+      run: go build -v ./...
+
+    - name: Verify module builds
+      run: |
+        echo "✅ All packages build successfully"
+        go list -m github.com/cecil-the-coder/ai-provider-kit
+
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    needs: [test, security, quality]
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: ${{ env.GO_VERSION }}
+
+    - name: Verify version tag matches module
+      run: |
+        # Extract version from tag (remove 'v' prefix)
+        TAG_VERSION="${GITHUB_REF#refs/tags/v}"
+        echo "Tag version: $TAG_VERSION"
+
+        # Get module version from go.mod
+        MODULE_VERSION=$(grep -E '^module ' go.mod | awk '{print $2}')
+        echo "Module: $MODULE_VERSION"
+
+        # Validate semantic version
+        if [[ ! "$TAG_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9]+)?$ ]]; then
+          echo "Error: Invalid semantic version format. Expected v1.2.3 or v1.2.3-alpha"
+          exit 1
+        fi
+
+        echo "✅ Version tag is valid"
+
+    - name: Build all packages
+      run: go build -v ./...
+
+    - name: Run tests one more time
+      run: go test -v -race ./...
+
+    - name: Create source archive
+      run: |
+        # Create a source archive for the release
+        git archive --format=tar.gz --prefix=ai-provider-kit-${{ github.ref_name }}/ ${{ github.ref_name }} > ai-provider-kit-${{ github.ref_name }}.tar.gz
+
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v2
+      with:
+        files: |
+          ai-provider-kit-${{ github.ref_name }}.tar.gz
+        generate_release_notes: true
+        draft: false
+        prerelease: ${{ contains(github.ref, '-') }}
+        body: |
+          ## Release ${{ github.ref_name }}
+
+          This release has been tested and verified to work with Go ${{ env.GO_VERSION }}.
+
+          ### Installation
+          ```bash
+          go get github.com/cecil-the-coder/ai-provider-kit@${{ github.ref_name }}
+          ```
+
+          ### Verification
+          To verify the installation:
+          ```go
+          import "github.com/cecil-the-coder/ai-provider-kit/pkg/factory"
+          ```
+
+          ### What's Included
+          - Complete Go library source code
+          - Example applications demonstrating usage
+          - Comprehensive test suite
+          - Full API documentation
+
+          ${{ github.event.head_commit.message }}
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

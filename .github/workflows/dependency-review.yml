@@ -1,0 +1,36 @@
+name: Dependency Review
+
+on:
+  pull_request:
+    types: [opened]
+    paths: ['go.mod', 'go.sum']
+
+jobs:
+  dependency-review:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout PR
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+
+      - name: Run govulncheck
+        uses: Templum/govulncheck-action@v1
+        with:
+          go-version: '1.24'
+
+      - name: Run nancy
+        uses: sonatype-community/nancy-github-action@main
+        with:
+          version: 'latest'
+          level: 'error'
+
+      - name: Dependency Review
+        uses: actions/dependency-review-action@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
