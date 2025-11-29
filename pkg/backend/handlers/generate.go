@@ -3,6 +3,7 @@ package handlers
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"sync"
@@ -141,9 +142,8 @@ func (h *GenerateHandler) Generate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// For streaming requests, handle streaming response
-	// TODO: Implement SSE streaming in future iteration
-	SendError(w, r, "NOT_IMPLEMENTED", "Streaming not yet implemented", http.StatusNotImplemented)
+	// For streaming requests, use SSE (Server-Sent Events)
+	h.handleStreamingRequest(w, r, &req, provider, providerName, ctx)
 }
 
 // collectStreamResponse collects all chunks from a stream into a single response
@@ -257,4 +257,166 @@ func updateFromExtensionResponse(resp *backendtypes.GenerateResponse, extResp *e
 	resp.Model = extResp.Model
 	resp.Provider = extResp.Provider
 	resp.Metadata = extResp.Metadata
+}
+
+// handleStreamingRequest handles streaming requests using SSE (Server-Sent Events)
+func (h *GenerateHandler) handleStreamingRequest(w http.ResponseWriter, r *http.Request, req *backendtypes.GenerateRequest, provider types.Provider, providerName string, ctx context.Context) {
+	// Setup SSE headers and get flusher
+	flusher, ok := h.setupSSE(w)
+	if !ok {
+		SendError(w, r, "STREAMING_NOT_SUPPORTED", "Streaming not supported by server", http.StatusInternalServerError)
+		return
+	}
+
+	// Run extension hooks before generation (with SSE error handling)
+	if h.extensions != nil {
+		for _, ext := range h.extensions.List() {
+			extReq := convertToExtensionRequest(req)
+			if err := ext.BeforeGenerate(ctx, extReq); err != nil {
+				h.sendSSEError(w, flusher, "EXTENSION_ERROR", "BeforeGenerate hook failed: "+err.Error())
+				return
+			}
+			updateFromExtensionRequest(req, extReq)
+		}
+
+		for _, ext := range h.extensions.List() {
+			if err := ext.OnProviderSelected(ctx, provider); err != nil {
+				h.sendSSEError(w, flusher, "EXTENSION_ERROR", "OnProviderSelected hook failed: "+err.Error())
+				return
+			}
+		}
+	}
+
+	// Generate stream
+	options := buildGenerateOptions(req, ctx)
+	options.Stream = true
+
+	stream, err := provider.GenerateChatCompletion(ctx, options)
+	if err != nil {
+		// Call OnProviderError hooks
+		if h.extensions != nil {
+			for _, ext := range h.extensions.List() {
+				_ = ext.OnProviderError(ctx, provider, err)
+			}
+		}
+		h.sendSSEError(w, flusher, "GENERATION_ERROR", "Failed to generate: "+err.Error())
+		return
+	}
+	defer func() {
+		_ = stream.Close()
+	}()
+
+	// Process and send stream chunks
+	fullContent, usage, streamErr := h.processSSEStreamChunks(stream, w, flusher)
+	if streamErr != nil {
+		return // Error already sent via SSE
+	}
+
+	// Run extension hooks after generation
+	if h.extensions != nil {
+		genResp := &backendtypes.GenerateResponse{
+			Content:  fullContent,
+			Model:    req.Model,
+			Provider: providerName,
+			Usage:    usage,
+			Metadata: req.Metadata,
+		}
+
+		for _, ext := range h.extensions.List() {
+			extReq := convertToExtensionRequest(req)
+			extResp := convertToExtensionResponse(genResp)
+			if err := ext.AfterGenerate(ctx, extReq, extResp); err != nil {
+				h.sendSSEError(w, flusher, "EXTENSION_ERROR", "AfterGenerate hook failed: "+err.Error())
+				return
+			}
+		}
+	}
+
+	// Send completion event
+	h.sendDoneEvent(w, flusher)
+}
+
+// setupSSE sets up SSE headers and returns the flusher
+func (h *GenerateHandler) setupSSE(w http.ResponseWriter) (http.Flusher, bool) {
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("X-Accel-Buffering", "no")
+
+	flusher, ok := w.(http.Flusher)
+	return flusher, ok
+}
+
+// processSSEStreamChunks processes all chunks from the stream and sends them via SSE
+func (h *GenerateHandler) processSSEStreamChunks(stream types.ChatCompletionStream, w http.ResponseWriter, flusher http.Flusher) (string, *backendtypes.UsageInfo, error) {
+	var fullContent string
+	var usage *backendtypes.UsageInfo
+
+	for {
+		chunk, err := stream.Next()
+		if err != nil {
+			h.sendSSEError(w, flusher, "STREAM_ERROR", "Failed to read stream: "+err.Error())
+			return "", nil, err
+		}
+
+		if chunk.Done {
+			if chunk.Usage.TotalTokens > 0 {
+				usage = &backendtypes.UsageInfo{
+					PromptTokens:     chunk.Usage.PromptTokens,
+					CompletionTokens: chunk.Usage.CompletionTokens,
+					TotalTokens:      chunk.Usage.TotalTokens,
+				}
+			}
+			break
+		}
+
+		// Extract content from chunk
+		if chunk.Content != "" {
+			fullContent += chunk.Content
+		}
+		for _, choice := range chunk.Choices {
+			if choice.Delta.Content != "" {
+				fullContent += choice.Delta.Content
+			}
+		}
+
+		// Send chunk as SSE event
+		if err := h.sendChunkAsSSE(chunk, w, flusher); err != nil {
+			return "", nil, err
+		}
+	}
+
+	return fullContent, usage, nil
+}
+
+// sendChunkAsSSE sends a chunk as an SSE event
+func (h *GenerateHandler) sendChunkAsSSE(chunk types.ChatCompletionChunk, w http.ResponseWriter, flusher http.Flusher) error {
+	chunkData, err := json.Marshal(chunk)
+	if err != nil {
+		h.sendSSEError(w, flusher, "SERIALIZATION_ERROR", "Failed to serialize chunk: "+err.Error())
+		return err
+	}
+
+	_, _ = fmt.Fprintf(w, "data: %s\n\n", chunkData)
+	flusher.Flush()
+	return nil
+}
+
+// sendDoneEvent sends the SSE completion event
+func (h *GenerateHandler) sendDoneEvent(w http.ResponseWriter, flusher http.Flusher) {
+	_, _ = fmt.Fprintf(w, "data: [DONE]\n\n")
+	flusher.Flush()
+}
+
+// sendSSEError sends an error as an SSE event
+func (h *GenerateHandler) sendSSEError(w http.ResponseWriter, flusher http.Flusher, code string, message string) {
+	errorData := map[string]interface{}{
+		"error": map[string]string{
+			"code":    code,
+			"message": message,
+		},
+	}
+	data, _ := json.Marshal(errorData)
+	_, _ = fmt.Fprintf(w, "data: %s\n\n", data)
+	flusher.Flush()
 }

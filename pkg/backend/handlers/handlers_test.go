@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -875,10 +876,10 @@ func TestGenerateHandler_Generate_ExtensionError(t *testing.T) {
 	}
 }
 
-func TestGenerateHandler_Generate_StreamingNotImplemented(t *testing.T) {
+func TestGenerateHandler_Generate_Streaming(t *testing.T) {
 	provider := &mockProvider{
 		name:             "test",
-		generateResponse: &types.ChatCompletionChunk{Content: "test"},
+		generateResponse: &types.ChatCompletionChunk{Content: "test response"},
 	}
 	providers := map[string]types.Provider{"test": provider}
 	handler := NewGenerateHandler(providers, nil, "test")
@@ -894,8 +895,26 @@ func TestGenerateHandler_Generate_StreamingNotImplemented(t *testing.T) {
 
 	handler.Generate(w, r)
 
-	if w.Code != http.StatusNotImplemented {
-		t.Errorf("Expected status 501, got %d", w.Code)
+	// SSE streaming should return 200 OK
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status 200, got %d", w.Code)
+	}
+
+	// Verify SSE headers
+	if ct := w.Header().Get("Content-Type"); ct != "text/event-stream" {
+		t.Errorf("Expected Content-Type text/event-stream, got %s", ct)
+	}
+	if cc := w.Header().Get("Cache-Control"); cc != "no-cache" {
+		t.Errorf("Expected Cache-Control no-cache, got %s", cc)
+	}
+
+	// Verify response contains SSE data
+	responseBody := w.Body.String()
+	if !strings.Contains(responseBody, "data:") {
+		t.Errorf("Expected SSE data in response, got: %s", responseBody)
+	}
+	if !strings.Contains(responseBody, "[DONE]") {
+		t.Errorf("Expected [DONE] event in response, got: %s", responseBody)
 	}
 }
 
