@@ -11,7 +11,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 )
 
@@ -244,62 +243,6 @@ func TestGeminiProvider_IsAuthenticated(t *testing.T) {
 			actual := provider.IsAuthenticated()
 			if actual != tt.expected {
 				t.Errorf("Expected authenticated=%v, got %v", tt.expected, actual)
-			}
-		})
-	}
-}
-
-func TestGeminiProvider_FilterContextFiles(t *testing.T) {
-	contextFiles := []string{"file1.go", "file2.go", "output.go"}
-	outputFile := "output.go"
-
-	filtered := common.FilterContextFiles(contextFiles, outputFile)
-
-	expected := []string{"file1.go", "file2.go"}
-	if len(filtered) != len(expected) {
-		t.Fatalf("Expected %d filtered files, got %d", len(expected), len(filtered))
-	}
-
-	for i, expectedFile := range expected {
-		if filtered[i] != expectedFile {
-			t.Errorf("Expected file '%s' at index %d, got '%s'", expectedFile, i, filtered[i])
-		}
-	}
-}
-
-func TestGeminiProvider_CleanCodeResponse(t *testing.T) {
-	tests := []struct {
-		name     string
-		input    string
-		expected string
-	}{
-		{
-			name:     "Clean code",
-			input:    "func main() { println('Hello') }",
-			expected: "func main() { println('Hello') }",
-		},
-		{
-			name:     "With markdown blocks",
-			input:    "```go\nfunc main() { println('Hello') }\n```",
-			expected: "func main() { println('Hello') }",
-		},
-		{
-			name:     "With language identifier",
-			input:    "go\nfunc main() { println('Hello') }",
-			expected: "func main() { println('Hello') }",
-		},
-		{
-			name:     "With whitespace",
-			input:    "  func main() { println('Hello') }  ",
-			expected: "func main() { println('Hello') }",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			actual := common.CleanCodeResponse(tt.input)
-			if actual != tt.expected {
-				t.Errorf("Expected cleaned response '%s', got '%s'", tt.expected, actual)
 			}
 		})
 	}

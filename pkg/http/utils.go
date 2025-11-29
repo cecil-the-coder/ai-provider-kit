@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
@@ -59,83 +58,6 @@ type APIError struct {
 
 func (e *APIError) Error() string {
 	return fmt.Sprintf("API error %d: %s", e.StatusCode, e.Message)
-}
-
-// IsRetryableError checks if an error should trigger a retry
-func IsRetryableError(err error) bool {
-	if apiErr, ok := err.(*APIError); ok {
-		switch apiErr.StatusCode {
-		case http.StatusTooManyRequests, // 429
-			http.StatusInternalServerError, // 500
-			http.StatusBadGateway,          // 502
-			http.StatusServiceUnavailable,  // 503
-			http.StatusGatewayTimeout:      // 504
-			return true
-		}
-		return false
-	}
-
-	// Check for network-related errors
-	errStr := strings.ToLower(err.Error())
-	return strings.Contains(errStr, "connection refused") ||
-		strings.Contains(errStr, "timeout") ||
-		strings.Contains(errStr, "network") ||
-		strings.Contains(errStr, "temporary")
-}
-
-// ProcessResponse processes an HTTP response and handles errors
-func ProcessResponse(resp *http.Response) ([]byte, error) {
-	defer func() { _ = resp.Body.Close() }() //nolint:staticcheck // Empty branch is intentional - we ignore close errors
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response body: %w", err)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, ParseAPIError(resp.StatusCode, string(body))
-	}
-
-	return body, nil
-}
-
-// ProcessJSONResponse processes an HTTP response and unmarshals JSON
-func ProcessJSONResponse(resp *http.Response, target interface{}) error {
-	body, err := ProcessResponse(resp)
-	if err != nil {
-		return err
-	}
-
-	if err := json.Unmarshal(body, target); err != nil {
-		return fmt.Errorf("failed to parse JSON response: %w", err)
-	}
-
-	return nil
-}
-
-// ParseAPIError creates a standardized API error from response
-func ParseAPIError(statusCode int, body string) *APIError {
-	apiErr := &APIError{
-		StatusCode: statusCode,
-		RawBody:    body,
-		Timestamp:  time.Now(),
-	}
-
-	// Try to parse structured error response
-	var errorResp ErrorResponse
-	if err := json.Unmarshal([]byte(body), &errorResp); err == nil {
-		apiErr.Message = errorResp.Error.Message
-		apiErr.Type = errorResp.Error.Type
-		apiErr.Code = errorResp.Error.Code
-	} else {
-		// Fallback to simple error message
-		apiErr.Message = strings.TrimSpace(body)
-		if apiErr.Message == "" {
-			apiErr.Message = http.StatusText(statusCode)
-		}
-	}
-
-	return apiErr
 }
 
 // RequestBuilder helps build HTTP requests with common patterns
@@ -206,81 +128,6 @@ func (rb *RequestBuilder) Build() (*http.Request, error) {
 	}
 
 	return req, nil
-}
-
-// StreamingResponse handles streaming responses
-type StreamingResponse struct {
-	resp *http.Response
-}
-
-// NewStreamingResponse creates a new streaming response handler
-func NewStreamingResponse(resp *http.Response) *StreamingResponse {
-	return &StreamingResponse{resp: resp}
-}
-
-// ReadLine reads a single line from the streaming response
-func (sr *StreamingResponse) ReadLine() ([]byte, error) {
-	return readLine(sr.resp.Body)
-}
-
-// ReadChunk reads data until a delimiter
-func (sr *StreamingResponse) ReadChunk(delimiter string) ([]byte, error) {
-	var buffer bytes.Buffer
-	chunk := make([]byte, 1024)
-
-	for {
-		n, err := sr.resp.Body.Read(chunk)
-		if n > 0 {
-			buffer.Write(chunk[:n])
-		}
-
-		if err != nil {
-			if err == io.EOF {
-				break
-			}
-			return nil, err
-		}
-
-		// Check if delimiter is found
-		if bytes.Contains(buffer.Bytes(), []byte(delimiter)) {
-			break
-		}
-	}
-
-	return buffer.Bytes(), nil
-}
-
-// Close closes the streaming response
-func (sr *StreamingResponse) Close() error {
-	if sr.resp != nil && sr.resp.Body != nil {
-		return sr.resp.Body.Close()
-	}
-	return nil
-}
-
-// readLine reads a single line from a reader
-func readLine(r io.Reader) ([]byte, error) {
-	var buf [1]byte
-	var line []byte
-
-	for {
-		n, err := r.Read(buf[:])
-		if n > 0 {
-			ch := buf[0]
-			line = append(line, ch)
-			if ch == '\n' {
-				break
-			}
-		}
-		if err != nil {
-			if err == io.EOF && len(line) > 0 {
-				break
-			}
-			return line, err
-		}
-	}
-
-	return line, nil
 }
 
 // CommonHTTPHeaders returns commonly used HTTP headers for AI providers

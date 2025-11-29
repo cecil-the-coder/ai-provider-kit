@@ -172,23 +172,6 @@ func TestMultiKeyManager(t *testing.T) {
 	}
 }
 
-func TestFilterContextFiles(t *testing.T) {
-	contextFiles := []string{"file1.go", "file2.go", "main.go"}
-	outputFile := "main.go"
-
-	filtered := common.FilterContextFiles(contextFiles, outputFile)
-
-	if len(filtered) != 2 {
-		t.Errorf("Expected 2 filtered files, got %d", len(filtered))
-	}
-
-	for _, file := range filtered {
-		if file == outputFile {
-			t.Errorf("Output file should not be in context files: %s", file)
-		}
-	}
-}
-
 func TestSimplePromptHandling(t *testing.T) {
 	options := types.GenerateOptions{
 		Prompt:     "Create a function that adds two numbers",
@@ -256,37 +239,6 @@ func TestPrepareRequest(t *testing.T) {
 	if contentStr, ok := request.Messages[0].Content.(string); ok {
 		if contentStr != options.Prompt {
 			t.Error("Message content should match the prompt")
-		}
-	}
-}
-
-func TestCleanCodeResponse(t *testing.T) {
-	tests := []struct {
-		input    string
-		expected string
-	}{
-		{
-			input:    "function test() {}",
-			expected: "function test() {}",
-		},
-		{
-			input:    "```javascript\nfunction test() {}\n```",
-			expected: "function test() {}",
-		},
-		{
-			input:    "javascript\nfunction test() {}",
-			expected: "function test() {}",
-		},
-		{
-			input:    "   \nfunction test() {}\n   ",
-			expected: "function test() {}",
-		},
-	}
-
-	for _, tt := range tests {
-		result := common.CleanCodeResponse(tt.input)
-		if result != tt.expected {
-			t.Errorf("common.CleanCodeResponse(%q) = %q, expected %q", tt.input, result, tt.expected)
 		}
 	}
 }
