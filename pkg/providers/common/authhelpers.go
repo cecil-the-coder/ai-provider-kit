@@ -3,6 +3,7 @@ package common
 import (
 	"context"
 	"fmt"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -98,24 +99,39 @@ func (h *AuthHelper) ExecuteWithAuth(
 	oauthOperation func(context.Context, *types.OAuthCredentialSet) (string, *types.Usage, error),
 	apiKeyOperation func(context.Context, string) (string, *types.Usage, error),
 ) (string, *types.Usage, error) {
+	log.Printf("🟡 [AuthHelper] ExecuteWithAuth ENTRY - provider=%s, Stream=%v", h.ProviderName, options.Stream)
+	log.Printf("🟡 [AuthHelper] OAuthManager=%p, KeyManager=%p", h.OAuthManager, h.KeyManager)
 
 	// Check if streaming is requested
 	if options.Stream {
+		log.Printf("🟡 [AuthHelper] Delegating to executeStreamWithAuth")
 		return h.executeStreamWithAuth(ctx, options, oauthOperation, apiKeyOperation)
 	}
 
+	log.Printf("🟡 [AuthHelper] Non-streaming path")
 	// Non-streaming path
 	if h.OAuthManager != nil {
+		log.Printf("🟡 [AuthHelper] Trying OAuth failover...")
 		result, usage, err := h.OAuthManager.ExecuteWithFailover(ctx, oauthOperation)
 		if err == nil {
+			log.Printf("🟢 [AuthHelper] OAuth SUCCESS")
 			return result, usage, nil
 		}
+		log.Printf("🔴 [AuthHelper] OAuth FAILED: %v", err)
+	} else {
+		log.Printf("⚠️  [AuthHelper] OAuthManager is NIL")
 	}
 
 	if h.KeyManager != nil {
-		return h.KeyManager.ExecuteWithFailover(ctx, apiKeyOperation)
+		log.Printf("🟡 [AuthHelper] Trying API key failover...")
+		result, usage, err := h.KeyManager.ExecuteWithFailover(ctx, apiKeyOperation)
+		log.Printf("🟡 [AuthHelper] API key result - err=%v", err)
+		return result, usage, err
+	} else {
+		log.Printf("⚠️  [AuthHelper] KeyManager is NIL")
 	}
 
+	log.Printf("🔴 [AuthHelper] NO AUTH CONFIGURED ERROR")
 	return "", nil, fmt.Errorf("no authentication configured for %s", h.ProviderName)
 }
 

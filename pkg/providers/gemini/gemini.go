@@ -29,7 +29,7 @@ import (
 const (
 	cloudcodeBaseURL      = "https://cloudcode-pa.googleapis.com/v1internal"
 	standardGeminiBaseURL = "https://generativelanguage.googleapis.com/v1beta"
-	geminiDefaultModel    = "gemini-2.0-flash-exp"
+	geminiDefaultModel    = "gemini-2.5-flash" // Updated to stable Gemini 2.5 Flash
 	loadCodeAssistRoute   = ":loadCodeAssist"
 	onboardUserRoute      = ":onboardUser"
 	pollInterval          = 5 * time.Second
@@ -239,11 +239,21 @@ func (p *GeminiProvider) enrichModels(models []types.Model) []types.Model {
 // getStaticFallback returns static model list
 func (p *GeminiProvider) getStaticFallback() []types.Model {
 	return []types.Model{
-		{ID: "gemini-2.0-flash-exp", Name: "Gemini 2.0 Flash (Experimental)", Provider: p.Type(), MaxTokens: 8192, SupportsStreaming: true, SupportsToolCalling: true, Description: "Google's latest experimental Gemini model"},
-		{ID: "gemini-1.5-pro", Name: "Gemini 1.5 Pro", Provider: p.Type(), MaxTokens: 2097152, SupportsStreaming: true, SupportsToolCalling: true, Description: "Google's advanced multimodal model with 2M token context"},
-		{ID: "gemini-1.5-flash", Name: "Gemini 1.5 Flash", Provider: p.Type(), MaxTokens: 1048576, SupportsStreaming: true, SupportsToolCalling: true, Description: "Google's fast and efficient model for everyday tasks"},
-		{ID: "gemini-1.0-pro", Name: "Gemini 1.0 Pro", Provider: p.Type(), MaxTokens: 32768, SupportsStreaming: true, SupportsToolCalling: true, Description: "Google's capable text-based model"},
-		{ID: "gemini-pro-vision", Name: "Gemini Pro Vision", Provider: p.Type(), MaxTokens: 16384, SupportsStreaming: false, SupportsToolCalling: false, Description: "Google's multimodal model for images and text"},
+		// Gemini 3 Series (Latest - Preview)
+		{ID: "gemini-3-pro-preview", Name: "Gemini 3 Pro (Preview)", Provider: p.Type(), MaxTokens: 2097152, SupportsStreaming: true, SupportsToolCalling: true, Description: "Google's latest Gemini 3 Pro model with advanced capabilities"},
+		{ID: "gemini-3-pro-image-preview", Name: "Gemini 3 Pro Image (Preview)", Provider: p.Type(), MaxTokens: 2097152, SupportsStreaming: true, SupportsToolCalling: true, Description: "Gemini 3 Pro with enhanced image understanding"},
+
+		// Gemini 2.5 Series (Stable)
+		{ID: "gemini-2.5-pro", Name: "Gemini 2.5 Pro", Provider: p.Type(), MaxTokens: 2097152, SupportsStreaming: true, SupportsToolCalling: true, Description: "Stable Gemini 2.5 Pro model with 2M token context"},
+		{ID: "gemini-2.5-flash", Name: "Gemini 2.5 Flash", Provider: p.Type(), MaxTokens: 1048576, SupportsStreaming: true, SupportsToolCalling: true, Description: "Fast and efficient Gemini 2.5 Flash model"},
+		{ID: "gemini-2.5-flash-image", Name: "Gemini 2.5 Flash Image", Provider: p.Type(), MaxTokens: 1048576, SupportsStreaming: true, SupportsToolCalling: true, Description: "Gemini 2.5 Flash optimized for image tasks"},
+		{ID: "gemini-2.5-flash-lite", Name: "Gemini 2.5 Flash Lite", Provider: p.Type(), MaxTokens: 524288, SupportsStreaming: true, SupportsToolCalling: true, Description: "Lightweight version of Gemini 2.5 Flash"},
+
+		// Gemini 2.0 Series (Stable)
+		{ID: "gemini-2.0-flash", Name: "Gemini 2.0 Flash", Provider: p.Type(), MaxTokens: 1048576, SupportsStreaming: true, SupportsToolCalling: true, Description: "Stable Gemini 2.0 Flash model"},
+		{ID: "gemini-2.0-flash-001", Name: "Gemini 2.0 Flash 001", Provider: p.Type(), MaxTokens: 1048576, SupportsStreaming: true, SupportsToolCalling: true, Description: "Gemini 2.0 Flash version 001"},
+		{ID: "gemini-2.0-flash-lite", Name: "Gemini 2.0 Flash Lite", Provider: p.Type(), MaxTokens: 524288, SupportsStreaming: true, SupportsToolCalling: true, Description: "Lightweight Gemini 2.0 Flash model"},
+		{ID: "gemini-2.0-flash-lite-001", Name: "Gemini 2.0 Flash Lite 001", Provider: p.Type(), MaxTokens: 524288, SupportsStreaming: true, SupportsToolCalling: true, Description: "Gemini 2.0 Flash Lite version 001"},
 	}
 }
 

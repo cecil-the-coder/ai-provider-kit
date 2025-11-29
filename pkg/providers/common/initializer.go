@@ -459,23 +459,71 @@ func (pi *ProviderInitializer) getStaticCerebrasModels() []types.Model {
 
 func (pi *ProviderInitializer) getStaticGeminiModels() []types.Model {
 	return []types.Model{
+		// Gemini 3 Series (Latest)
 		{
-			ID:                  "gemini-1.5-pro",
-			Name:                "Gemini 1.5 Pro",
+			ID:                  "gemini-3-pro-preview",
+			Name:                "Gemini 3 Pro (Preview)",
 			Provider:            types.ProviderTypeGemini,
 			MaxTokens:           2097152,
 			SupportsStreaming:   true,
 			SupportsToolCalling: true,
-			Description:         "Google's Gemini 1.5 Pro model with large context window",
+			Description:         "Google's latest Gemini 3 Pro model with advanced capabilities",
 		},
 		{
-			ID:                  "gemini-1.5-flash",
-			Name:                "Gemini 1.5 Flash",
+			ID:                  "gemini-3-pro-image-preview",
+			Name:                "Gemini 3 Pro Image (Preview)",
+			Provider:            types.ProviderTypeGemini,
+			MaxTokens:           2097152,
+			SupportsStreaming:   true,
+			SupportsToolCalling: true,
+			Description:         "Gemini 3 Pro with enhanced image understanding",
+		},
+		// Gemini 2.5 Series (Stable)
+		{
+			ID:                  "gemini-2.5-pro",
+			Name:                "Gemini 2.5 Pro",
+			Provider:            types.ProviderTypeGemini,
+			MaxTokens:           2097152,
+			SupportsStreaming:   true,
+			SupportsToolCalling: true,
+			Description:         "Stable Gemini 2.5 Pro model with 2M token context",
+		},
+		{
+			ID:                  "gemini-2.5-flash",
+			Name:                "Gemini 2.5 Flash",
 			Provider:            types.ProviderTypeGemini,
 			MaxTokens:           1048576,
 			SupportsStreaming:   true,
 			SupportsToolCalling: true,
-			Description:         "Google's Gemini 1.5 Flash model for fast inference",
+			Description:         "Fast and efficient Gemini 2.5 Flash model",
+		},
+		{
+			ID:                  "gemini-2.5-flash-lite",
+			Name:                "Gemini 2.5 Flash Lite",
+			Provider:            types.ProviderTypeGemini,
+			MaxTokens:           524288,
+			SupportsStreaming:   true,
+			SupportsToolCalling: true,
+			Description:         "Lightweight version of Gemini 2.5 Flash",
+		},
+		// Gemini 2.0 Series (Stable)
+		{
+			ID:                  "gemini-2.0-flash",
+			Name:                "Gemini 2.0 Flash",
+			Provider:            types.ProviderTypeGemini,
+			MaxTokens:           1048576,
+			SupportsStreaming:   true,
+			SupportsToolCalling: true,
+			Description:         "Stable Gemini 2.0 Flash model",
+		},
+		{
+			ID:                  "gemini-2.0-flash-lite",
+			Name:                "Gemini 2.0 Flash Lite",
+			Provider:            types.ProviderTypeGemini,
+			MaxTokens:           524288,
+			SupportsStreaming:   true,
+			SupportsToolCalling: true,
+			Description:         "Lightweight Gemini 2.0 Flash model",
 		},
 	}
 }

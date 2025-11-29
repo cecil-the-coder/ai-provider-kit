@@ -340,6 +340,12 @@ func (p *AnthropicProvider) GenerateChatCompletion(
 	ctx context.Context,
 	options types.GenerateOptions,
 ) (types.ChatCompletionStream, error) {
+	log.Printf("🟣 [Anthropic] GenerateChatCompletion ENTRY - options.Model=%s, options.Stream=%v", options.Model, options.Stream)
+	log.Printf("🟣 [Anthropic] authHelper=%p, OAuthManager=%p, KeyManager=%p",
+		p.authHelper,
+		func() interface{} { if p.authHelper != nil { return p.authHelper.OAuthManager } else { return nil } }(),
+		func() interface{} { if p.authHelper != nil { return p.authHelper.KeyManager } else { return nil } }())
+
 	p.IncrementRequestCount()
 	startTime := time.Now()
 
@@ -348,8 +354,12 @@ func (p *AnthropicProvider) GenerateChatCompletion(
 	if model == "" {
 		model = p.GetDefaultModel()
 		if model == "" {
+			log.Printf("🔴 [Anthropic] ERROR: No model specified and no default available")
 			return nil, fmt.Errorf("no model specified and no default model available (required when using third-party OAuth tokens)")
 		}
+		log.Printf("🟣 [Anthropic] Using default model: %s", model)
+	} else {
+		log.Printf("🟣 [Anthropic] Using specified model: %s", model)
 	}
 
 	// Check rate limits before making request
@@ -362,26 +372,33 @@ func (p *AnthropicProvider) GenerateChatCompletion(
 
 	// Handle streaming
 	if options.Stream {
+		log.Printf("🟣 [Anthropic] Taking STREAMING path")
 		stream, err := p.executeStreamWithAuth(ctx, options, model)
 		if err != nil {
+			log.Printf("🔴 [Anthropic] Streaming error: %v", err)
 			p.RecordError(err)
 			return nil, err
 		}
 		latency := time.Since(startTime)
 		p.RecordSuccess(latency, 0) // Tokens will be counted as stream is consumed
+		log.Printf("🟢 [Anthropic] Streaming SUCCESS")
 		return stream, nil
 	}
 
+	log.Printf("🟣 [Anthropic] Taking NON-STREAMING path")
 	// Non-streaming path - use auth helper
 	requestData := p.prepareRequest(options, model)
+	log.Printf("🟣 [Anthropic] Request prepared")
 
 	// Define OAuth operation
 	oauthOperation := func(ctx context.Context, cred *types.OAuthCredentialSet) (string, *types.Usage, error) {
+		log.Printf("🟣 [Anthropic] OAuth operation called with cred.ID=%s", cred.ID)
 		return p.makeAPICallWithOAuth(ctx, requestData, cred.AccessToken)
 	}
 
 	// Define API key operation
 	apiKeyOperation := func(ctx context.Context, apiKey string) (string, *types.Usage, error) {
+		log.Printf("🟣 [Anthropic] API key operation called")
 		response, responseUsage, err := p.makeAPICallWithKey(ctx, requestData, apiKey)
 		if err != nil {
 			return "", nil, err
@@ -404,12 +421,15 @@ func (p *AnthropicProvider) GenerateChatCompletion(
 		return cleanedContent, responseUsage, nil
 	}
 
+	log.Printf("🟣 [Anthropic] About to call authHelper.ExecuteWithAuth")
 	// Use auth helper to execute with automatic failover
 	responseText, usage, err := p.authHelper.ExecuteWithAuth(ctx, options, oauthOperation, apiKeyOperation)
 	if err != nil {
+		log.Printf("🔴 [Anthropic] ExecuteWithAuth returned ERROR: %v", err)
 		p.RecordError(err)
 		return nil, err
 	}
+	log.Printf("🟢 [Anthropic] ExecuteWithAuth returned SUCCESS")
 
 	// Record success
 	latency := time.Since(startTime)
@@ -474,6 +494,8 @@ func (p *AnthropicProvider) executeStreamWithAuth(ctx context.Context, options t
 
 // prepareRequest prepares the API request payload
 func (p *AnthropicProvider) prepareRequest(options types.GenerateOptions, model string) AnthropicRequest {
+	log.Printf("🔧 [Anthropic] prepareRequest ENTRY - model=%s, Messages count=%d, Prompt=%q", model, len(options.Messages), options.Prompt)
+
 	// Use the model parameter passed from GenerateChatCompletion
 	// (already determined with options.Model fallback logic)
 
@@ -482,29 +504,33 @@ func (p *AnthropicProvider) prepareRequest(options types.GenerateOptions, model 
 		detectedLanguage = common.DetectLanguage(options.OutputFile)
 	}
 
-	systemPrompt := fmt.Sprintf("You are an expert programmer. Generate ONLY clean, functional code in %s with no explanations, comments about the code generation process, or markdown formatting. Include necessary imports and ensure the code is ready to run. When modifying existing files, preserve the structure and style while implementing the requested changes. Output raw code only. Never use markdown code blocks.", detectedLanguage)
-
-	// For OAuth, initialize as empty array to allow prepending Claude Code prompt
-	// For API key, use string format
-	var systemField interface{}
-	if p.authHelper.GetAuthMethod() == "oauth" {
-		systemField = []interface{}{}
-	} else {
-		systemField = systemPrompt
-	}
+	// REQUIRED: All Anthropic requests via Claude Code must start with this system prompt
+	claudeCodePrompt := "You are Claude Code, Anthropic's official CLI for Claude."
 
 	var messages []AnthropicMessage
+	var systemPrompts []string
 
-	// If Messages are provided, convert them to Anthropic format
+	// Extract system messages from the Messages array and collect their content
+	// Anthropic API requires system prompts in a separate System field, not in Messages
 	if len(options.Messages) > 0 {
-		messages = make([]AnthropicMessage, len(options.Messages))
+		log.Printf("🔧 [Anthropic] Processing %d messages", len(options.Messages))
 		for i, msg := range options.Messages {
-			messages[i] = AnthropicMessage{
-				Role:    msg.Role,
-				Content: convertToAnthropicContent(msg),
+			log.Printf("🔧 [Anthropic] Message %d: role=%s, content_length=%d", i, msg.Role, len(msg.Content))
+			if msg.Role == "system" {
+				// Collect system message content to add to System field
+				systemPrompts = append(systemPrompts, msg.Content)
+				log.Printf("🟠 [Anthropic] Extracted system message from Messages array: %.100s...", msg.Content)
+			} else {
+				// Add non-system messages to the messages array
+				messages = append(messages, AnthropicMessage{
+					Role:    msg.Role,
+					Content: convertToAnthropicContent(msg),
+				})
+				log.Printf("🔧 [Anthropic] Added %s message to array", msg.Role)
 			}
 		}
 	} else if options.Prompt != "" {
+		log.Printf("🔧 [Anthropic] Using legacy Prompt field: %q", options.Prompt)
 		// Convert prompt to user message
 		messages = []AnthropicMessage{
 			{
@@ -514,6 +540,40 @@ func (p *AnthropicProvider) prepareRequest(options types.GenerateOptions, model 
 		}
 	}
 
+	log.Printf("🔧 [Anthropic] After processing: %d system prompts, %d messages", len(systemPrompts), len(messages))
+
+	// Build the System field: Claude Code prompt + any system messages from router + fallback instructions
+	var fullSystemPrompt string
+	if len(systemPrompts) > 0 {
+		// Use system prompts from the router (which already include code generation instructions)
+		fullSystemPrompt = claudeCodePrompt + "\n\n" + systemPrompts[0]
+		// If there are multiple system messages, append them
+		for i := 1; i < len(systemPrompts); i++ {
+			fullSystemPrompt += "\n\n" + systemPrompts[i]
+		}
+	} else {
+		// Fallback: if no system messages provided, create default code generation prompt
+		codeGenerationPrompt := fmt.Sprintf("You are an expert programmer. Generate ONLY clean, functional code in %s with no explanations, comments about the code generation process, or markdown formatting. Include necessary imports and ensure the code is ready to run. When modifying existing files, preserve the structure and style while implementing the requested changes. Output raw code only. Never use markdown code blocks.", detectedLanguage)
+		fullSystemPrompt = claudeCodePrompt + "\n\n" + codeGenerationPrompt
+	}
+
+	// For OAuth, use array format to allow Claude Code beta headers
+	// For API key, use string format
+	var systemField interface{}
+	authMethod := p.authHelper.GetAuthMethod()
+	if authMethod == "oauth" {
+		systemField = []interface{}{
+			map[string]string{
+				"type": "text",
+				"text": fullSystemPrompt,
+			},
+		}
+		log.Printf("🔧 [Anthropic] System field format: OAuth array, prompt_length=%d", len(fullSystemPrompt))
+	} else {
+		systemField = fullSystemPrompt
+		log.Printf("🔧 [Anthropic] System field format: API key string, prompt_length=%d", len(fullSystemPrompt))
+	}
+
 	request := AnthropicRequest{
 		Model:     model,
 		MaxTokens: 4096,
@@ -521,9 +581,12 @@ func (p *AnthropicProvider) prepareRequest(options types.GenerateOptions, model 
 		Messages:  messages,
 	}
 
+	log.Printf("🔧 [Anthropic] Request prepared: model=%s, messages_count=%d, has_system=%v", model, len(messages), systemField != nil)
+
 	// Convert tools if provided
 	if len(options.Tools) > 0 {
 		request.Tools = convertToAnthropicTools(options.Tools)
+		log.Printf("🔧 [Anthropic] Added %d tools to request", len(options.Tools))
 
 		// Convert tool choice if specified
 		if options.ToolChoice != nil {
@@ -531,6 +594,7 @@ func (p *AnthropicProvider) prepareRequest(options types.GenerateOptions, model 
 		}
 	}
 
+	log.Printf("🔧 [Anthropic] prepareRequest EXIT - returning request")
 	return request
 }
 
