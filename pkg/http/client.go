@@ -301,23 +301,15 @@ func (c *HTTPClient) ResetMetrics() {
 }
 
 // calculateDelay calculates retry delay with exponential backoff
+// Delegates to the shared CalculateBackoff function for backward compatibility
 func (r *RetryHandler) calculateDelay(attempt int) time.Duration {
-	if attempt <= 0 {
-		return r.config.BaseRetryDelay
+	config := BackoffConfig{
+		BaseDelay:   r.config.BaseRetryDelay,
+		MaxDelay:    r.config.MaxRetryDelay,
+		Multiplier:  r.config.BackoffMultiplier,
+		MaxAttempts: r.config.MaxRetries,
 	}
-
-	// Safe bit shifting to prevent overflow
-	if attempt > 30 { // 1 << 30 would overflow int32
-		attempt = 30
-	}
-	multiplier := float64(int(1)<<uint(attempt-1)) * r.config.BackoffMultiplier // #nosec G115 -- attempt is capped at 30, safe conversion
-	delay := time.Duration(float64(r.config.BaseRetryDelay) * multiplier)
-
-	if delay > r.config.MaxRetryDelay {
-		delay = r.config.MaxRetryDelay
-	}
-
-	return delay
+	return CalculateBackoff(config, attempt)
 }
 
 // HTTPClientBuilder provides a builder pattern for HTTPClient

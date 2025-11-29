@@ -428,7 +428,7 @@ func (p *AnthropicProvider) GenerateChatCompletion(
 				break
 			}
 		}
-		cleanedContent := p.cleanCodeResponse(content)
+		cleanedContent := common.CleanCodeResponse(content)
 
 		return cleanedContent, responseUsage, nil
 	}
@@ -782,7 +782,7 @@ func (p *AnthropicProvider) makeAPICallWithOAuth(ctx context.Context, requestDat
 			break
 		}
 	}
-	cleanedContent := p.cleanCodeResponse(content)
+	cleanedContent := common.CleanCodeResponse(content)
 
 	usage := &types.Usage{
 		PromptTokens:     response.Usage.InputTokens,
@@ -791,25 +791,6 @@ func (p *AnthropicProvider) makeAPICallWithOAuth(ctx context.Context, requestDat
 	}
 
 	return cleanedContent, usage, nil
-}
-
-// cleanCodeResponse cleans the generated code response
-func (p *AnthropicProvider) cleanCodeResponse(content string) string {
-	// Remove markdown code blocks if present
-	content = strings.TrimPrefix(content, "```")
-	content = strings.TrimSuffix(content, "```")
-
-	// Remove language identifiers
-	lines := strings.Split(content, "\n")
-	if len(lines) > 0 {
-		firstLine := strings.TrimSpace(lines[0])
-		if firstLine != "" && !strings.Contains(firstLine, " ") && len(firstLine) < 20 {
-			// Likely a language identifier
-			content = strings.Join(lines[1:], "\n")
-		}
-	}
-
-	return strings.TrimSpace(content)
 }
 
 // convertToAnthropicTools converts universal tools to Anthropic format

@@ -755,25 +755,6 @@ func convertUniversalToolCallsToGeminiParts(toolCalls []types.ToolCall) []Part {
 
 // Helper Methods
 
-// cleanCodeResponse cleans the generated code response
-func (p *GeminiProvider) cleanCodeResponse(content string) string {
-	// Remove markdown code blocks if present
-	content = strings.TrimPrefix(content, "```")
-	content = strings.TrimSuffix(content, "```")
-
-	// Remove language identifiers
-	lines := strings.Split(content, "\n")
-	if len(lines) > 0 {
-		firstLine := strings.TrimSpace(lines[0])
-		if firstLine != "" && !strings.Contains(firstLine, " ") && len(firstLine) < 20 {
-			// Likely a language identifier
-			content = strings.Join(lines[1:], "\n")
-		}
-	}
-
-	return strings.TrimSpace(content)
-}
-
 // executeStreamWithOAuth executes a streaming request using OAuth authentication
 func (p *GeminiProvider) executeStreamWithOAuth(ctx context.Context, options types.GenerateOptions) (types.ChatCompletionStream, error) {
 	options.ContextObj = ctx
@@ -1286,7 +1267,7 @@ func (p *GeminiProvider) parseStandardGeminiResponse(responseBody []byte, _ stri
 	}
 
 	// Clean and return content
-	cleanedContent := p.cleanCodeResponse(result)
+	cleanedContent := common.CleanCodeResponse(result)
 
 	// Extract usage information
 	var usage *types.Usage
@@ -1397,7 +1378,7 @@ func (p *GeminiProvider) parseOAuthGeminiResponse(responseBody []byte, _ string)
 	}
 
 	// Clean and return content
-	cleanedContent := p.cleanCodeResponse(result)
+	cleanedContent := common.CleanCodeResponse(result)
 
 	// Extract usage information
 	var usage *types.Usage

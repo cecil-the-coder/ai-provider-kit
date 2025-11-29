@@ -295,10 +295,9 @@ func TestGeminiProvider_CleanCodeResponse(t *testing.T) {
 		},
 	}
 
-	provider := NewGeminiProvider(types.ProviderConfig{Type: types.ProviderTypeGemini})
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			actual := provider.cleanCodeResponse(tt.input)
+			actual := common.CleanCodeResponse(tt.input)
 			if actual != tt.expected {
 				t.Errorf("Expected cleaned response '%s', got '%s'", tt.expected, actual)
 			}

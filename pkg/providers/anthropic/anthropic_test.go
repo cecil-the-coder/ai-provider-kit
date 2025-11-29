@@ -257,10 +257,6 @@ func TestPrepareRequest(t *testing.T) {
 }
 
 func TestCleanCodeResponse(t *testing.T) {
-	provider := NewAnthropicProvider(types.ProviderConfig{
-		Type: types.ProviderTypeAnthropic,
-	})
-
 	tests := []struct {
 		input    string
 		expected string
@@ -284,9 +280,9 @@ func TestCleanCodeResponse(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		result := provider.cleanCodeResponse(tt.input)
+		result := common.CleanCodeResponse(tt.input)
 		if result != tt.expected {
-			t.Errorf("cleanCodeResponse(%q) = %q, expected %q", tt.input, result, tt.expected)
+			t.Errorf("common.CleanCodeResponse(%q) = %q, expected %q", tt.input, result, tt.expected)
 		}
 	}
 }

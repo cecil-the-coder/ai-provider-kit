@@ -1,6 +1,10 @@
 package backendtypes
 
-import "time"
+import (
+	"time"
+
+	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
+)
 
 // APIResponse is the standard response wrapper
 type APIResponse struct {
@@ -26,11 +30,8 @@ type GenerateResponse struct {
 	Metadata map[string]interface{} `json:"metadata,omitempty"`
 }
 
-type UsageInfo struct {
-	PromptTokens     int `json:"prompt_tokens"`
-	CompletionTokens int `json:"completion_tokens"`
-	TotalTokens      int `json:"total_tokens"`
-}
+// UsageInfo is a type alias to types.Usage to avoid duplication
+type UsageInfo = types.Usage
 
 // ProviderInfo for provider listing
 type ProviderInfo struct {

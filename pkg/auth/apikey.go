@@ -9,6 +9,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	pkghttp "github.com/cecil-the-coder/ai-provider-kit/pkg/http"
 )
 
 // APIKeyManagerImpl implements APIKeyManager with load balancing and failover
@@ -377,36 +379,36 @@ func (m *APIKeyManagerImpl) ReportFailure(key string, err error) {
 }
 
 // calculateBackoff calculates exponential backoff duration
+// Uses the shared CalculateBackoff function from pkg/http
 func (m *APIKeyManagerImpl) calculateBackoff(failureCount int) time.Duration {
 	if !m.config.Health.Enabled || failureCount <= 0 {
 		return 0
 	}
 
 	config := m.config.Health.Backoff
-	backoffSeconds := float64(config.Initial) * config.Multiplier
 
-	// Apply exponential backoff
-	for i := 1; i < failureCount && i < 10; i++ {
-		backoffSeconds *= config.Multiplier
+	// Use the shared backoff calculator
+	backoffConfig := pkghttp.BackoffConfig{
+		BaseDelay:   config.Initial,
+		MaxDelay:    config.Maximum,
+		Multiplier:  config.Multiplier,
+		MaxAttempts: failureCount,
 	}
 
-	// Cap at maximum
-	if backoffSeconds > float64(config.Maximum) {
-		backoffSeconds = float64(config.Maximum)
-	}
+	backoffDuration := pkghttp.CalculateBackoff(backoffConfig, failureCount)
 
 	// Add jitter if enabled
 	if config.Jitter {
 		// Use crypto/rand for jitter calculation
 		jitterBig, err := rand.Int(rand.Reader, big.NewInt(100))
 		if err == nil {
-			jitterPercent := float64(jitterBig.Int64()) / 100.0 // 0-1% jitter
-			jitter := backoffSeconds * jitterPercent * 0.1      // 10% of 0-1% = 0-0.1% jitter
-			backoffSeconds += jitter
+			jitterPercent := float64(jitterBig.Int64()) / 100.0      // 0-1% jitter
+			jitter := float64(backoffDuration) * jitterPercent * 0.1 // 10% of 0-1% = 0-0.1% jitter
+			backoffDuration += time.Duration(jitter)
 		}
 	}
 
-	return time.Duration(backoffSeconds)
+	return backoffDuration
 }
 
 // ExecuteWithFailover attempts an operation with automatic failover to next key on failure
