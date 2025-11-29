@@ -568,6 +568,7 @@ func (c *DefaultMetricsCollector) callHooks(ctx context.Context, event types.Met
 			defer func() {
 				if r := recover(); r != nil {
 					// Hook panicked, ignore - we don't want a misbehaving hook to crash the collector
+					_ = r // Explicitly ignore the panic value
 				}
 			}()
 
