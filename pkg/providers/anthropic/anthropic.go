@@ -3,7 +3,6 @@
 package anthropic
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -31,6 +30,10 @@ type AnthropicProvider struct {
 
 	// Rate limiting (header-based tracking)
 	rateLimitHelper *common.RateLimitHelper
+
+	// Request/response handling
+	requestHandler base.RequestHandler
+	responseParser base.ResponseParser
 }
 
 // AnthropicConfig represents Anthropic-specific configuration
@@ -83,6 +86,15 @@ func NewAnthropicProvider(config types.ProviderConfig) *AnthropicProvider {
 	refreshFactory := common.NewRefreshFuncFactory("anthropic", client)
 	authHelper.SetupOAuth(refreshFactory.CreateAnthropicRefreshFunc())
 
+	// Determine base URL
+	baseURL := anthropicConfig.BaseURL
+	if baseURL == "" {
+		baseURL = "https://api.anthropic.com"
+	}
+
+	// Create rate limit helper
+	rateLimitHelper := common.NewRateLimitHelper(ratelimit.NewAnthropicParser())
+
 	provider := &AnthropicProvider{
 		BaseProvider:    base.NewBaseProvider("anthropic", mergedConfig, client, log.Default()),
 		authHelper:      authHelper,
@@ -90,7 +102,9 @@ func NewAnthropicProvider(config types.ProviderConfig) *AnthropicProvider {
 		displayName:     anthropicConfig.DisplayName,
 		config:          anthropicConfig,
 		modelCache:      common.NewModelCache(6 * time.Hour), // 6 hour cache for Anthropic
-		rateLimitHelper: common.NewRateLimitHelper(ratelimit.NewAnthropicParser()),
+		rateLimitHelper: rateLimitHelper,
+		requestHandler:  base.NewDefaultRequestHandler(client, authHelper, baseURL),
+		responseParser:  base.NewDefaultResponseParser(rateLimitHelper),
 	}
 
 	return provider
@@ -189,6 +203,7 @@ func (p *AnthropicProvider) fetchModelsHelper(ctx context.Context, authType stri
 	}
 	url := baseURL + "/v1/models?limit=1000"
 
+	// Create request with proper authentication headers
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return "", nil, fmt.Errorf("failed to create request: %w", err)
@@ -209,17 +224,18 @@ func (p *AnthropicProvider) fetchModelsHelper(ctx context.Context, authType stri
 		}
 	}()
 
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return "", nil, fmt.Errorf("failed to fetch models: HTTP %d - %s", resp.StatusCode, string(body))
+	// Check status code using response parser
+	if err := p.responseParser.CheckStatusCode(resp); err != nil {
+		return "", nil, fmt.Errorf("failed to fetch models: %w", err)
 	}
 
-	body, err := io.ReadAll(resp.Body)
+	// Read body using response parser
+	body, err := p.responseParser.ReadBody(resp)
 	if err != nil {
 		return "", nil, fmt.Errorf("failed to read response: %w", err)
 	}
 
-	return string(body), &types.Usage{}, nil
+	return body, &types.Usage{}, nil
 }
 
 // fetchModelsWithOAuth fetches models using OAuth authentication
@@ -626,13 +642,7 @@ func (p *AnthropicProvider) prepareRequest(options types.GenerateOptions, model 
 
 // makeAPICallWithKey makes the actual HTTP request to the Anthropic API with a specific API key
 func (p *AnthropicProvider) makeAPICallWithKey(ctx context.Context, requestData AnthropicRequest, apiKey string) (*AnthropicResponse, *types.Usage, error) {
-	// Serialize request
-	jsonBody, err := json.Marshal(requestData)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to marshal request: %w", err)
-	}
-
-	// Create HTTP request
+	// Get base URL
 	config := p.GetConfig()
 	baseURL := config.BaseURL
 	if baseURL == "" {
@@ -640,10 +650,18 @@ func (p *AnthropicProvider) makeAPICallWithKey(ctx context.Context, requestData 
 	}
 	url := baseURL + "/v1/messages"
 
-	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonBody))
+	// Create HTTP request
+	req, err := http.NewRequestWithContext(ctx, "POST", url, nil)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create request: %w", err)
 	}
+
+	// Prepare JSON body
+	jsonBody, err := p.requestHandler.PrepareJSONBody(requestData)
+	if err != nil {
+		return nil, nil, err
+	}
+	req.Body = io.NopCloser(jsonBody)
 
 	// Use auth helper to set headers
 	p.authHelper.SetAuthHeaders(req, apiKey, "api_key")
@@ -671,14 +689,10 @@ func (p *AnthropicProvider) makeAPICallWithKey(ctx context.Context, requestData 
 	// Parse rate limit headers from response
 	p.rateLimitHelper.ParseAndUpdateRateLimits(resp.Header, requestData.Model)
 
-	// Read response body
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to read response body: %w", err)
-	}
-
-	// Check status code
+	// Check status code using response parser
 	if resp.StatusCode != http.StatusOK {
+		// Read body for error message
+		body, _ := io.ReadAll(resp.Body)
 		var errorResponse AnthropicErrorResponse
 		if parseErr := json.Unmarshal(body, &errorResponse); parseErr == nil {
 			return nil, nil, fmt.Errorf("anthropic API error: %d - %s", resp.StatusCode, errorResponse.Error.Message)
@@ -686,9 +700,9 @@ func (p *AnthropicProvider) makeAPICallWithKey(ctx context.Context, requestData 
 		return nil, nil, fmt.Errorf("anthropic API error: %d - %s", resp.StatusCode, string(body))
 	}
 
-	// Parse successful response
+	// Parse successful response using response parser
 	var response AnthropicResponse
-	if err := json.Unmarshal(body, &response); err != nil {
+	if err := p.responseParser.ParseJSON(resp, &response); err != nil {
 		return nil, nil, fmt.Errorf("failed to parse API response: %w", err)
 	}
 
@@ -722,12 +736,6 @@ func (p *AnthropicProvider) makeAPICallWithOAuth(ctx context.Context, requestDat
 		requestData.System = []interface{}{claudeCodePrompt}
 	}
 
-	// Serialize request
-	jsonBody, err := json.Marshal(requestData)
-	if err != nil {
-		return "", nil, fmt.Errorf("failed to marshal request: %w", err)
-	}
-
 	config := p.GetConfig()
 	baseURL := config.BaseURL
 	if baseURL == "" {
@@ -735,10 +743,18 @@ func (p *AnthropicProvider) makeAPICallWithOAuth(ctx context.Context, requestDat
 	}
 	url := baseURL + "/v1/messages"
 
-	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonBody))
+	// Create HTTP request
+	req, err := http.NewRequestWithContext(ctx, "POST", url, nil)
 	if err != nil {
 		return "", nil, fmt.Errorf("failed to create request: %w", err)
 	}
+
+	// Prepare JSON body using request handler
+	jsonBody, err := p.requestHandler.PrepareJSONBody(requestData)
+	if err != nil {
+		return "", nil, err
+	}
+	req.Body = io.NopCloser(jsonBody)
 
 	// Use auth helper to set OAuth headers
 	p.authHelper.SetAuthHeaders(req, accessToken, "oauth")
@@ -766,12 +782,9 @@ func (p *AnthropicProvider) makeAPICallWithOAuth(ctx context.Context, requestDat
 	// Parse rate limit headers from response
 	p.rateLimitHelper.ParseAndUpdateRateLimits(resp.Header, requestData.Model)
 
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", nil, fmt.Errorf("failed to read response body: %w", err)
-	}
-
+	// Check status code and parse response
 	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
 		var errorResponse AnthropicErrorResponse
 		if parseErr := json.Unmarshal(body, &errorResponse); parseErr == nil {
 			return "", nil, fmt.Errorf("anthropic API error: %d - %s", resp.StatusCode, errorResponse.Error.Message)
@@ -779,8 +792,9 @@ func (p *AnthropicProvider) makeAPICallWithOAuth(ctx context.Context, requestDat
 		return "", nil, fmt.Errorf("anthropic API error: %d - %s", resp.StatusCode, string(body))
 	}
 
+	// Parse successful response using response parser
 	var response AnthropicResponse
-	if err := json.Unmarshal(body, &response); err != nil {
+	if err := p.responseParser.ParseJSON(resp, &response); err != nil {
 		return "", nil, fmt.Errorf("failed to parse API response: %w", err)
 	}
 
@@ -1073,11 +1087,6 @@ func (p *AnthropicProvider) GetToolFormat() types.ToolFormat {
 
 // makeStreamingAPICallWithKey makes a streaming API call with API key
 func (p *AnthropicProvider) makeStreamingAPICallWithKey(ctx context.Context, requestData AnthropicRequest, apiKey string) (types.ChatCompletionStream, error) {
-	jsonBody, err := json.Marshal(requestData)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal request: %w", err)
-	}
-
 	config := p.GetConfig()
 	baseURL := config.BaseURL
 	if baseURL == "" {
@@ -1085,10 +1094,18 @@ func (p *AnthropicProvider) makeStreamingAPICallWithKey(ctx context.Context, req
 	}
 	url := baseURL + "/v1/messages"
 
-	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonBody))
+	// Create HTTP request
+	req, err := http.NewRequestWithContext(ctx, "POST", url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
+
+	// Prepare JSON body using request handler
+	jsonBody, err := p.requestHandler.PrepareJSONBody(requestData)
+	if err != nil {
+		return nil, err
+	}
+	req.Body = io.NopCloser(jsonBody)
 
 	// Use auth helper to set headers
 	p.authHelper.SetAuthHeaders(req, apiKey, "api_key")
@@ -1132,11 +1149,6 @@ func (p *AnthropicProvider) makeStreamingAPICallWithOAuth(ctx context.Context, r
 		requestData.System = []interface{}{claudeCodePrompt}
 	}
 
-	jsonBody, err := json.Marshal(requestData)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal request: %w", err)
-	}
-
 	config := p.GetConfig()
 	baseURL := config.BaseURL
 	if baseURL == "" {
@@ -1144,10 +1156,18 @@ func (p *AnthropicProvider) makeStreamingAPICallWithOAuth(ctx context.Context, r
 	}
 	url := baseURL + "/v1/messages"
 
-	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonBody))
+	// Create HTTP request
+	req, err := http.NewRequestWithContext(ctx, "POST", url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
+
+	// Prepare JSON body using request handler
+	jsonBody, err := p.requestHandler.PrepareJSONBody(requestData)
+	if err != nil {
+		return nil, err
+	}
+	req.Body = io.NopCloser(jsonBody)
 
 	// Use auth helper to set OAuth headers
 	p.authHelper.SetAuthHeaders(req, accessToken, "oauth")

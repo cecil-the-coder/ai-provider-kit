@@ -160,6 +160,7 @@ type OpenAIProvider struct {
 	useResponsesAPI bool
 	rateLimitHelper *common.RateLimitHelper
 	modelCache      *common.ModelCache
+	modelRegistry   *common.ModelMetadataRegistry
 	organizationID  string
 }
 
@@ -204,6 +205,7 @@ func NewOpenAIProvider(config types.ProviderConfig) *OpenAIProvider {
 		rateLimitHelper: common.NewRateLimitHelper(ratelimit.NewOpenAIParser()),
 		organizationID:  organizationID,
 		modelCache:      common.NewModelCache(24 * time.Hour), // 24 hour cache for OpenAI
+		modelRegistry:   common.GetOpenAIMetadataRegistry(),
 	}
 
 	return provider
@@ -237,89 +239,6 @@ func (p *OpenAIProvider) isChatModel(modelID string) bool {
 		}
 	}
 	return false
-}
-
-// getDisplayName returns a friendly display name for a model
-func (p *OpenAIProvider) getDisplayName(modelID string) string {
-	displayNames := map[string]string{
-		"gpt-4o":        "GPT-4o",
-		"gpt-4o-mini":   "GPT-4o Mini",
-		"gpt-4":         "GPT-4",
-		"gpt-4-turbo":   "GPT-4 Turbo",
-		"gpt-3.5-turbo": "GPT-3.5 Turbo",
-	}
-
-	// Check for exact match first
-	if name, exists := displayNames[modelID]; exists {
-		return name
-	}
-
-	// Check for prefix match
-	for prefix, name := range displayNames {
-		if strings.HasPrefix(modelID, prefix) {
-			return name
-		}
-	}
-
-	return modelID
-}
-
-// getMaxTokens returns the maximum token limit for a model
-func (p *OpenAIProvider) getMaxTokens(modelID string) int {
-	tokenLimits := map[string]int{
-		"gpt-4o":            128000,
-		"gpt-4o-mini":       128000,
-		"gpt-4":             8192,
-		"gpt-4-32k":         32768,
-		"gpt-4-turbo":       128000,
-		"gpt-3.5-turbo":     4096,
-		"gpt-3.5-turbo-16k": 16384,
-	}
-
-	// Check for exact match first
-	if limit, exists := tokenLimits[modelID]; exists {
-		return limit
-	}
-
-	// Check for prefix match
-	for prefix, limit := range tokenLimits {
-		if strings.HasPrefix(modelID, prefix) {
-			return limit
-		}
-	}
-
-	return 4096 // Default
-}
-
-// supportsToolCalling checks if a model supports tool/function calling
-func (p *OpenAIProvider) supportsToolCalling(modelID string) bool {
-	// GPT-4 and GPT-3.5-turbo models support function calling
-	return strings.Contains(modelID, "gpt-4") || strings.Contains(modelID, "gpt-3.5-turbo")
-}
-
-// getDescription returns a description for a model
-func (p *OpenAIProvider) getDescription(modelID string) string {
-	descriptions := map[string]string{
-		"gpt-4o":        "OpenAI's latest high-intelligence flagship model",
-		"gpt-4o-mini":   "OpenAI's efficient and affordable small model",
-		"gpt-4":         "OpenAI's previous flagship model",
-		"gpt-4-turbo":   "OpenAI's balanced GPT-4 model",
-		"gpt-3.5-turbo": "OpenAI's fast and capable model",
-	}
-
-	// Check for exact match first
-	if desc, exists := descriptions[modelID]; exists {
-		return desc
-	}
-
-	// Check for prefix match
-	for prefix, desc := range descriptions {
-		if strings.HasPrefix(modelID, prefix) {
-			return desc
-		}
-	}
-
-	return "OpenAI language model"
 }
 
 func (p *OpenAIProvider) GetModels(ctx context.Context) ([]types.Model, error) {
@@ -400,63 +319,14 @@ func (p *OpenAIProvider) fetchModelsFromAPI(ctx context.Context) ([]types.Model,
 	return models, nil
 }
 
-// enrichModels adds metadata to models
+// enrichModels adds metadata to models using the shared registry
 func (p *OpenAIProvider) enrichModels(models []types.Model) []types.Model {
-	enriched := make([]types.Model, len(models))
-	for i, model := range models {
-		enriched[i] = types.Model{
-			ID:                  model.ID,
-			Name:                p.getDisplayName(model.ID),
-			Provider:            p.Type(),
-			MaxTokens:           p.getMaxTokens(model.ID),
-			SupportsStreaming:   true,
-			SupportsToolCalling: p.supportsToolCalling(model.ID),
-			Description:         p.getDescription(model.ID),
-		}
-	}
-	return enriched
+	return p.modelRegistry.EnrichModels(models)
 }
 
-// getStaticFallback returns static model list
+// getStaticFallback returns static model list using the shared fallback
 func (p *OpenAIProvider) getStaticFallback() []types.Model {
-	return []types.Model{
-		{
-			ID:                  "gpt-4o",
-			Name:                "GPT-4o",
-			Provider:            p.Type(),
-			MaxTokens:           128000,
-			SupportsStreaming:   true,
-			SupportsToolCalling: true,
-			Description:         "OpenAI's latest high-intelligence flagship model",
-		},
-		{
-			ID:                  "gpt-4o-mini",
-			Name:                "GPT-4o Mini",
-			Provider:            p.Type(),
-			MaxTokens:           128000,
-			SupportsStreaming:   true,
-			SupportsToolCalling: true,
-			Description:         "OpenAI's efficient and affordable small model",
-		},
-		{
-			ID:                  "gpt-4-turbo",
-			Name:                "GPT-4 Turbo",
-			Provider:            p.Type(),
-			MaxTokens:           128000,
-			SupportsStreaming:   true,
-			SupportsToolCalling: true,
-			Description:         "OpenAI's balanced GPT-4 model",
-		},
-		{
-			ID:                  "gpt-3.5-turbo",
-			Name:                "GPT-3.5 Turbo",
-			Provider:            p.Type(),
-			MaxTokens:           4096,
-			SupportsStreaming:   true,
-			SupportsToolCalling: true,
-			Description:         "OpenAI's fast and capable model",
-		},
-	}
+	return common.GetStaticFallback(p.Type())
 }
 
 func (p *OpenAIProvider) GetDefaultModel() string {

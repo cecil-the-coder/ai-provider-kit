@@ -108,7 +108,7 @@ func NewGeminiProvider(config types.ProviderConfig) *GeminiProvider {
 		client:          client,
 		config:          geminiConfig,
 		displayName:     geminiConfig.DisplayName,
-		modelCache:      common.NewModelCache(2 * time.Hour), // 2 hour cache for Gemini
+		modelCache:      common.NewModelCache(common.GetModelCacheTTL(types.ProviderTypeGemini)),
 		rateLimitHelper: common.NewRateLimitHelper(ratelimit.NewGeminiParser()),
 		// Client-side limits (free tier: 15 RPM, pay-as-you-go: 360 RPM)
 		// Default to free tier - can be updated with UpdateRateLimitTier

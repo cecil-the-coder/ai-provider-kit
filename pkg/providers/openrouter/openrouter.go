@@ -139,7 +139,7 @@ func NewOpenRouterProvider(config types.ProviderConfig) *OpenRouterProvider {
 		models:          models,
 		modelStrategy:   modelStrategy,
 		freeOnly:        providerConfig.FreeOnly,
-		modelCache:      common.NewModelCache(6 * time.Hour), // 6 hour cache for OpenRouter
+		modelCache:      common.NewModelCache(common.GetModelCacheTTL(types.ProviderTypeOpenRouter)),
 		rateLimitHelper: common.NewRateLimitHelper(ratelimit.NewOpenRouterParser()),
 	}
 

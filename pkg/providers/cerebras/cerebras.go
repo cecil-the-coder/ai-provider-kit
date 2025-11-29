@@ -54,7 +54,7 @@ func NewCerebrasProvider(config types.ProviderConfig) *CerebrasProvider {
 		config:          mergedConfig,
 		httpClient:      client,
 		authHelper:      authHelper,
-		modelCache:      common.NewModelCache(6 * time.Hour), // 6 hour cache for Cerebras
+		modelCache:      common.NewModelCache(common.GetModelCacheTTL(types.ProviderTypeCerebras)),
 		rateLimitHelper: common.NewRateLimitHelper(&ratelimit.CerebrasParser{}),
 	}
 }
