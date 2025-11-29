@@ -490,6 +490,7 @@ type MockAuthenticator struct {
 	logoutShouldFail bool
 	logoutError      error
 	authMethod       types.AuthMethod
+	refreshError     error
 }
 
 func (m *MockAuthenticator) Authenticate(ctx context.Context, config types.AuthConfig) error {
@@ -509,6 +510,9 @@ func (m *MockAuthenticator) GetToken() (string, error) {
 }
 
 func (m *MockAuthenticator) RefreshToken(ctx context.Context) error {
+	if m.refreshError != nil {
+		return m.refreshError
+	}
 	if !m.authenticated {
 		return errors.New("not authenticated")
 	}
