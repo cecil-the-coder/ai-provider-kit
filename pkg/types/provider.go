@@ -25,6 +25,11 @@ const (
 	ProviderTypeLMStudio   ProviderType = "lmstudio"
 	ProviderTypeLlamaCpp   ProviderType = "llamacpp"
 	ProviderTypeOllama     ProviderType = "ollama"
+
+	// Virtual providers
+	ProviderTypeRacing      ProviderType = "racing"
+	ProviderTypeFallback    ProviderType = "fallback"
+	ProviderTypeLoadBalance ProviderType = "loadbalance"
 )
 
 // AuthMethod represents the authentication method

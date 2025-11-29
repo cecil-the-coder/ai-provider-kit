@@ -95,15 +95,16 @@ type ChatCompletionStream interface {
 
 // ChatCompletionChunk represents a chunk of a streaming response
 type ChatCompletionChunk struct {
-	ID      string       `json:"id"`
-	Object  string       `json:"object"`
-	Created int64        `json:"created"`
-	Model   string       `json:"model"`
-	Choices []ChatChoice `json:"choices"`
-	Usage   Usage        `json:"usage"`
-	Done    bool         `json:"done"`
-	Content string       `json:"content"`
-	Error   string       `json:"error"`
+	ID       string                 `json:"id"`
+	Object   string                 `json:"object"`
+	Created  int64                  `json:"created"`
+	Model    string                 `json:"model"`
+	Choices  []ChatChoice           `json:"choices"`
+	Usage    Usage                  `json:"usage"`
+	Done     bool                   `json:"done"`
+	Content  string                 `json:"content"`
+	Error    string                 `json:"error"`
+	Metadata map[string]interface{} `json:"metadata,omitempty"`
 }
 
 // ChatChoice represents a choice in a chat completion

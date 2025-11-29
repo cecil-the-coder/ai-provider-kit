@@ -9,6 +9,9 @@ import (
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/openai"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/openrouter"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/qwen"
+	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/virtual/fallback"
+	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/virtual/loadbalance"
+	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/virtual/racing"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 )
 
@@ -49,6 +52,76 @@ func RegisterDefaultProviders(factory *DefaultProviderFactory) {
 	})
 	factory.RegisterProvider(types.ProviderTypeOllama, func(config types.ProviderConfig) types.Provider {
 		return &SimpleProviderStub{name: "ollama", providerType: types.ProviderTypeOllama, config: config}
+	})
+
+	// Register virtual providers
+	// Note: Virtual providers need SetProviders() called after creation to inject dependencies
+	factory.RegisterProvider(types.ProviderTypeRacing, func(config types.ProviderConfig) types.Provider {
+		// Extract racing-specific config from ProviderConfig
+		racingConfig := &racing.Config{
+			TimeoutMS:     5000, // default 5 seconds
+			GracePeriodMS: 100,  // default 100ms
+			Strategy:      racing.StrategyFirstWins,
+		}
+
+		// Override defaults with config values if present
+		if config.ProviderConfig != nil {
+			if timeout, ok := config.ProviderConfig["timeout_ms"].(int); ok {
+				racingConfig.TimeoutMS = timeout
+			}
+			if gracePeriod, ok := config.ProviderConfig["grace_period_ms"].(int); ok {
+				racingConfig.GracePeriodMS = gracePeriod
+			}
+			if strategy, ok := config.ProviderConfig["strategy"].(string); ok {
+				racingConfig.Strategy = racing.Strategy(strategy)
+			}
+			if providers, ok := config.ProviderConfig["providers"].([]string); ok {
+				racingConfig.ProviderNames = providers
+			}
+			if perfFile, ok := config.ProviderConfig["performance_file"].(string); ok {
+				racingConfig.PerformanceFile = perfFile
+			}
+		}
+
+		return racing.NewRacingProvider(config.Name, racingConfig)
+	})
+
+	factory.RegisterProvider(types.ProviderTypeFallback, func(config types.ProviderConfig) types.Provider {
+		// Extract fallback-specific config from ProviderConfig
+		fallbackConfig := &fallback.Config{
+			MaxRetries: 3, // default
+		}
+
+		// Override defaults with config values if present
+		if config.ProviderConfig != nil {
+			if maxRetries, ok := config.ProviderConfig["max_retries"].(int); ok {
+				fallbackConfig.MaxRetries = maxRetries
+			}
+			if providers, ok := config.ProviderConfig["providers"].([]string); ok {
+				fallbackConfig.ProviderNames = providers
+			}
+		}
+
+		return fallback.NewFallbackProvider(config.Name, fallbackConfig)
+	})
+
+	factory.RegisterProvider(types.ProviderTypeLoadBalance, func(config types.ProviderConfig) types.Provider {
+		// Extract load balance-specific config from ProviderConfig
+		lbConfig := &loadbalance.Config{
+			Strategy: loadbalance.StrategyRoundRobin, // default
+		}
+
+		// Override defaults with config values if present
+		if config.ProviderConfig != nil {
+			if strategy, ok := config.ProviderConfig["strategy"].(string); ok {
+				lbConfig.Strategy = loadbalance.Strategy(strategy)
+			}
+			if providers, ok := config.ProviderConfig["providers"].([]string); ok {
+				lbConfig.ProviderNames = providers
+			}
+		}
+
+		return loadbalance.NewLoadBalanceProvider(config.Name, lbConfig)
 	})
 }
 

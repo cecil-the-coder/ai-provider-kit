@@ -34,6 +34,9 @@ func TestRegisterDefaultProviders(t *testing.T) {
 		types.ProviderTypeLMStudio,
 		types.ProviderTypeLlamaCpp,
 		types.ProviderTypeOllama,
+		types.ProviderTypeRacing,
+		types.ProviderTypeFallback,
+		types.ProviderTypeLoadBalance,
 	}
 
 	assert.Len(t, supportedProviders, len(expectedProviders))
@@ -174,7 +177,7 @@ func TestRegisterDefaultProviders_DuplicateRegistration(t *testing.T) {
 
 	// Should still have the same number of providers (no duplicates)
 	supportedProviders := factory.GetSupportedProviders()
-	expectedCount := 9 // Number of default providers
+	expectedCount := 12 // Number of default providers (9 regular + 3 virtual)
 	assert.Len(t, supportedProviders, expectedCount)
 }
 
@@ -197,7 +200,7 @@ func TestRegisterDefaultProviders_ConcurrentAccess(t *testing.T) {
 
 	// Verify providers were registered correctly (no duplicates)
 	supportedProviders := factory.GetSupportedProviders()
-	expectedCount := 9 // Number of default providers
+	expectedCount := 12 // Number of default providers (9 regular + 3 virtual)
 	assert.Len(t, supportedProviders, expectedCount)
 
 	// Verify we can still create providers
@@ -248,7 +251,7 @@ func TestRegisterDefaultProviders_MixedWithCustomProviders(t *testing.T) {
 	}
 
 	// Verify total count
-	assert.Len(t, supportedProviders, 10) // 9 default + 1 custom
+	assert.Len(t, supportedProviders, 13) // 12 default + 1 custom
 }
 
 // TestInitializeDefaultProviders_vs_RegisterDefaultProviders tests both initialization methods
@@ -273,7 +276,7 @@ func TestInitializeDefaultProviders_vs_RegisterDefaultProviders(t *testing.T) {
 	}
 	assert.Len(t, providers1, len(expectedStubProviders))
 
-	// RegisterDefaultProviders should have all providers (9 total)
+	// RegisterDefaultProviders should have all providers (12 total)
 	expectedAllProviders := []types.ProviderType{
 		types.ProviderTypeOpenAI,
 		types.ProviderTypeAnthropic,
@@ -284,6 +287,9 @@ func TestInitializeDefaultProviders_vs_RegisterDefaultProviders(t *testing.T) {
 		types.ProviderTypeLMStudio,
 		types.ProviderTypeLlamaCpp,
 		types.ProviderTypeOllama,
+		types.ProviderTypeRacing,
+		types.ProviderTypeFallback,
+		types.ProviderTypeLoadBalance,
 	}
 	assert.Len(t, providers2, len(expectedAllProviders))
 
