@@ -1266,9 +1266,6 @@ func (p *GeminiProvider) parseStandardGeminiResponse(responseBody []byte, _ stri
 		return "", nil, fmt.Errorf("empty response from Gemini API")
 	}
 
-	// Clean and return content
-	cleanedContent := common.CleanCodeResponse(result)
-
 	// Extract usage information
 	var usage *types.Usage
 	if apiResp.UsageMetadata != nil {
@@ -1279,7 +1276,7 @@ func (p *GeminiProvider) parseStandardGeminiResponse(responseBody []byte, _ stri
 		}
 	}
 
-	return cleanedContent, usage, nil
+	return result, usage, nil
 }
 
 // executeOAuthAPIRequest executes an OAuth-based CloudCode API request
@@ -1377,9 +1374,6 @@ func (p *GeminiProvider) parseOAuthGeminiResponse(responseBody []byte, _ string)
 		return "", nil, fmt.Errorf("empty response from Gemini API")
 	}
 
-	// Clean and return content
-	cleanedContent := common.CleanCodeResponse(result)
-
 	// Extract usage information
 	var usage *types.Usage
 	if apiResp.UsageMetadata != nil {
@@ -1390,5 +1384,5 @@ func (p *GeminiProvider) parseOAuthGeminiResponse(responseBody []byte, _ string)
 		}
 	}
 
-	return cleanedContent, usage, nil
+	return result, usage, nil
 }

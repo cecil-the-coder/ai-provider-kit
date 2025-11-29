@@ -428,9 +428,8 @@ func (p *AnthropicProvider) GenerateChatCompletion(
 				break
 			}
 		}
-		cleanedContent := common.CleanCodeResponse(content)
 
-		return cleanedContent, responseUsage, nil
+		return content, responseUsage, nil
 	}
 
 	log.Printf("🟣 [Anthropic] About to call authHelper.ExecuteWithAuth")
@@ -797,7 +796,6 @@ func (p *AnthropicProvider) makeAPICallWithOAuth(ctx context.Context, requestDat
 			break
 		}
 	}
-	cleanedContent := common.CleanCodeResponse(content)
 
 	usage := &types.Usage{
 		PromptTokens:     response.Usage.InputTokens,
@@ -805,7 +803,7 @@ func (p *AnthropicProvider) makeAPICallWithOAuth(ctx context.Context, requestDat
 		TotalTokens:      response.Usage.InputTokens + response.Usage.OutputTokens,
 	}
 
-	return cleanedContent, usage, nil
+	return content, usage, nil
 }
 
 // convertToAnthropicTools converts universal tools to Anthropic format
