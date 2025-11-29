@@ -183,57 +183,25 @@ func TestHealthChecker_IsHealthy(t *testing.T) {
 }
 
 func TestHealthChecker_GetHealthyProviders(t *testing.T) {
-	checker := NewHealthChecker(time.Minute)
-
-	// Set up mixed statuses
-	checker.healthStatus[types.ProviderTypeOpenAI] = &ProviderHealth{
-		Provider: types.ProviderTypeOpenAI,
-		Healthy:  true,
-		Details:  make(map[string]interface{}),
-	}
-
-	checker.healthStatus[types.ProviderTypeAnthropic] = &ProviderHealth{
-		Provider: types.ProviderTypeAnthropic,
-		Healthy:  false,
-		Details:  make(map[string]interface{}),
-	}
-
-	checker.healthStatus[types.ProviderTypeGemini] = &ProviderHealth{
-		Provider: types.ProviderTypeGemini,
-		Healthy:  true,
-		Details:  make(map[string]interface{}),
-	}
-
-	healthy := checker.GetHealthyProviders()
-
-	if len(healthy) != 2 {
-		t.Errorf("expected 2 healthy providers, got %d", len(healthy))
-	}
-
-	// Check that the right providers are in the list
-	hasOpenAI := false
-	hasGemini := false
-	for _, provider := range healthy {
-		if provider == types.ProviderTypeOpenAI {
-			hasOpenAI = true
-		}
-		if provider == types.ProviderTypeGemini {
-			hasGemini = true
-		}
-	}
-
-	if !hasOpenAI {
-		t.Error("expected OpenAI in healthy providers")
-	}
-	if !hasGemini {
-		t.Error("expected Gemini in healthy providers")
-	}
+	testGetProvidersByHealthStatus(t, true, []types.ProviderType{
+		types.ProviderTypeOpenAI,
+		types.ProviderTypeGemini,
+	})
 }
 
 func TestHealthChecker_GetUnhealthyProviders(t *testing.T) {
+	testGetProvidersByHealthStatus(t, false, []types.ProviderType{
+		types.ProviderTypeAnthropic,
+		types.ProviderTypeCerebras,
+	})
+}
+
+// testGetProvidersByHealthStatus is a helper function to test both GetHealthyProviders and GetUnhealthyProviders
+func testGetProvidersByHealthStatus(t *testing.T, healthy bool, expectedProviders []types.ProviderType) {
+	t.Helper()
 	checker := NewHealthChecker(time.Minute)
 
-	// Set up mixed statuses
+	// Set up mixed statuses - always use the same providers for consistency
 	checker.healthStatus[types.ProviderTypeOpenAI] = &ProviderHealth{
 		Provider: types.ProviderTypeOpenAI,
 		Healthy:  true,
@@ -246,35 +214,49 @@ func TestHealthChecker_GetUnhealthyProviders(t *testing.T) {
 		Details:  make(map[string]interface{}),
 	}
 
-	checker.healthStatus[types.ProviderTypeCerebras] = &ProviderHealth{
-		Provider: types.ProviderTypeCerebras,
-		Healthy:  false,
-		Details:  make(map[string]interface{}),
-	}
-
-	unhealthy := checker.GetUnhealthyProviders()
-
-	if len(unhealthy) != 2 {
-		t.Errorf("expected 2 unhealthy providers, got %d", len(unhealthy))
-	}
-
-	// Check that the right providers are in the list
-	hasAnthropic := false
-	hasCerebras := false
-	for _, provider := range unhealthy {
-		if provider == types.ProviderTypeAnthropic {
-			hasAnthropic = true
+	if healthy {
+		checker.healthStatus[types.ProviderTypeGemini] = &ProviderHealth{
+			Provider: types.ProviderTypeGemini,
+			Healthy:  true,
+			Details:  make(map[string]interface{}),
 		}
-		if provider == types.ProviderTypeCerebras {
-			hasCerebras = true
+	} else {
+		checker.healthStatus[types.ProviderTypeCerebras] = &ProviderHealth{
+			Provider: types.ProviderTypeCerebras,
+			Healthy:  false,
+			Details:  make(map[string]interface{}),
 		}
 	}
 
-	if !hasAnthropic {
-		t.Error("expected Anthropic in unhealthy providers")
+	// Get providers based on health status
+	var providers []types.ProviderType
+	if healthy {
+		providers = checker.GetHealthyProviders()
+	} else {
+		providers = checker.GetUnhealthyProviders()
 	}
-	if !hasCerebras {
-		t.Error("expected Cerebras in unhealthy providers")
+
+	// Verify count
+	if len(providers) != len(expectedProviders) {
+		t.Errorf("expected %d providers, got %d", len(expectedProviders), len(providers))
+	}
+
+	// Verify all expected providers are in the list
+	for _, expected := range expectedProviders {
+		found := false
+		for _, provider := range providers {
+			if provider == expected {
+				found = true
+				break
+			}
+		}
+		if !found {
+			statusStr := "healthy"
+			if !healthy {
+				statusStr = "unhealthy"
+			}
+			t.Errorf("expected %s in %s providers", expected, statusStr)
+		}
 	}
 }
 

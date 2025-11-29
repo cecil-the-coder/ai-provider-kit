@@ -284,97 +284,101 @@ func TestFirstWinsStrategy_AllProvidersFail(t *testing.T) {
 	}
 }
 
-func TestWeightedStrategy_CollectsDuringGracePeriod(t *testing.T) {
-	rp := NewRacingProvider("test", &Config{
-		TimeoutMS:     5000,
-		GracePeriodMS: 100,
-		Strategy:      StrategyWeighted,
-	})
-
-	// Pre-seed performance stats
-	rp.performance.RecordWin("high-score-provider", 50*time.Millisecond)
-	rp.performance.RecordWin("high-score-provider", 50*time.Millisecond)
-	rp.performance.RecordLoss("low-score-provider", 50*time.Millisecond)
-	rp.performance.RecordWin("low-score-provider", 50*time.Millisecond)
-
-	providers := []types.Provider{
-		&mockChatProvider{
-			name:     "low-score-provider",
-			delay:    10 * time.Millisecond,
-			response: "response 1",
+// TestWeightedStrategy_ScoreBasedSelection tests that the weighted strategy
+// selects the provider with the best performance score during the grace period,
+// even if a faster provider with worse history finishes first.
+func TestWeightedStrategy_ScoreBasedSelection(t *testing.T) {
+	tests := []struct {
+		name           string
+		gracePeriodMS  int
+		performanceSetup func(*PerformanceTracker)
+		providers      []types.Provider
+		expectedWinner string
+		description    string
+	}{
+		{
+			name:          "CollectsDuringGracePeriod",
+			gracePeriodMS: 100,
+			performanceSetup: func(pt *PerformanceTracker) {
+				// high-score-provider: 100% win rate (2 wins, 0 losses)
+				pt.RecordWin("high-score-provider", 50*time.Millisecond)
+				pt.RecordWin("high-score-provider", 50*time.Millisecond)
+				// low-score-provider: 50% win rate (1 win, 1 loss)
+				pt.RecordLoss("low-score-provider", 50*time.Millisecond)
+				pt.RecordWin("low-score-provider", 50*time.Millisecond)
+			},
+			providers: []types.Provider{
+				&mockChatProvider{
+					name:     "low-score-provider",
+					delay:    10 * time.Millisecond,
+					response: "response 1",
+				},
+				&mockChatProvider{
+					name:     "high-score-provider",
+					delay:    50 * time.Millisecond,
+					response: "response 2",
+				},
+			},
+			expectedWinner: "high-score-provider",
+			description:    "high-score-provider should win because it has better performance history",
 		},
-		&mockChatProvider{
-			name:     "high-score-provider",
-			delay:    50 * time.Millisecond,
-			response: "response 2",
-		},
-	}
-
-	rp.SetProviders(providers)
-
-	ctx := context.Background()
-	opts := types.GenerateOptions{Prompt: "test"}
-
-	stream, err := rp.GenerateChatCompletion(ctx, opts)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	defer stream.Close()
-
-	chunk, _ := stream.Next()
-	winner := chunk.Metadata["racing_winner"].(string)
-
-	// high-score-provider should win because it has better performance history
-	if winner != "high-score-provider" {
-		t.Errorf("expected 'high-score-provider' to win, got '%s'", winner)
-	}
-}
-
-func TestWeightedStrategy_PicksBestScore(t *testing.T) {
-	rp := NewRacingProvider("test", &Config{
-		TimeoutMS:     5000,
-		GracePeriodMS: 50,
-		Strategy:      StrategyWeighted,
-	})
-
-	// Provider A: 100% win rate
-	rp.performance.RecordWin("provider-a", 100*time.Millisecond)
-	rp.performance.RecordWin("provider-a", 100*time.Millisecond)
-
-	// Provider B: 50% win rate
-	rp.performance.RecordWin("provider-b", 100*time.Millisecond)
-	rp.performance.RecordLoss("provider-b", 100*time.Millisecond)
-
-	providers := []types.Provider{
-		&mockChatProvider{
-			name:     "provider-b",
-			delay:    10 * time.Millisecond,
-			response: "response b",
-		},
-		&mockChatProvider{
-			name:     "provider-a",
-			delay:    20 * time.Millisecond,
-			response: "response a",
+		{
+			name:          "PicksBestScore",
+			gracePeriodMS: 50,
+			performanceSetup: func(pt *PerformanceTracker) {
+				// provider-a: 100% win rate (2 wins, 0 losses)
+				pt.RecordWin("provider-a", 100*time.Millisecond)
+				pt.RecordWin("provider-a", 100*time.Millisecond)
+				// provider-b: 50% win rate (1 win, 1 loss)
+				pt.RecordWin("provider-b", 100*time.Millisecond)
+				pt.RecordLoss("provider-b", 100*time.Millisecond)
+			},
+			providers: []types.Provider{
+				&mockChatProvider{
+					name:     "provider-b",
+					delay:    10 * time.Millisecond,
+					response: "response b",
+				},
+				&mockChatProvider{
+					name:     "provider-a",
+					delay:    20 * time.Millisecond,
+					response: "response a",
+				},
+			},
+			expectedWinner: "provider-a",
+			description:    "provider-a should win due to better score",
 		},
 	}
 
-	rp.SetProviders(providers)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rp := NewRacingProvider("test", &Config{
+				TimeoutMS:     5000,
+				GracePeriodMS: tt.gracePeriodMS,
+				Strategy:      StrategyWeighted,
+			})
 
-	ctx := context.Background()
-	opts := types.GenerateOptions{Prompt: "test"}
+			// Pre-seed performance stats
+			tt.performanceSetup(rp.performance)
 
-	stream, err := rp.GenerateChatCompletion(ctx, opts)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	defer stream.Close()
+			rp.SetProviders(tt.providers)
 
-	chunk, _ := stream.Next()
-	winner := chunk.Metadata["racing_winner"].(string)
+			ctx := context.Background()
+			opts := types.GenerateOptions{Prompt: "test"}
 
-	// Provider A should win due to better score
-	if winner != "provider-a" {
-		t.Errorf("expected 'provider-a' to win, got '%s'", winner)
+			stream, err := rp.GenerateChatCompletion(ctx, opts)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			defer stream.Close()
+
+			chunk, _ := stream.Next()
+			winner := chunk.Metadata["racing_winner"].(string)
+
+			if winner != tt.expectedWinner {
+				t.Errorf("expected '%s' to win, got '%s': %s", tt.expectedWinner, winner, tt.description)
+			}
+		})
 	}
 }
 

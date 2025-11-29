@@ -102,9 +102,10 @@ func (m *KeyManager) GetNextKey() (string, error) {
 	if len(m.keys) == 1 {
 		m.mu.RLock()
 		health := m.keyHealth[m.keys[0]]
+		available := m.isKeyAvailable(m.keys[0], health)
 		m.mu.RUnlock()
 
-		if m.isKeyAvailable(m.keys[0], health) {
+		if available {
 			return m.keys[0], nil
 		}
 		return "", fmt.Errorf("only API key for %s is unavailable (in backoff)", m.providerName)
@@ -123,9 +124,10 @@ func (m *KeyManager) GetNextKey() (string, error) {
 
 		m.mu.RLock()
 		health := m.keyHealth[key]
+		available := m.isKeyAvailable(key, health)
 		m.mu.RUnlock()
 
-		if m.isKeyAvailable(key, health) {
+		if available {
 			return key, nil
 		}
 	}

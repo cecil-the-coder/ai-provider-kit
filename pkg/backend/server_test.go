@@ -188,8 +188,8 @@ func TestNewServer(t *testing.T) {
 	})
 }
 
-// TestServer_setupRoutes tests that routes are properly registered
-func TestServer_setupRoutes(t *testing.T) {
+// setupTestServer is a helper function that creates a test server with standard configuration
+func setupTestServer() *Server {
 	config := backendtypes.BackendConfig{
 		Server: backendtypes.ServerConfig{
 			Host:    "localhost",
@@ -202,7 +202,12 @@ func TestServer_setupRoutes(t *testing.T) {
 		"test-provider": NewMockProvider("test-provider", types.ProviderTypeOpenAI),
 	}
 
-	server := NewServer(config, providers)
+	return NewServer(config, providers)
+}
+
+// TestServer_setupRoutes tests that routes are properly registered
+func TestServer_setupRoutes(t *testing.T) {
+	server := setupTestServer()
 
 	// Test health endpoints
 	t.Run("HealthEndpoint", func(t *testing.T) {
@@ -244,19 +249,7 @@ func TestServer_setupRoutes(t *testing.T) {
 
 // TestServer_routeProviderRequests tests provider-specific routing
 func TestServer_routeProviderRequests(t *testing.T) {
-	config := backendtypes.BackendConfig{
-		Server: backendtypes.ServerConfig{
-			Host:    "localhost",
-			Port:    8080,
-			Version: "1.0.0",
-		},
-	}
-
-	providers := map[string]types.Provider{
-		"test-provider": NewMockProvider("test-provider", types.ProviderTypeOpenAI),
-	}
-
-	server := NewServer(config, providers)
+	server := setupTestServer()
 
 	t.Run("ProviderHealthCheckRoute", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPost, "/api/providers/health", nil)

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 	"time"
 
@@ -666,7 +667,8 @@ func TestOAuthKeyManager_CheckAlerts(t *testing.T) {
 }
 
 func TestOAuthKeyManager_WebhookIntegration(t *testing.T) {
-	// Create a test webhook server
+	// Create a test webhook server with thread-safe event collection
+	var eventsMu sync.Mutex
 	receivedEvents := make([]WebhookEvent, 0)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var event WebhookEvent
@@ -675,7 +677,9 @@ func TestOAuthKeyManager_WebhookIntegration(t *testing.T) {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
+		eventsMu.Lock()
 		receivedEvents = append(receivedEvents, event)
+		eventsMu.Unlock()
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer server.Close()
@@ -717,11 +721,17 @@ func TestOAuthKeyManager_WebhookIntegration(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	// Verify webhook was received
-	if len(receivedEvents) == 0 {
+	eventsMu.Lock()
+	eventCount := len(receivedEvents)
+	events := make([]WebhookEvent, len(receivedEvents))
+	copy(events, receivedEvents)
+	eventsMu.Unlock()
+
+	if eventCount == 0 {
 		t.Error("No webhook events received")
 	} else {
 		found := false
-		for _, event := range receivedEvents {
+		for _, event := range events {
 			if event.Type == "refresh" && event.CredentialID == "cred-1" {
 				found = true
 				break

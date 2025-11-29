@@ -129,37 +129,66 @@ func TestValidateAPIKeyFormat(t *testing.T) {
 	})
 }
 
+// testValidationCases is a helper for testing two-parameter validation functions
+type validationTestCase struct {
+	name        string
+	input       string
+	expected    string
+	shouldError bool
+	errorMsg    string
+}
+
+func runValidationTests(t *testing.T, testFunc func(string, string) error, cases []validationTestCase) {
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := testFunc(tc.input, tc.expected)
+			if tc.shouldError {
+				if err == nil {
+					t.Error(tc.errorMsg)
+				}
+			} else {
+				if err != nil {
+					t.Errorf("Expected no error, got: %v", err)
+				}
+			}
+		})
+	}
+}
+
 func TestValidateOAuthState(t *testing.T) {
 	utils := NewSecurityUtils(nil)
 
-	t.Run("ValidState", func(t *testing.T) {
-		state := "random-state-123"
-		err := utils.ValidateOAuthState(state, state)
-		if err != nil {
-			t.Errorf("Expected no error, got: %v", err)
-		}
-	})
+	cases := []validationTestCase{
+		{
+			name:        "ValidState",
+			input:       "random-state-123",
+			expected:    "random-state-123",
+			shouldError: false,
+		},
+		{
+			name:        "StateMismatch",
+			input:       "state1",
+			expected:    "state2",
+			shouldError: true,
+			errorMsg:    "Expected error for state mismatch",
+		},
+		{
+			name:        "EmptyState",
+			input:       "",
+			expected:    "expected",
+			shouldError: true,
+			errorMsg:    "Expected error for empty state",
+		},
+		{
+			name:        "EmptyExpectedState",
+			input:       "state",
+			expected:    "",
+			shouldError: true,
+			errorMsg:    "Expected error for empty expected state",
+		},
+	}
 
-	t.Run("StateMismatch", func(t *testing.T) {
-		err := utils.ValidateOAuthState("state1", "state2")
-		if err == nil {
-			t.Error("Expected error for state mismatch")
-		}
-	})
-
-	t.Run("EmptyState", func(t *testing.T) {
-		err := utils.ValidateOAuthState("", "expected")
-		if err == nil {
-			t.Error("Expected error for empty state")
-		}
-	})
-
-	t.Run("EmptyExpectedState", func(t *testing.T) {
-		err := utils.ValidateOAuthState("state", "")
-		if err == nil {
-			t.Error("Expected error for empty expected state")
-		}
-	})
+	runValidationTests(t, utils.ValidateOAuthState, cases)
 }
 
 func TestGenerateSecureToken(t *testing.T) {
@@ -317,34 +346,37 @@ func TestDeriveKey(t *testing.T) {
 func TestValidateRedirectURI(t *testing.T) {
 	utils := NewSecurityUtils(nil)
 
-	t.Run("ValidURI", func(t *testing.T) {
-		uri := "https://example.com/callback"
-		err := utils.ValidateRedirectURI(uri, uri)
-		if err != nil {
-			t.Errorf("Expected no error, got: %v", err)
-		}
-	})
+	cases := []validationTestCase{
+		{
+			name:        "ValidURI",
+			input:       "https://example.com/callback",
+			expected:    "https://example.com/callback",
+			shouldError: false,
+		},
+		{
+			name:        "Mismatch",
+			input:       "https://example.com/a",
+			expected:    "https://example.com/b",
+			shouldError: true,
+			errorMsg:    "Expected error for URI mismatch",
+		},
+		{
+			name:        "EmptyURI",
+			input:       "",
+			expected:    "https://example.com",
+			shouldError: true,
+			errorMsg:    "Expected error for empty URI",
+		},
+		{
+			name:        "EmptyExpected",
+			input:       "https://example.com",
+			expected:    "",
+			shouldError: true,
+			errorMsg:    "Expected error for empty expected URI",
+		},
+	}
 
-	t.Run("Mismatch", func(t *testing.T) {
-		err := utils.ValidateRedirectURI("https://example.com/a", "https://example.com/b")
-		if err == nil {
-			t.Error("Expected error for URI mismatch")
-		}
-	})
-
-	t.Run("EmptyURI", func(t *testing.T) {
-		err := utils.ValidateRedirectURI("", "https://example.com")
-		if err == nil {
-			t.Error("Expected error for empty URI")
-		}
-	})
-
-	t.Run("EmptyExpected", func(t *testing.T) {
-		err := utils.ValidateRedirectURI("https://example.com", "")
-		if err == nil {
-			t.Error("Expected error for empty expected URI")
-		}
-	})
+	runValidationTests(t, utils.ValidateRedirectURI, cases)
 }
 
 func TestSanitizeLogMessage(t *testing.T) {

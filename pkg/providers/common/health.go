@@ -16,8 +16,10 @@ type HealthChecker struct {
 	healthStatus   map[types.ProviderType]*ProviderHealth
 	mu             sync.RWMutex
 	ticker         *time.Ticker
-	stopChan       chan bool
+	stopChan       chan struct{}
 	checkCallbacks []HealthCheckCallback
+	running        bool           // tracks if the health checker is running
+	wg             sync.WaitGroup // waits for goroutine to exit
 }
 
 // ProviderHealth represents the health status of a provider
@@ -57,19 +59,26 @@ func NewHealthChecker(interval time.Duration) *HealthChecker {
 
 // Start starts the health checker
 func (hc *HealthChecker) Start() {
-	if hc.ticker != nil {
+	hc.mu.Lock()
+	if hc.running {
+		hc.mu.Unlock()
 		return // Already started
 	}
-
+	hc.running = true
 	hc.ticker = time.NewTicker(hc.interval)
-	hc.stopChan = make(chan bool)
+	hc.stopChan = make(chan struct{})
+	ticker := hc.ticker
+	stopChan := hc.stopChan
+	hc.wg.Add(1)
+	hc.mu.Unlock()
 
 	go func() {
+		defer hc.wg.Done()
 		for {
 			select {
-			case <-hc.ticker.C:
+			case <-ticker.C:
 				hc.performAllChecks()
-			case <-hc.stopChan:
+			case <-stopChan:
 				return
 			}
 		}
@@ -78,17 +87,32 @@ func (hc *HealthChecker) Start() {
 
 // Stop stops the health checker
 func (hc *HealthChecker) Stop() {
-	if hc.ticker == nil {
+	hc.mu.Lock()
+	if !hc.running {
+		hc.mu.Unlock()
 		return // Already stopped
 	}
-
-	hc.ticker.Stop()
-	close(hc.stopChan)
+	hc.running = false
+	ticker := hc.ticker
+	stopChan := hc.stopChan
 	hc.ticker = nil
+	hc.stopChan = nil
+	hc.mu.Unlock()
+
+	if ticker != nil {
+		ticker.Stop()
+	}
+	if stopChan != nil {
+		close(stopChan)
+	}
+	// Wait for the goroutine to exit
+	hc.wg.Wait()
 }
 
 // AddCallback adds a callback to be called when health checks complete
 func (hc *HealthChecker) AddCallback(callback HealthCheckCallback) {
+	hc.mu.Lock()
+	defer hc.mu.Unlock()
 	hc.checkCallbacks = append(hc.checkCallbacks, callback)
 }
 
@@ -97,8 +121,13 @@ func (hc *HealthChecker) CheckProvider(ctx context.Context, provider *Initialize
 	result := hc.performHealthCheck(ctx, provider)
 	hc.updateHealthStatus(provider.Type, result)
 
-	// Call callbacks
-	for _, callback := range hc.checkCallbacks {
+	// Call callbacks - make a copy of callbacks under lock
+	hc.mu.RLock()
+	callbacks := make([]HealthCheckCallback, len(hc.checkCallbacks))
+	copy(callbacks, hc.checkCallbacks)
+	hc.mu.RUnlock()
+
+	for _, callback := range callbacks {
 		go callback(provider.Type, hc.getHealthStatus(provider.Type))
 	}
 

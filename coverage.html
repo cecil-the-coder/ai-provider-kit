@@ -1,0 +1,561 @@
+
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+		<title>racing: Go Coverage Report</title>
+		<style>
+			body {
+				background: black;
+				color: rgb(80, 80, 80);
+			}
+			body, pre, #legend span {
+				font-family: Menlo, monospace;
+				font-weight: bold;
+			}
+			#topbar {
+				background: black;
+				position: fixed;
+				top: 0; left: 0; right: 0;
+				height: 42px;
+				border-bottom: 1px solid rgb(80, 80, 80);
+			}
+			#content {
+				margin-top: 50px;
+			}
+			#nav, #legend {
+				float: left;
+				margin-left: 10px;
+			}
+			#legend {
+				margin-top: 12px;
+			}
+			#nav {
+				margin-top: 10px;
+			}
+			#legend span {
+				margin: 0 5px;
+			}
+			.cov0 { color: rgb(192, 0, 0) }
+.cov1 { color: rgb(128, 128, 128) }
+.cov2 { color: rgb(116, 140, 131) }
+.cov3 { color: rgb(104, 152, 134) }
+.cov4 { color: rgb(92, 164, 137) }
+.cov5 { color: rgb(80, 176, 140) }
+.cov6 { color: rgb(68, 188, 143) }
+.cov7 { color: rgb(56, 200, 146) }
+.cov8 { color: rgb(44, 212, 149) }
+.cov9 { color: rgb(32, 224, 152) }
+.cov10 { color: rgb(20, 236, 155) }
+
+		</style>
+	</head>
+	<body>
+		<div id="topbar">
+			<div id="nav">
+				<select id="files">
+				
+				<option value="file0">github.com/cecil-the-coder/ai-provider-kit/pkg/providers/virtual/racing/performance.go (100.0%)</option>
+				
+				<option value="file1">github.com/cecil-the-coder/ai-provider-kit/pkg/providers/virtual/racing/provider.go (91.2%)</option>
+				
+				<option value="file2">github.com/cecil-the-coder/ai-provider-kit/pkg/providers/virtual/racing/stubs.go (88.9%)</option>
+				
+				</select>
+			</div>
+			<div id="legend">
+				<span>not tracked</span>
+			
+				<span class="cov0">not covered</span>
+				<span class="cov8">covered</span>
+			
+			</div>
+		</div>
+		<div id="content">
+		
+		<pre class="file" id="file0" style="display: none">package racing
+
+import (
+        "sync"
+        "time"
+)
+
+type PerformanceTracker struct {
+        mu    sync.RWMutex
+        stats map[string]*ProviderStats
+}
+
+type ProviderStats struct {
+        TotalRaces   int64         `json:"total_races"`
+        Wins         int64         `json:"wins"`
+        Losses       int64         `json:"losses"`
+        AvgLatency   time.Duration `json:"avg_latency"`
+        TotalLatency time.Duration `json:"-"`
+        WinRate      float64       `json:"win_rate"`
+        LastUpdated  time.Time     `json:"last_updated"`
+}
+
+func NewPerformanceTracker() *PerformanceTracker <span class="cov8" title="1">{
+        return &amp;PerformanceTracker{
+                stats: make(map[string]*ProviderStats),
+        }
+}</span>
+
+func (pt *PerformanceTracker) RecordWin(provider string, latency time.Duration) <span class="cov8" title="1">{
+        pt.mu.Lock()
+        defer pt.mu.Unlock()
+
+        stats := pt.getOrCreate(provider)
+        stats.TotalRaces++
+        stats.Wins++
+        stats.TotalLatency += latency
+        stats.AvgLatency = stats.TotalLatency / time.Duration(stats.TotalRaces)
+        stats.WinRate = float64(stats.Wins) / float64(stats.TotalRaces)
+        stats.LastUpdated = time.Now()
+}</span>
+
+func (pt *PerformanceTracker) RecordLoss(provider string, latency time.Duration) <span class="cov8" title="1">{
+        pt.mu.Lock()
+        defer pt.mu.Unlock()
+
+        stats := pt.getOrCreate(provider)
+        stats.TotalRaces++
+        stats.Losses++
+        stats.TotalLatency += latency
+        stats.AvgLatency = stats.TotalLatency / time.Duration(stats.TotalRaces)
+        stats.WinRate = float64(stats.Wins) / float64(stats.TotalRaces)
+        stats.LastUpdated = time.Now()
+}</span>
+
+func (pt *PerformanceTracker) GetScore(provider string) float64 <span class="cov8" title="1">{
+        pt.mu.RLock()
+        defer pt.mu.RUnlock()
+
+        stats, ok := pt.stats[provider]
+        if !ok </span><span class="cov8" title="1">{
+                return 0.5
+        }</span>
+
+        <span class="cov8" title="1">return stats.WinRate</span>
+}
+
+func (pt *PerformanceTracker) GetAllStats() map[string]*ProviderStats <span class="cov8" title="1">{
+        pt.mu.RLock()
+        defer pt.mu.RUnlock()
+
+        result := make(map[string]*ProviderStats)
+        for k, v := range pt.stats </span><span class="cov8" title="1">{
+                statsCopy := *v
+                result[k] = &amp;statsCopy
+        }</span>
+        <span class="cov8" title="1">return result</span>
+}
+
+func (pt *PerformanceTracker) getOrCreate(provider string) *ProviderStats <span class="cov8" title="1">{
+        stats, ok := pt.stats[provider]
+        if !ok </span><span class="cov8" title="1">{
+                stats = &amp;ProviderStats{}
+                pt.stats[provider] = stats
+        }</span>
+        <span class="cov8" title="1">return stats</span>
+}
+</pre>
+		
+		<pre class="file" id="file1" style="display: none">package racing
+
+import (
+        "context"
+        "fmt"
+        "sync"
+        "time"
+
+        "github.com/cecil-the-coder/ai-provider-kit/pkg/types"
+)
+
+// RacingProvider races multiple providers and returns the first successful response
+type RacingProvider struct {
+        name        string
+        providers   []types.Provider
+        config      *Config
+        performance *PerformanceTracker
+        mu          sync.RWMutex
+}
+
+type Config struct {
+        TimeoutMS       int      `yaml:"timeout_ms"`
+        GracePeriodMS   int      `yaml:"grace_period_ms"`
+        Strategy        Strategy `yaml:"strategy"`
+        ProviderNames   []string `yaml:"providers"`
+        PerformanceFile string   `yaml:"performance_file,omitempty"`
+}
+
+type Strategy string
+
+const (
+        StrategyFirstWins Strategy = "first_wins"
+        StrategyWeighted  Strategy = "weighted"
+        StrategyQuality   Strategy = "quality"
+)
+
+type raceResult struct {
+        index    int
+        provider types.Provider
+        stream   types.ChatCompletionStream
+        err      error
+        latency  time.Duration
+}
+
+func NewRacingProvider(name string, config *Config) *RacingProvider <span class="cov8" title="1">{
+        return &amp;RacingProvider{
+                name:        name,
+                config:      config,
+                performance: NewPerformanceTracker(),
+        }
+}</span>
+
+func (r *RacingProvider) SetProviders(providers []types.Provider) <span class="cov8" title="1">{
+        r.mu.Lock()
+        defer r.mu.Unlock()
+        r.providers = providers
+}</span>
+
+func (r *RacingProvider) Name() string              <span class="cov8" title="1">{ return r.name }</span>
+func (r *RacingProvider) Type() types.ProviderType <span class="cov8" title="1">{ return "racing" }</span>
+func (r *RacingProvider) Description() string      <span class="cov8" title="1">{ return "Races multiple providers for fastest response" }</span>
+
+func (r *RacingProvider) GenerateChatCompletion(ctx context.Context, opts types.GenerateOptions) (types.ChatCompletionStream, error) <span class="cov8" title="1">{
+        r.mu.RLock()
+        providers := r.providers
+        r.mu.RUnlock()
+
+        if len(providers) == 0 </span><span class="cov8" title="1">{
+                return nil, fmt.Errorf("no providers configured for racing")
+        }</span>
+
+        <span class="cov8" title="1">timeout := time.Duration(r.config.TimeoutMS) * time.Millisecond
+        ctx, cancel := context.WithTimeout(ctx, timeout)
+        defer cancel()
+
+        // Create a cancellable context for racing goroutines that we can cancel early
+        // when a winner is found, reducing resource waste
+        raceCtx, raceCancel := context.WithCancel(ctx)
+
+        results := make(chan *raceResult, len(providers))
+        var wg sync.WaitGroup
+
+        for i, provider := range providers </span><span class="cov8" title="1">{
+                wg.Add(1)
+                go func(idx int, p types.Provider) </span><span class="cov8" title="1">{
+                        defer wg.Done()
+                        start := time.Now()
+
+                        chatProvider, ok := p.(types.ChatProvider)
+                        if !ok </span><span class="cov0" title="0">{
+                                results &lt;- &amp;raceResult{index: idx, provider: p, err: fmt.Errorf("provider does not support chat")}
+                                return
+                        }</span>
+
+                        // Use raceCtx so this goroutine can be cancelled early when winner is found
+                        <span class="cov8" title="1">stream, err := chatProvider.GenerateChatCompletion(raceCtx, opts)
+                        results &lt;- &amp;raceResult{
+                                index:    idx,
+                                provider: p,
+                                stream:   stream,
+                                err:      err,
+                                latency:  time.Since(start),
+                        }</span>
+                }(i, provider)
+        }
+
+        <span class="cov8" title="1">go func() </span><span class="cov8" title="1">{
+                wg.Wait()
+                close(results)
+        }</span>()
+
+        <span class="cov8" title="1">return r.selectWinner(ctx, results, raceCancel)</span>
+}
+
+func (r *RacingProvider) selectWinner(ctx context.Context, results chan *raceResult, cancelRace context.CancelFunc) (types.ChatCompletionStream, error) <span class="cov8" title="1">{
+        defer cancelRace() // Always cancel racing context when winner is selected or error occurs
+
+        switch r.config.Strategy </span>{
+        case StrategyWeighted:<span class="cov8" title="1">
+                return r.weightedStrategy(ctx, results)</span>
+        case StrategyQuality:<span class="cov8" title="1">
+                return r.qualityStrategy(ctx, results)</span>
+        default:<span class="cov8" title="1">
+                return r.firstWinsStrategy(ctx, results)</span>
+        }
+}
+
+func (r *RacingProvider) firstWinsStrategy(ctx context.Context, results chan *raceResult) (types.ChatCompletionStream, error) <span class="cov8" title="1">{
+        var lastErr error
+        for result := range results </span><span class="cov8" title="1">{
+                if result.err == nil &amp;&amp; result.stream != nil </span><span class="cov8" title="1">{
+                        r.performance.RecordWin(result.provider.Name(), result.latency)
+                        // Return immediately on first success - the defer cancelRace() in selectWinner
+                        // will cancel the racing context, stopping other in-flight requests
+                        return &amp;racingStream{
+                                inner:    result.stream,
+                                provider: result.provider.Name(),
+                                latency:  result.latency,
+                        }, nil
+                }</span>
+                <span class="cov8" title="1">if result.err != nil </span><span class="cov8" title="1">{
+                        r.performance.RecordLoss(result.provider.Name(), result.latency)
+                        lastErr = result.err
+                }</span>
+        }
+        <span class="cov8" title="1">if lastErr != nil </span><span class="cov8" title="1">{
+                return nil, fmt.Errorf("all providers failed, last error: %w", lastErr)
+        }</span>
+        <span class="cov0" title="0">return nil, fmt.Errorf("all providers failed")</span>
+}
+
+func (r *RacingProvider) weightedStrategy(ctx context.Context, results chan *raceResult) (types.ChatCompletionStream, error) <span class="cov8" title="1">{
+        gracePeriod := time.Duration(r.config.GracePeriodMS) * time.Millisecond
+        timer := time.NewTimer(gracePeriod)
+        defer timer.Stop()
+
+        var candidates []*raceResult
+
+        for </span><span class="cov8" title="1">{
+                select </span>{
+                case result, ok := &lt;-results:<span class="cov8" title="1">
+                        if !ok </span><span class="cov8" title="1">{
+                                return r.pickBestCandidate(candidates)
+                        }</span>
+                        <span class="cov8" title="1">if result.err == nil &amp;&amp; result.stream != nil </span><span class="cov8" title="1">{
+                                candidates = append(candidates, result)
+                                if len(candidates) == 1 </span><span class="cov8" title="1">{
+                                        timer.Reset(gracePeriod)
+                                }</span>
+                        }
+                case &lt;-timer.C:<span class="cov8" title="1">
+                        if len(candidates) &gt; 0 </span><span class="cov8" title="1">{
+                                return r.pickBestCandidate(candidates)
+                        }</span>
+                case &lt;-ctx.Done():<span class="cov0" title="0">
+                        if len(candidates) &gt; 0 </span><span class="cov0" title="0">{
+                                return r.pickBestCandidate(candidates)
+                        }</span>
+                        <span class="cov0" title="0">return nil, ctx.Err()</span>
+                }
+        }
+}
+
+func (r *RacingProvider) qualityStrategy(ctx context.Context, results chan *raceResult) (types.ChatCompletionStream, error) <span class="cov8" title="1">{
+        return r.weightedStrategy(ctx, results)
+}</span>
+
+func (r *RacingProvider) pickBestCandidate(candidates []*raceResult) (types.ChatCompletionStream, error) <span class="cov8" title="1">{
+        if len(candidates) == 0 </span><span class="cov8" title="1">{
+                return nil, fmt.Errorf("no successful candidates")
+        }</span>
+
+        <span class="cov8" title="1">var best *raceResult
+        var bestScore float64 = -1
+
+        for _, c := range candidates </span><span class="cov8" title="1">{
+                score := r.performance.GetScore(c.provider.Name())
+                latencyFactor := 1.0 / (1.0 + c.latency.Seconds())
+                adjustedScore := score * latencyFactor
+
+                if adjustedScore &gt; bestScore </span><span class="cov8" title="1">{
+                        bestScore = adjustedScore
+                        best = c
+                }</span>
+        }
+
+        <span class="cov8" title="1">if best != nil </span><span class="cov8" title="1">{
+                r.performance.RecordWin(best.provider.Name(), best.latency)
+                return &amp;racingStream{
+                        inner:    best.stream,
+                        provider: best.provider.Name(),
+                        latency:  best.latency,
+                }, nil
+        }</span>
+
+        <span class="cov0" title="0">r.performance.RecordWin(candidates[0].provider.Name(), candidates[0].latency)
+        return &amp;racingStream{
+                inner:    candidates[0].stream,
+                provider: candidates[0].provider.Name(),
+                latency:  candidates[0].latency,
+        }, nil</span>
+}
+
+func (r *RacingProvider) GetPerformanceStats() map[string]*ProviderStats <span class="cov8" title="1">{
+        return r.performance.GetAllStats()
+}</span>
+
+type racingStream struct {
+        inner    types.ChatCompletionStream
+        provider string
+        latency  time.Duration
+}
+
+func (s *racingStream) Next() (types.ChatCompletionChunk, error) <span class="cov8" title="1">{
+        chunk, err := s.inner.Next()
+        if chunk.Metadata == nil </span><span class="cov8" title="1">{
+                chunk.Metadata = make(map[string]interface{})
+        }</span>
+        <span class="cov8" title="1">chunk.Metadata["racing_winner"] = s.provider
+        chunk.Metadata["racing_latency_ms"] = s.latency.Milliseconds()
+        return chunk, err</span>
+}
+
+func (s *racingStream) Close() error <span class="cov8" title="1">{
+        return s.inner.Close()
+}</span>
+</pre>
+		
+		<pre class="file" id="file2" style="display: none">package racing
+
+import (
+        "context"
+        "fmt"
+
+        "github.com/cecil-the-coder/ai-provider-kit/pkg/types"
+)
+
+// Stub implementations for Provider interface methods not specific to racing
+
+func (r *RacingProvider) GetModels(ctx context.Context) ([]types.Model, error) <span class="cov8" title="1">{
+        return nil, fmt.Errorf("GetModels not supported for virtual racing provider")
+}</span>
+
+func (r *RacingProvider) GetDefaultModel() string <span class="cov8" title="1">{
+        return ""
+}</span>
+
+func (r *RacingProvider) SupportsToolCalling() bool <span class="cov8" title="1">{
+        return false
+}</span>
+
+func (r *RacingProvider) SupportsStreaming() bool <span class="cov8" title="1">{
+        return true
+}</span>
+
+func (r *RacingProvider) SupportsResponsesAPI() bool <span class="cov8" title="1">{
+        return false
+}</span>
+
+func (r *RacingProvider) GetToolFormat() types.ToolFormat <span class="cov8" title="1">{
+        return types.ToolFormatOpenAI
+}</span>
+
+func (r *RacingProvider) Authenticate(ctx context.Context, authConfig types.AuthConfig) error <span class="cov8" title="1">{
+        return nil // Virtual providers don't need authentication
+}</span>
+
+func (r *RacingProvider) IsAuthenticated() bool <span class="cov8" title="1">{
+        return true
+}</span>
+
+func (r *RacingProvider) Logout(ctx context.Context) error <span class="cov8" title="1">{
+        return nil
+}</span>
+
+func (r *RacingProvider) Configure(config types.ProviderConfig) error <span class="cov8" title="1">{
+        // Update racing config from provider config if needed
+        if config.ProviderConfig != nil </span><span class="cov8" title="1">{
+                if timeout, ok := config.ProviderConfig["timeout_ms"].(int); ok </span><span class="cov8" title="1">{
+                        r.config.TimeoutMS = timeout
+                }</span>
+                <span class="cov8" title="1">if gracePeriod, ok := config.ProviderConfig["grace_period_ms"].(int); ok </span><span class="cov8" title="1">{
+                        r.config.GracePeriodMS = gracePeriod
+                }</span>
+                <span class="cov8" title="1">if strategy, ok := config.ProviderConfig["strategy"].(string); ok </span><span class="cov8" title="1">{
+                        r.config.Strategy = Strategy(strategy)
+                }</span>
+                <span class="cov8" title="1">if providers, ok := config.ProviderConfig["providers"].([]string); ok </span><span class="cov8" title="1">{
+                        r.config.ProviderNames = providers
+                }</span>
+        }
+        <span class="cov8" title="1">return nil</span>
+}
+
+func (r *RacingProvider) GetConfig() types.ProviderConfig <span class="cov8" title="1">{
+        return types.ProviderConfig{
+                Type: "racing",
+                Name: r.name,
+                ProviderConfig: map[string]interface{}{
+                        "timeout_ms":       r.config.TimeoutMS,
+                        "grace_period_ms":  r.config.GracePeriodMS,
+                        "strategy":         string(r.config.Strategy),
+                        "providers":        r.config.ProviderNames,
+                        "performance_file": r.config.PerformanceFile,
+                },
+        }
+}</span>
+
+func (r *RacingProvider) InvokeServerTool(ctx context.Context, toolName string, params interface{}) (interface{}, error) <span class="cov8" title="1">{
+        return nil, fmt.Errorf("tool calling not supported for virtual racing provider")
+}</span>
+
+func (r *RacingProvider) HealthCheck(ctx context.Context) error <span class="cov8" title="1">{
+        r.mu.RLock()
+        providers := r.providers
+        r.mu.RUnlock()
+
+        if len(providers) == 0 </span><span class="cov8" title="1">{
+                return fmt.Errorf("no providers configured")
+        }</span>
+
+        // Check health of at least one provider
+        <span class="cov8" title="1">var lastErr error
+        for _, provider := range providers </span><span class="cov8" title="1">{
+                if healthProvider, ok := provider.(types.HealthCheckProvider); ok </span><span class="cov8" title="1">{
+                        if err := healthProvider.HealthCheck(ctx); err == nil </span><span class="cov8" title="1">{
+                                return nil // At least one provider is healthy
+                        }</span> else<span class="cov0" title="0"> {
+                                lastErr = err
+                        }</span>
+                }
+        }
+
+        <span class="cov0" title="0">if lastErr != nil </span><span class="cov0" title="0">{
+                return fmt.Errorf("all providers unhealthy: %w", lastErr)
+        }</span>
+        <span class="cov0" title="0">return nil</span>
+}
+
+func (r *RacingProvider) GetMetrics() types.ProviderMetrics <span class="cov8" title="1">{
+        return types.ProviderMetrics{
+                RequestCount: 0,
+                SuccessCount: 0,
+                ErrorCount:   0,
+        }
+}</span>
+</pre>
+		
+		</div>
+	</body>
+	<script>
+	(function() {
+		var files = document.getElementById('files');
+		var visible;
+		files.addEventListener('change', onChange, false);
+		function select(part) {
+			if (visible)
+				visible.style.display = 'none';
+			visible = document.getElementById(part);
+			if (!visible)
+				return;
+			files.value = part;
+			visible.style.display = 'block';
+			location.hash = part;
+		}
+		function onChange() {
+			select(files.value);
+			window.scrollTo(0, 0);
+		}
+		if (location.hash != "") {
+			select(location.hash.substr(1));
+		}
+		if (!visible) {
+			select("file0");
+		}
+	})();
+	</script>
+</html>

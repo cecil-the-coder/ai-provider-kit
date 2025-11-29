@@ -13,253 +13,161 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// apiErrorTestCase represents a test case for API error handling
+type apiErrorTestCase struct {
+	name             string
+	statusCode       int
+	responseBody     interface{} // Can be OpenAIErrorResponse, OpenAIResponse, or string for raw JSON
+	expectedErrorMsg string
+	apiKey           string
+	model            string
+}
+
+// setupErrorTestServer creates a test server that returns the specified response
+func setupErrorTestServer(statusCode int, responseBody interface{}) *httptest.Server {
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(statusCode)
+		w.Header().Set("Content-Type", "application/json")
+
+		switch v := responseBody.(type) {
+		case string:
+			_, _ = w.Write([]byte(v))
+		case OpenAIErrorResponse:
+			_ = json.NewEncoder(w).Encode(v)
+		case OpenAIResponse:
+			_ = json.NewEncoder(w).Encode(v)
+		}
+	}))
+}
+
+// runAPIErrorTest runs a single API error test case
+func runAPIErrorTest(t *testing.T, tc apiErrorTestCase) {
+	server := setupErrorTestServer(tc.statusCode, tc.responseBody)
+	defer server.Close()
+
+	apiKey := tc.apiKey
+	if apiKey == "" {
+		apiKey = "sk-test-key"
+	}
+
+	model := tc.model
+	if model == "" {
+		model = "gpt-4"
+	}
+
+	config := types.ProviderConfig{
+		Type:    types.ProviderTypeOpenAI,
+		APIKey:  apiKey,
+		BaseURL: server.URL,
+	}
+	provider := NewOpenAIProvider(config)
+
+	request := OpenAIRequest{
+		Model: model,
+		Messages: []OpenAIMessage{
+			{Role: "user", Content: "Test"},
+		},
+	}
+
+	msg, usage, err := provider.makeAPICall(context.Background(), request, apiKey)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), tc.expectedErrorMsg)
+	assert.Empty(t, msg.Content)
+	assert.Nil(t, usage)
+}
+
 // TestMakeAPICall_ErrorHandling tests error handling in makeAPICall
 func TestMakeAPICall_ErrorHandling(t *testing.T) {
-	t.Run("InvalidAPIKey", func(t *testing.T) {
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			errorResp := OpenAIErrorResponse{
+	testCases := []apiErrorTestCase{
+		{
+			name:       "InvalidAPIKey",
+			statusCode: http.StatusUnauthorized,
+			responseBody: OpenAIErrorResponse{
 				Error: OpenAIError{
 					Message: "Invalid API key provided",
 					Type:    "invalid_api_key",
 					Code:    "invalid_api_key",
 				},
-			}
-			w.WriteHeader(http.StatusUnauthorized)
-			w.Header().Set("Content-Type", "application/json")
-			_ = json.NewEncoder(w).Encode(errorResp)
-		}))
-		defer server.Close()
-
-		config := types.ProviderConfig{
-			Type:    types.ProviderTypeOpenAI,
-			APIKey:  "sk-invalid-key",
-			BaseURL: server.URL,
-		}
-		provider := NewOpenAIProvider(config)
-
-		request := OpenAIRequest{
-			Model: "gpt-4",
-			Messages: []OpenAIMessage{
-				{Role: "user", Content: "Test"},
 			},
-		}
-
-		msg, usage, err := provider.makeAPICall(context.Background(), request, "sk-invalid-key")
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "invalid OpenAI API key")
-		assert.Empty(t, msg.Content)
-		assert.Nil(t, usage)
-	})
-
-	t.Run("InsufficientQuota", func(t *testing.T) {
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			errorResp := OpenAIErrorResponse{
+			expectedErrorMsg: "invalid OpenAI API key",
+			apiKey:           "sk-invalid-key",
+		},
+		{
+			name:       "InsufficientQuota",
+			statusCode: http.StatusTooManyRequests,
+			responseBody: OpenAIErrorResponse{
 				Error: OpenAIError{
 					Message: "You exceeded your current quota",
 					Type:    "insufficient_quota",
 					Code:    "insufficient_quota",
 				},
-			}
-			w.WriteHeader(http.StatusTooManyRequests)
-			w.Header().Set("Content-Type", "application/json")
-			_ = json.NewEncoder(w).Encode(errorResp)
-		}))
-		defer server.Close()
-
-		config := types.ProviderConfig{
-			Type:    types.ProviderTypeOpenAI,
-			APIKey:  "sk-test-key",
-			BaseURL: server.URL,
-		}
-		provider := NewOpenAIProvider(config)
-
-		request := OpenAIRequest{
-			Model: "gpt-4",
-			Messages: []OpenAIMessage{
-				{Role: "user", Content: "Test"},
 			},
-		}
-
-		msg, usage, err := provider.makeAPICall(context.Background(), request, "sk-test-key")
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "quota exceeded")
-		assert.Empty(t, msg.Content)
-		assert.Nil(t, usage)
-	})
-
-	t.Run("RateLimitExceeded", func(t *testing.T) {
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			errorResp := OpenAIErrorResponse{
+			expectedErrorMsg: "quota exceeded",
+		},
+		{
+			name:       "RateLimitExceeded",
+			statusCode: http.StatusTooManyRequests,
+			responseBody: OpenAIErrorResponse{
 				Error: OpenAIError{
 					Message: "Rate limit exceeded",
 					Type:    "rate_limit_exceeded",
 					Code:    "rate_limit_exceeded",
 				},
-			}
-			w.WriteHeader(http.StatusTooManyRequests)
-			w.Header().Set("Content-Type", "application/json")
-			_ = json.NewEncoder(w).Encode(errorResp)
-		}))
-		defer server.Close()
-
-		config := types.ProviderConfig{
-			Type:    types.ProviderTypeOpenAI,
-			APIKey:  "sk-test-key",
-			BaseURL: server.URL,
-		}
-		provider := NewOpenAIProvider(config)
-
-		request := OpenAIRequest{
-			Model: "gpt-4",
-			Messages: []OpenAIMessage{
-				{Role: "user", Content: "Test"},
 			},
-		}
-
-		msg, usage, err := provider.makeAPICall(context.Background(), request, "sk-test-key")
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "rate limit exceeded")
-		assert.Empty(t, msg.Content)
-		assert.Nil(t, usage)
-	})
-
-	t.Run("ModelNotFound", func(t *testing.T) {
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			errorResp := OpenAIErrorResponse{
+			expectedErrorMsg: "rate limit exceeded",
+		},
+		{
+			name:       "ModelNotFound",
+			statusCode: http.StatusNotFound,
+			responseBody: OpenAIErrorResponse{
 				Error: OpenAIError{
 					Message: "The model does not exist",
 					Type:    "model_not_found",
 					Code:    "model_not_found",
 				},
-			}
-			w.WriteHeader(http.StatusNotFound)
-			w.Header().Set("Content-Type", "application/json")
-			_ = json.NewEncoder(w).Encode(errorResp)
-		}))
-		defer server.Close()
-
-		config := types.ProviderConfig{
-			Type:    types.ProviderTypeOpenAI,
-			APIKey:  "sk-test-key",
-			BaseURL: server.URL,
-		}
-		provider := NewOpenAIProvider(config)
-
-		request := OpenAIRequest{
-			Model: "non-existent-model",
-			Messages: []OpenAIMessage{
-				{Role: "user", Content: "Test"},
 			},
-		}
-
-		msg, usage, err := provider.makeAPICall(context.Background(), request, "sk-test-key")
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "model not found")
-		assert.Empty(t, msg.Content)
-		assert.Nil(t, usage)
-	})
-
-	t.Run("InvalidRequestError", func(t *testing.T) {
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			errorResp := OpenAIErrorResponse{
+			expectedErrorMsg: "model not found",
+			model:            "non-existent-model",
+		},
+		{
+			name:       "InvalidRequestError",
+			statusCode: http.StatusBadRequest,
+			responseBody: OpenAIErrorResponse{
 				Error: OpenAIError{
 					Message: "Invalid request parameters",
 					Type:    "invalid_request_error",
 					Code:    "invalid_request_error",
 				},
-			}
-			w.WriteHeader(http.StatusBadRequest)
-			w.Header().Set("Content-Type", "application/json")
-			_ = json.NewEncoder(w).Encode(errorResp)
-		}))
-		defer server.Close()
-
-		config := types.ProviderConfig{
-			Type:    types.ProviderTypeOpenAI,
-			APIKey:  "sk-test-key",
-			BaseURL: server.URL,
-		}
-		provider := NewOpenAIProvider(config)
-
-		request := OpenAIRequest{
-			Model: "gpt-4",
-			Messages: []OpenAIMessage{
-				{Role: "user", Content: "Test"},
 			},
-		}
-
-		msg, usage, err := provider.makeAPICall(context.Background(), request, "sk-test-key")
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "invalid OpenAI request")
-		assert.Empty(t, msg.Content)
-		assert.Nil(t, usage)
-	})
-
-	t.Run("GenericAPIError", func(t *testing.T) {
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			errorResp := OpenAIErrorResponse{
+			expectedErrorMsg: "invalid OpenAI request",
+		},
+		{
+			name:       "GenericAPIError",
+			statusCode: http.StatusInternalServerError,
+			responseBody: OpenAIErrorResponse{
 				Error: OpenAIError{
 					Message: "Some other error",
 					Type:    "other_error",
 					Code:    "other_error",
 				},
-			}
-			w.WriteHeader(http.StatusInternalServerError)
-			w.Header().Set("Content-Type", "application/json")
-			_ = json.NewEncoder(w).Encode(errorResp)
-		}))
-		defer server.Close()
-
-		config := types.ProviderConfig{
-			Type:    types.ProviderTypeOpenAI,
-			APIKey:  "sk-test-key",
-			BaseURL: server.URL,
-		}
-		provider := NewOpenAIProvider(config)
-
-		request := OpenAIRequest{
-			Model: "gpt-4",
-			Messages: []OpenAIMessage{
-				{Role: "user", Content: "Test"},
 			},
-		}
+			expectedErrorMsg: "OpenAI API error",
+		},
+		{
+			name:             "MalformedErrorResponse",
+			statusCode:       http.StatusInternalServerError,
+			responseBody:     "not valid json",
+			expectedErrorMsg: "OpenAI API error",
+		},
+	}
 
-		msg, usage, err := provider.makeAPICall(context.Background(), request, "sk-test-key")
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "OpenAI API error")
-		assert.Empty(t, msg.Content)
-		assert.Nil(t, usage)
-	})
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			runAPIErrorTest(t, tc)
+		})
+	}
 
-	t.Run("MalformedErrorResponse", func(t *testing.T) {
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(http.StatusInternalServerError)
-			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte("not valid json"))
-		}))
-		defer server.Close()
-
-		config := types.ProviderConfig{
-			Type:    types.ProviderTypeOpenAI,
-			APIKey:  "sk-test-key",
-			BaseURL: server.URL,
-		}
-		provider := NewOpenAIProvider(config)
-
-		request := OpenAIRequest{
-			Model: "gpt-4",
-			Messages: []OpenAIMessage{
-				{Role: "user", Content: "Test"},
-			},
-		}
-
-		msg, usage, err := provider.makeAPICall(context.Background(), request, "sk-test-key")
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "OpenAI API error")
-		assert.Empty(t, msg.Content)
-		assert.Nil(t, usage)
-	})
-
+	// Special cases that need custom handling
 	t.Run("NoChoicesInResponse", func(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			response := OpenAIResponse{
@@ -301,32 +209,13 @@ func TestMakeAPICall_ErrorHandling(t *testing.T) {
 	})
 
 	t.Run("InvalidJSONResponse", func(t *testing.T) {
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(http.StatusOK)
-			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte("invalid json"))
-		}))
-		defer server.Close()
-
-		config := types.ProviderConfig{
-			Type:    types.ProviderTypeOpenAI,
-			APIKey:  "sk-test-key",
-			BaseURL: server.URL,
+		tc := apiErrorTestCase{
+			name:             "InvalidJSONResponse",
+			statusCode:       http.StatusOK,
+			responseBody:     "invalid json",
+			expectedErrorMsg: "failed to parse API response",
 		}
-		provider := NewOpenAIProvider(config)
-
-		request := OpenAIRequest{
-			Model: "gpt-4",
-			Messages: []OpenAIMessage{
-				{Role: "user", Content: "Test"},
-			},
-		}
-
-		msg, usage, err := provider.makeAPICall(context.Background(), request, "sk-test-key")
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "failed to parse API response")
-		assert.Empty(t, msg.Content)
-		assert.Nil(t, usage)
+		runAPIErrorTest(t, tc)
 	})
 }
 
