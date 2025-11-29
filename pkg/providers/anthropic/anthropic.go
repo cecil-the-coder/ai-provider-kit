@@ -511,11 +511,6 @@ func (p *AnthropicProvider) prepareRequest(options types.GenerateOptions, model 
 	// Use the model parameter passed from GenerateChatCompletion
 	// (already determined with options.Model fallback logic)
 
-	detectedLanguage := "text"
-	if options.OutputFile != "" {
-		detectedLanguage = common.DetectLanguage(options.OutputFile)
-	}
-
 	// REQUIRED: All Anthropic requests via Claude Code must start with this system prompt
 	claudeCodePrompt := "You are Claude Code, Anthropic's official CLI for Claude."
 
@@ -554,19 +549,39 @@ func (p *AnthropicProvider) prepareRequest(options types.GenerateOptions, model 
 
 	log.Printf("🔧 [Anthropic] After processing: %d system prompts, %d messages", len(systemPrompts), len(messages))
 
-	// Build the System field: Claude Code prompt + any system messages from router + fallback instructions
+	// Build the System field: Handle Claude Code identifier and system messages
 	var fullSystemPrompt string
+
+	// Check if any system prompt already contains the Claude Code identifier
+	hasClaudeCodeIdentifier := false
+	for _, sysPrompt := range systemPrompts {
+		if strings.Contains(sysPrompt, "Claude Code") || strings.Contains(sysPrompt, "Anthropic's official CLI") {
+			hasClaudeCodeIdentifier = true
+			log.Printf("🔍 [Anthropic] Detected Claude Code identifier in system prompt")
+			break
+		}
+	}
+
 	if len(systemPrompts) > 0 {
-		// Use system prompts from the router (which already include code generation instructions)
-		fullSystemPrompt = claudeCodePrompt + "\n\n" + systemPrompts[0]
-		// If there are multiple system messages, append them
-		for i := 1; i < len(systemPrompts); i++ {
-			fullSystemPrompt += "\n\n" + systemPrompts[i]
+		if hasClaudeCodeIdentifier {
+			// Claude Code prompt is already in the system prompts, just join them
+			fullSystemPrompt = systemPrompts[0]
+			for i := 1; i < len(systemPrompts); i++ {
+				fullSystemPrompt += "\n\n" + systemPrompts[i]
+			}
+			log.Printf("🔧 [Anthropic] Using existing Claude Code identifier from system prompts")
+		} else {
+			// Prepend claudeCodePrompt to the system prompts
+			fullSystemPrompt = claudeCodePrompt + "\n\n" + systemPrompts[0]
+			for i := 1; i < len(systemPrompts); i++ {
+				fullSystemPrompt += "\n\n" + systemPrompts[i]
+			}
+			log.Printf("🔧 [Anthropic] Prepended Claude Code identifier to system prompts")
 		}
 	} else {
-		// Fallback: if no system messages provided, create default code generation prompt
-		codeGenerationPrompt := fmt.Sprintf("You are an expert programmer. Generate ONLY clean, functional code in %s with no explanations, comments about the code generation process, or markdown formatting. Include necessary imports and ensure the code is ready to run. When modifying existing files, preserve the structure and style while implementing the requested changes. Output raw code only. Never use markdown code blocks.", detectedLanguage)
-		fullSystemPrompt = claudeCodePrompt + "\n\n" + codeGenerationPrompt
+		// No system prompts provided, use claudeCodePrompt alone (no expert programmer fallback)
+		fullSystemPrompt = claudeCodePrompt
+		log.Printf("🔧 [Anthropic] Using only Claude Code identifier (no system prompts provided)")
 	}
 
 	// For OAuth, use array format to allow Claude Code beta headers

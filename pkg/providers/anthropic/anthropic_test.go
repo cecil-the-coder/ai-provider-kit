@@ -239,8 +239,12 @@ func TestPrepareRequest(t *testing.T) {
 
 	// System can be string or interface{} (for OAuth), so we need to check
 	if systemStr, ok := request.System.(string); ok {
-		if !contains(systemStr, "javascript") {
-			t.Error("System prompt should contain the detected language")
+		if !contains(systemStr, "Claude Code") {
+			t.Error("System prompt should contain the Claude Code identifier")
+		}
+		// Should NOT contain the expert programmer fallback when no system prompts provided
+		if contains(systemStr, "expert programmer") {
+			t.Error("System prompt should not contain expert programmer fallback")
 		}
 	}
 
