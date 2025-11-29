@@ -14,12 +14,12 @@ import (
 func Example_basicUsage() {
 	// Create a new metrics collector
 	collector := metrics.NewDefaultMetricsCollector()
-	defer collector.Close()
+	defer func() { _ = collector.Close() }()
 
 	ctx := context.Background()
 
 	// Record a request
-	collector.RecordEvent(ctx, types.MetricEvent{
+	_ = collector.RecordEvent(ctx, types.MetricEvent{
 		Type:         types.MetricEventRequest,
 		ProviderName: "openai-prod",
 		ProviderType: types.ProviderTypeOpenAI,
@@ -28,7 +28,7 @@ func Example_basicUsage() {
 	})
 
 	// Record a successful response
-	collector.RecordEvent(ctx, types.MetricEvent{
+	_ = collector.RecordEvent(ctx, types.MetricEvent{
 		Type:         types.MetricEventSuccess,
 		ProviderName: "openai-prod",
 		ProviderType: types.ProviderTypeOpenAI,
@@ -55,7 +55,7 @@ func Example_basicUsage() {
 // Example demonstrating subscription to metrics events
 func Example_subscription() {
 	collector := metrics.NewDefaultMetricsCollector()
-	defer collector.Close()
+	defer func() { _ = collector.Close() }()
 
 	ctx := context.Background()
 
@@ -71,7 +71,7 @@ func Example_subscription() {
 	}()
 
 	// Record some events
-	collector.RecordEvent(ctx, types.MetricEvent{
+	_ = collector.RecordEvent(ctx, types.MetricEvent{
 		Type:         types.MetricEventSuccess,
 		ProviderName: "test-provider",
 		ProviderType: types.ProviderTypeOpenAI,
@@ -85,7 +85,7 @@ func Example_subscription() {
 // Example demonstrating filtered subscriptions
 func Example_filteredSubscription() {
 	collector := metrics.NewDefaultMetricsCollector()
-	defer collector.Close()
+	defer func() { _ = collector.Close() }()
 
 	ctx := context.Background()
 
@@ -105,14 +105,14 @@ func Example_filteredSubscription() {
 	}()
 
 	// Record various events
-	collector.RecordEvent(ctx, types.MetricEvent{
+	_ = collector.RecordEvent(ctx, types.MetricEvent{
 		Type:         types.MetricEventSuccess,
 		ProviderName: "critical-provider",
 		ProviderType: types.ProviderTypeOpenAI,
 		Timestamp:    time.Now(),
 	})
 
-	collector.RecordEvent(ctx, types.MetricEvent{
+	_ = collector.RecordEvent(ctx, types.MetricEvent{
 		Type:         types.MetricEventError,
 		ProviderName: "critical-provider",
 		ProviderType: types.ProviderTypeOpenAI,
@@ -126,7 +126,7 @@ func Example_filteredSubscription() {
 // Example demonstrating hooks for synchronous event handling
 func Example_hooks() {
 	collector := metrics.NewDefaultMetricsCollector()
-	defer collector.Close()
+	defer func() { _ = collector.Close() }()
 
 	ctx := context.Background()
 
@@ -137,7 +137,7 @@ func Example_hooks() {
 
 	// Record some error events
 	for i := 0; i < 5; i++ {
-		collector.RecordEvent(ctx, types.MetricEvent{
+		_ = collector.RecordEvent(ctx, types.MetricEvent{
 			Type:         types.MetricEventError,
 			ProviderName: "test-provider",
 			ProviderType: types.ProviderTypeOpenAI,
@@ -151,7 +151,7 @@ func Example_hooks() {
 
 // alertHook is a custom hook that alerts when consecutive errors exceed a threshold
 type alertHook struct {
-	threshold        int
+	threshold         int
 	consecutiveErrors int
 }
 
@@ -177,7 +177,7 @@ func (h *alertHook) Filter() *types.MetricFilter {
 // Example demonstrating per-provider metrics
 func Example_providerMetrics() {
 	collector := metrics.NewDefaultMetricsCollector()
-	defer collector.Close()
+	defer func() { _ = collector.Close() }()
 
 	ctx := context.Background()
 
@@ -185,7 +185,7 @@ func Example_providerMetrics() {
 	providers := []string{"openai-prod", "anthropic-prod", "azure-prod"}
 	for _, provider := range providers {
 		for i := 0; i < 10; i++ {
-			collector.RecordEvent(ctx, types.MetricEvent{
+			_ = collector.RecordEvent(ctx, types.MetricEvent{
 				Type:         types.MetricEventSuccess,
 				ProviderName: provider,
 				ProviderType: types.ProviderTypeOpenAI,
@@ -211,14 +211,14 @@ func Example_providerMetrics() {
 // Example demonstrating per-model metrics
 func Example_modelMetrics() {
 	collector := metrics.NewDefaultMetricsCollector()
-	defer collector.Close()
+	defer func() { _ = collector.Close() }()
 
 	ctx := context.Background()
 
 	// Record events for different models
 	models := []string{"gpt-4", "gpt-3.5-turbo", "claude-3-opus"}
 	for _, model := range models {
-		collector.RecordEvent(ctx, types.MetricEvent{
+		_ = collector.RecordEvent(ctx, types.MetricEvent{
 			Type:         types.MetricEventSuccess,
 			ProviderName: "test-provider",
 			ProviderType: types.ProviderTypeOpenAI,
@@ -246,12 +246,12 @@ func Example_modelMetrics() {
 // Example demonstrating streaming metrics
 func Example_streamingMetrics() {
 	collector := metrics.NewDefaultMetricsCollector()
-	defer collector.Close()
+	defer func() { _ = collector.Close() }()
 
 	ctx := context.Background()
 
 	// Record streaming start
-	collector.RecordEvent(ctx, types.MetricEvent{
+	_ = collector.RecordEvent(ctx, types.MetricEvent{
 		Type:             types.MetricEventStreamStart,
 		ProviderName:     "openai-stream",
 		ProviderType:     types.ProviderTypeOpenAI,
@@ -262,7 +262,7 @@ func Example_streamingMetrics() {
 	})
 
 	// Record streaming end
-	collector.RecordEvent(ctx, types.MetricEvent{
+	_ = collector.RecordEvent(ctx, types.MetricEvent{
 		Type:            types.MetricEventStreamEnd,
 		ProviderName:    "openai-stream",
 		ProviderType:    types.ProviderTypeOpenAI,
@@ -286,12 +286,12 @@ func Example_streamingMetrics() {
 // Example demonstrating JSON serialization of metrics
 func Example_jsonSerialization() {
 	collector := metrics.NewDefaultMetricsCollector()
-	defer collector.Close()
+	defer func() { _ = collector.Close() }()
 
 	ctx := context.Background()
 
 	// Record some events
-	collector.RecordEvent(ctx, types.MetricEvent{
+	_ = collector.RecordEvent(ctx, types.MetricEvent{
 		Type:         types.MetricEventSuccess,
 		ProviderName: "test-provider",
 		ProviderType: types.ProviderTypeOpenAI,
@@ -313,7 +313,7 @@ func Example_jsonSerialization() {
 // Example demonstrating batch event recording
 func Example_batchEvents() {
 	collector := metrics.NewDefaultMetricsCollector()
-	defer collector.Close()
+	defer func() { _ = collector.Close() }()
 
 	ctx := context.Background()
 
@@ -347,13 +347,13 @@ func Example_batchEvents() {
 // Example demonstrating reset functionality
 func Example_reset() {
 	collector := metrics.NewDefaultMetricsCollector()
-	defer collector.Close()
+	defer func() { _ = collector.Close() }()
 
 	ctx := context.Background()
 
 	// Record some events
 	for i := 0; i < 100; i++ {
-		collector.RecordEvent(ctx, types.MetricEvent{
+		_ = collector.RecordEvent(ctx, types.MetricEvent{
 			Type:         types.MetricEventRequest,
 			ProviderName: "test-provider",
 			ProviderType: types.ProviderTypeOpenAI,
@@ -376,7 +376,7 @@ func Example_reset() {
 // Example demonstrating error metrics tracking
 func Example_errorMetrics() {
 	collector := metrics.NewDefaultMetricsCollector()
-	defer collector.Close()
+	defer func() { _ = collector.Close() }()
 
 	ctx := context.Background()
 
@@ -393,7 +393,7 @@ func Example_errorMetrics() {
 	}
 
 	for _, e := range errors {
-		collector.RecordEvent(ctx, types.MetricEvent{
+		_ = collector.RecordEvent(ctx, types.MetricEvent{
 			Type:         e.eventType,
 			ProviderName: "test-provider",
 			ProviderType: types.ProviderTypeOpenAI,

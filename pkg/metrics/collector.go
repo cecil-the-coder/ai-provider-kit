@@ -1,3 +1,6 @@
+// Package metrics provides a centralized metrics collection system for ai-provider-kit.
+// It includes the DefaultMetricsCollector implementation, streaming metrics wrapper,
+// cost calculation interface, and histogram for percentile calculations.
 package metrics
 
 import (
@@ -70,8 +73,8 @@ type providerMetrics struct {
 
 	latencyHistogram *Histogram
 
-	tokenMetrics *tokenMetrics
-	errorMetrics *errorMetrics
+	tokenMetrics  *tokenMetrics
+	errorMetrics  *errorMetrics
 	streamMetrics *streamMetrics
 
 	// Cost calculation (shared reference from collector)
@@ -125,10 +128,10 @@ type tokenMetrics struct {
 	reasoningTokens atomic.Int64
 
 	// Cost tracking (protected by mu)
-	totalCost       float64
-	inputCost       float64
-	outputCost      float64
-	currency        string
+	totalCost  float64
+	inputCost  float64
+	outputCost float64
+	currency   string
 
 	lastUpdated time.Time
 }
@@ -171,13 +174,13 @@ type streamMetrics struct {
 	totalStreamedTokens atomic.Int64
 	totalChunks         atomic.Int64
 
-	minTokensPerSecond float64
-	maxTokensPerSecond float64
+	minTokensPerSecond   float64
+	maxTokensPerSecond   float64
 	totalTokensPerSecond float64
-	tpsCount int64
+	tpsCount             int64
 
-	minStreamDuration time.Duration
-	maxStreamDuration time.Duration
+	minStreamDuration   time.Duration
+	maxStreamDuration   time.Duration
 	totalStreamDuration time.Duration
 
 	lastUpdated time.Time
@@ -325,10 +328,10 @@ func (c *DefaultMetricsCollector) SubscribeFiltered(bufferSize int, filter types
 
 	id := fmt.Sprintf("sub-%d", c.nextSubID.Add(1))
 	sub := &subscription{
-		id:         id,
-		events:     make(chan types.MetricEvent, bufferSize),
-		filter:     filter,
-		collector:  c,
+		id:        id,
+		events:    make(chan types.MetricEvent, bufferSize),
+		filter:    filter,
+		collector: c,
 	}
 
 	c.mu.Lock()
@@ -564,7 +567,7 @@ func (c *DefaultMetricsCollector) callHooks(ctx context.Context, event types.Met
 			defer cancel()
 			defer func() {
 				if r := recover(); r != nil {
-					// Hook panicked, ignore
+					// Hook panicked, ignore - we don't want a misbehaving hook to crash the collector
 				}
 			}()
 
@@ -576,9 +579,9 @@ func (c *DefaultMetricsCollector) callHooks(ctx context.Context, event types.Met
 
 			select {
 			case <-done:
-				// Hook completed
+				// Hook completed successfully - no action needed
 			case <-hookCtx.Done():
-				// Hook timed out or context cancelled
+				// Hook timed out or context cancelled - no action needed, hook goroutine will be abandoned
 			}
 		}()
 	}

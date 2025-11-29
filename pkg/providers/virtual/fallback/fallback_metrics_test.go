@@ -14,7 +14,7 @@ import (
 // TestFallbackProvider_MetricsCollector_FirstSucceeds tests metrics when first provider succeeds
 func TestFallbackProvider_MetricsCollector_FirstSucceeds(t *testing.T) {
 	collector := metrics.NewDefaultMetricsCollector()
-	defer collector.Close()
+	defer func() { _ = collector.Close() }()
 
 	sub := collector.Subscribe(100)
 	defer sub.Unsubscribe()
@@ -95,7 +95,7 @@ collectLoop:
 // TestFallbackProvider_MetricsCollector_FallbackOccurs tests metrics when fallback happens
 func TestFallbackProvider_MetricsCollector_FallbackOccurs(t *testing.T) {
 	collector := metrics.NewDefaultMetricsCollector()
-	defer collector.Close()
+	defer func() { _ = collector.Close() }()
 
 	sub := collector.Subscribe(100)
 	defer sub.Unsubscribe()
@@ -193,7 +193,7 @@ collectLoop:
 // TestFallbackProvider_MetricsCollector_AllFailed tests metrics when all providers fail
 func TestFallbackProvider_MetricsCollector_AllFailed(t *testing.T) {
 	collector := metrics.NewDefaultMetricsCollector()
-	defer collector.Close()
+	defer func() { _ = collector.Close() }()
 
 	sub := collector.Subscribe(100)
 	defer sub.Unsubscribe()

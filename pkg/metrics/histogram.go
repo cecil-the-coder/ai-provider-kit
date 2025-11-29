@@ -11,14 +11,14 @@ import (
 // Histogram is a simple circular buffer for storing latency samples
 // and calculating percentiles
 type Histogram struct {
-	mu         sync.RWMutex
-	samples    []time.Duration
-	capacity   int
-	index      int
-	count      int64
-	total      time.Duration
-	min        time.Duration
-	max        time.Duration
+	mu          sync.RWMutex
+	samples     []time.Duration
+	capacity    int
+	index       int
+	count       int64
+	total       time.Duration
+	min         time.Duration
+	max         time.Duration
 	lastUpdated time.Time
 }
 

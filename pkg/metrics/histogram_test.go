@@ -71,7 +71,7 @@ func TestHistogramCircularBuffer(t *testing.T) {
 	}
 
 	metrics := h.GetLatencyMetrics()
-	assert.Equal(t, int64(10), metrics.TotalRequests) // Count all requests
+	assert.Equal(t, int64(10), metrics.TotalRequests)          // Count all requests
 	assert.Equal(t, 55*time.Millisecond, metrics.TotalLatency) // Sum of 1+2+3+...+10
 
 	// Min should be 1ms (from total tracking)

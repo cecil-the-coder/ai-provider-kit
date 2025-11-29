@@ -18,10 +18,10 @@ import (
 //  3. Callbacks: RegisterHook() to receive synchronous notifications for each event
 //
 // Design principles:
-//  - Zero external dependencies (no OTEL/Prometheus in core)
-//  - Easy JSON serialization for all data types
-//  - Minimal memory footprint and CPU overhead
-//  - Flexible consumption patterns for different use cases
+//   - Zero external dependencies (no OTEL/Prometheus in core)
+//   - Easy JSON serialization for all data types
+//   - Minimal memory footprint and CPU overhead
+//   - Flexible consumption patterns for different use cases
 type MetricsCollector interface {
 	// ----- Snapshot API (Polling Pattern) -----
 	//
@@ -330,82 +330,101 @@ type MetricFilter struct {
 
 // Matches returns true if the given event matches this filter's criteria.
 func (f MetricFilter) Matches(event MetricEvent) bool {
-	// ProviderNames filter
-	if len(f.ProviderNames) > 0 {
-		found := false
-		for _, name := range f.ProviderNames {
-			if name == event.ProviderName {
-				found = true
-				break
-			}
-		}
-		if !found {
-			return false
+	if !f.matchesProviderNames(event) {
+		return false
+	}
+	if !f.matchesProviderTypes(event) {
+		return false
+	}
+	if !f.matchesModelIDs(event) {
+		return false
+	}
+	if !f.matchesEventTypes(event) {
+		return false
+	}
+	if !f.matchesMinLatency(event) {
+		return false
+	}
+	if !f.matchesErrorTypes(event) {
+		return false
+	}
+	return true
+}
+
+// matchesProviderNames checks if the event matches the ProviderNames filter.
+func (f MetricFilter) matchesProviderNames(event MetricEvent) bool {
+	if len(f.ProviderNames) == 0 {
+		return true
+	}
+	for _, name := range f.ProviderNames {
+		if name == event.ProviderName {
+			return true
 		}
 	}
+	return false
+}
 
-	// ProviderTypes filter
-	if len(f.ProviderTypes) > 0 {
-		found := false
-		for _, pt := range f.ProviderTypes {
-			if pt == event.ProviderType {
-				found = true
-				break
-			}
-		}
-		if !found {
-			return false
+// matchesProviderTypes checks if the event matches the ProviderTypes filter.
+func (f MetricFilter) matchesProviderTypes(event MetricEvent) bool {
+	if len(f.ProviderTypes) == 0 {
+		return true
+	}
+	for _, pt := range f.ProviderTypes {
+		if pt == event.ProviderType {
+			return true
 		}
 	}
+	return false
+}
 
-	// ModelIDs filter
-	if len(f.ModelIDs) > 0 {
-		found := false
-		for _, id := range f.ModelIDs {
-			if id == event.ModelID {
-				found = true
-				break
-			}
-		}
-		if !found {
-			return false
+// matchesModelIDs checks if the event matches the ModelIDs filter.
+func (f MetricFilter) matchesModelIDs(event MetricEvent) bool {
+	if len(f.ModelIDs) == 0 {
+		return true
+	}
+	for _, id := range f.ModelIDs {
+		if id == event.ModelID {
+			return true
 		}
 	}
+	return false
+}
 
-	// EventTypes filter
-	if len(f.EventTypes) > 0 {
-		found := false
-		for _, et := range f.EventTypes {
-			if et == event.Type {
-				found = true
-				break
-			}
-		}
-		if !found {
-			return false
+// matchesEventTypes checks if the event matches the EventTypes filter.
+func (f MetricFilter) matchesEventTypes(event MetricEvent) bool {
+	if len(f.EventTypes) == 0 {
+		return true
+	}
+	for _, et := range f.EventTypes {
+		if et == event.Type {
+			return true
 		}
 	}
+	return false
+}
 
-	// MinLatency filter
+// matchesMinLatency checks if the event matches the MinLatency filter.
+func (f MetricFilter) matchesMinLatency(event MetricEvent) bool {
 	if f.MinLatency > 0 && event.Latency < f.MinLatency {
 		return false
 	}
+	return true
+}
 
-	// ErrorTypesOnly filter
-	if len(f.ErrorTypesOnly) > 0 && event.ErrorType != "" {
-		found := false
-		for _, et := range f.ErrorTypesOnly {
-			if et == event.ErrorType {
-				found = true
-				break
-			}
-		}
-		if !found {
-			return false
+// matchesErrorTypes checks if the event matches the ErrorTypesOnly filter.
+func (f MetricFilter) matchesErrorTypes(event MetricEvent) bool {
+	if len(f.ErrorTypesOnly) == 0 {
+		return true
+	}
+	if event.ErrorType == "" {
+		return true
+	}
+	for _, et := range f.ErrorTypesOnly {
+		if et == event.ErrorType {
+			return true
 		}
 	}
-
-	return true
+	return false
 }
 
 // MetricsHook is an interface for synchronous callbacks on metrics events.
@@ -485,9 +504,9 @@ type MetricEvent struct {
 	RaceWinner       string                   `json:"race_winner,omitempty"`       // Which provider won the race
 
 	// Circuit breaker context
-	CircuitState     string `json:"circuit_state,omitempty"`      // Current state: closed, open, half-open
-	CircuitFailures  int    `json:"circuit_failures,omitempty"`   // Consecutive failures
-	CircuitSuccesses int    `json:"circuit_successes,omitempty"`  // Consecutive successes (in half-open)
+	CircuitState     string `json:"circuit_state,omitempty"`     // Current state: closed, open, half-open
+	CircuitFailures  int    `json:"circuit_failures,omitempty"`  // Consecutive failures
+	CircuitSuccesses int    `json:"circuit_successes,omitempty"` // Consecutive successes (in half-open)
 
 	// Additional metadata (provider-specific)
 	Metadata map[string]interface{} `json:"metadata,omitempty"`

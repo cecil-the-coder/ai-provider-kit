@@ -11,17 +11,17 @@ import (
 
 // MetricsStreamWrapper wraps a ChatCompletionStream and tracks detailed streaming metrics.
 // It measures:
-//  - TimeToFirstToken (TTFT): Time from stream start to first chunk
-//  - TokensPerSecond: Output throughput
-//  - ChunksReceived: Total SSE chunks received
-//  - StreamDuration: Total time from first Next() to Close()
-//  - StreamInterruptions: Connection drops that recovered
+//   - TimeToFirstToken (TTFT): Time from stream start to first chunk
+//   - TokensPerSecond: Output throughput
+//   - ChunksReceived: Total SSE chunks received
+//   - StreamDuration: Total time from first Next() to Close()
+//   - StreamInterruptions: Connection drops that recovered
 //
 // The wrapper emits MetricEvents to the MetricsCollector at key points:
-//  - MetricEventStreamStart: When first Next() is called (includes TTFT when first chunk arrives)
-//  - MetricEventStreamChunk: For each chunk received (optional, can be disabled for performance)
-//  - MetricEventStreamEnd: When stream completes successfully (includes tokens/sec)
-//  - MetricEventStreamAbort: If error occurs during streaming
+//   - MetricEventStreamStart: When first Next() is called (includes TTFT when first chunk arrives)
+//   - MetricEventStreamChunk: For each chunk received (optional, can be disabled for performance)
+//   - MetricEventStreamEnd: When stream completes successfully (includes tokens/sec)
+//   - MetricEventStreamAbort: If error occurs during streaming
 //
 // Thread-safe: Safe for concurrent use by multiple goroutines.
 type MetricsStreamWrapper struct {
@@ -190,7 +190,7 @@ func (w *MetricsStreamWrapper) Next() (types.ChatCompletionChunk, error) {
 
 	// Optionally emit chunk event
 	if w.emitChunkEvents {
-		w.emitChunkEvent(chunk, chunkTokens)
+		w.emitChunkEvent(chunkTokens)
 	}
 
 	// Check for stream completion
@@ -244,13 +244,13 @@ func (w *MetricsStreamWrapper) GetMetrics() StreamMetrics {
 	}
 
 	return StreamMetrics{
-		TimeToFirstToken:   ttft,
-		TokensPerSecond:    tokensPerSecond,
-		ChunksReceived:     w.chunksReceived.Load(),
-		StreamDuration:     duration,
+		TimeToFirstToken:    ttft,
+		TokensPerSecond:     tokensPerSecond,
+		ChunksReceived:      w.chunksReceived.Load(),
+		StreamDuration:      duration,
 		StreamInterruptions: w.interruptions.Load(),
-		TokensReceived:     w.tokensReceived.Load(),
-		Aborted:            w.streamAborted.Load(),
+		TokensReceived:      w.tokensReceived.Load(),
+		Aborted:             w.streamAborted.Load(),
 	}
 }
 
@@ -278,11 +278,11 @@ func (w *MetricsStreamWrapper) emitStreamStartEvent(ttft time.Duration) {
 		TimeToFirstToken: ttft,
 	}
 
-	w.collector.RecordEvent(w.ctx, event)
+	_ = w.collector.RecordEvent(w.ctx, event)
 }
 
 // emitChunkEvent emits a MetricEventStreamChunk event for an individual chunk.
-func (w *MetricsStreamWrapper) emitChunkEvent(chunk types.ChatCompletionChunk, tokens int64) {
+func (w *MetricsStreamWrapper) emitChunkEvent(tokens int64) {
 	chunkIndex := int(w.chunksReceived.Load() - 1) // 0-indexed
 
 	event := types.MetricEvent{
@@ -297,7 +297,7 @@ func (w *MetricsStreamWrapper) emitChunkEvent(chunk types.ChatCompletionChunk, t
 		OutputTokens:     tokens,
 	}
 
-	w.collector.RecordEvent(w.ctx, event)
+	_ = w.collector.RecordEvent(w.ctx, event)
 }
 
 // recordStreamEnd records the successful completion of the stream.
@@ -331,7 +331,7 @@ func (w *MetricsStreamWrapper) recordStreamEnd() {
 		},
 	}
 
-	w.collector.RecordEvent(w.ctx, event)
+	_ = w.collector.RecordEvent(w.ctx, event)
 }
 
 // recordStreamAbort records an abnormal termination of the stream.
@@ -370,7 +370,7 @@ func (w *MetricsStreamWrapper) recordStreamAbort(err error) {
 		},
 	}
 
-	w.collector.RecordEvent(w.ctx, event)
+	_ = w.collector.RecordEvent(w.ctx, event)
 }
 
 // countChunkTokens estimates the number of tokens in a chunk.
@@ -473,7 +473,7 @@ func toLower(s string) string {
 	for i := 0; i < len(s); i++ {
 		c := s[i]
 		if c >= 'A' && c <= 'Z' {
-			c = c + ('a' - 'A')
+			c += ('a' - 'A')
 		}
 		result[i] = c
 	}

@@ -60,7 +60,7 @@ func (lb *LoadBalanceProvider) GenerateChatCompletion(ctx context.Context, opts 
 
 	// Record request
 	if collector != nil {
-		collector.RecordEvent(ctx, types.MetricEvent{
+		_ = collector.RecordEvent(ctx, types.MetricEvent{
 			Type:         types.MetricEventRequest,
 			ProviderName: lb.name,
 			ProviderType: lb.Type(),
@@ -74,7 +74,7 @@ func (lb *LoadBalanceProvider) GenerateChatCompletion(ctx context.Context, opts 
 	chatProvider, ok := provider.(types.ChatProvider)
 	if !ok {
 		if collector != nil {
-			collector.RecordEvent(ctx, types.MetricEvent{
+			_ = collector.RecordEvent(ctx, types.MetricEvent{
 				Type:         types.MetricEventError,
 				ProviderName: lb.name,
 				ProviderType: lb.Type(),
@@ -93,7 +93,7 @@ func (lb *LoadBalanceProvider) GenerateChatCompletion(ctx context.Context, opts 
 
 	if err != nil {
 		if collector != nil {
-			collector.RecordEvent(ctx, types.MetricEvent{
+			_ = collector.RecordEvent(ctx, types.MetricEvent{
 				Type:         types.MetricEventError,
 				ProviderName: lb.name,
 				ProviderType: lb.Type(),
@@ -109,7 +109,7 @@ func (lb *LoadBalanceProvider) GenerateChatCompletion(ctx context.Context, opts 
 
 	// Record success
 	if collector != nil {
-		collector.RecordEvent(ctx, types.MetricEvent{
+		_ = collector.RecordEvent(ctx, types.MetricEvent{
 			Type:         types.MetricEventSuccess,
 			ProviderName: lb.name,
 			ProviderType: lb.Type(),

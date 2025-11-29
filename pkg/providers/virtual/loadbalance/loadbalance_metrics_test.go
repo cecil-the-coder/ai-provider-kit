@@ -14,7 +14,7 @@ import (
 // TestLoadBalanceProvider_MetricsCollector_Success tests metrics on successful request
 func TestLoadBalanceProvider_MetricsCollector_Success(t *testing.T) {
 	collector := metrics.NewDefaultMetricsCollector()
-	defer collector.Close()
+	defer func() { _ = collector.Close() }()
 
 	sub := collector.Subscribe(100)
 	defer sub.Unsubscribe()
@@ -106,7 +106,7 @@ collectLoop:
 // TestLoadBalanceProvider_MetricsCollector_Error tests metrics when provider fails
 func TestLoadBalanceProvider_MetricsCollector_Error(t *testing.T) {
 	collector := metrics.NewDefaultMetricsCollector()
-	defer collector.Close()
+	defer func() { _ = collector.Close() }()
 
 	sub := collector.Subscribe(100)
 	defer sub.Unsubscribe()
@@ -189,7 +189,7 @@ collectLoop:
 // TestLoadBalanceProvider_MetricsCollector_ProviderIncompatible tests metrics when provider doesn't support chat
 func TestLoadBalanceProvider_MetricsCollector_ProviderIncompatible(t *testing.T) {
 	collector := metrics.NewDefaultMetricsCollector()
-	defer collector.Close()
+	defer func() { _ = collector.Close() }()
 
 	sub := collector.Subscribe(100)
 	defer sub.Unsubscribe()

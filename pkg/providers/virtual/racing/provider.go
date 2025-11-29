@@ -73,7 +73,7 @@ func (r *RacingProvider) GenerateChatCompletion(ctx context.Context, opts types.
 
 	// Record race request
 	if collector != nil {
-		collector.RecordEvent(ctx, types.MetricEvent{
+		_ = collector.RecordEvent(ctx, types.MetricEvent{
 			Type:         types.MetricEventRequest,
 			ProviderName: r.name,
 			ProviderType: r.Type(),
@@ -164,42 +164,7 @@ func (r *RacingProvider) firstWinsStrategy(ctx context.Context, results chan *ra
 	}
 
 	if winner != nil {
-		// Emit race complete event
-		if collector != nil {
-			collector.RecordEvent(ctx, types.MetricEvent{
-				Type:             types.MetricEventRaceComplete,
-				ProviderName:     r.name,
-				ProviderType:     r.Type(),
-				ModelID:          modelID,
-				Timestamp:        time.Now(),
-				RaceParticipants: raceParticipants,
-				RaceLatencies:    raceLatencies,
-				RaceWinner:       winner.provider.Name(),
-				Latency:          winner.latency,
-			})
-
-			// Emit provider switch event (winner selected)
-			collector.RecordEvent(ctx, types.MetricEvent{
-				Type:         types.MetricEventProviderSwitch,
-				ProviderName: r.name,
-				ProviderType: r.Type(),
-				ModelID:      modelID,
-				Timestamp:    time.Now(),
-				ToProvider:   winner.provider.Name(),
-				SwitchReason: "race_winner",
-				Latency:      winner.latency,
-			})
-
-			// Record success
-			collector.RecordEvent(ctx, types.MetricEvent{
-				Type:         types.MetricEventSuccess,
-				ProviderName: r.name,
-				ProviderType: r.Type(),
-				ModelID:      modelID,
-				Timestamp:    time.Now(),
-				Latency:      winner.latency,
-			})
-		}
+		r.emitRaceWinnerEvents(ctx, collector, winner, raceParticipants, raceLatencies, modelID, "race_winner")
 
 		return &racingStream{
 			inner:    winner.stream,
@@ -210,7 +175,7 @@ func (r *RacingProvider) firstWinsStrategy(ctx context.Context, results chan *ra
 
 	// All providers failed
 	if collector != nil {
-		collector.RecordEvent(ctx, types.MetricEvent{
+		_ = collector.RecordEvent(ctx, types.MetricEvent{
 			Type:             types.MetricEventError,
 			ProviderName:     r.name,
 			ProviderType:     r.Type(),
@@ -275,7 +240,7 @@ func (r *RacingProvider) pickBestCandidate(ctx context.Context, candidates []*ra
 	if len(candidates) == 0 {
 		// All providers failed
 		if collector != nil {
-			collector.RecordEvent(ctx, types.MetricEvent{
+			_ = collector.RecordEvent(ctx, types.MetricEvent{
 				Type:             types.MetricEventError,
 				ProviderName:     r.name,
 				ProviderType:     r.Type(),
@@ -306,43 +271,7 @@ func (r *RacingProvider) pickBestCandidate(ctx context.Context, candidates []*ra
 
 	if best != nil {
 		r.performance.RecordWin(best.provider.Name(), best.latency)
-
-		// Emit race complete event
-		if collector != nil {
-			collector.RecordEvent(ctx, types.MetricEvent{
-				Type:             types.MetricEventRaceComplete,
-				ProviderName:     r.name,
-				ProviderType:     r.Type(),
-				ModelID:          modelID,
-				Timestamp:        time.Now(),
-				RaceParticipants: raceParticipants,
-				RaceLatencies:    raceLatencies,
-				RaceWinner:       best.provider.Name(),
-				Latency:          best.latency,
-			})
-
-			// Emit provider switch event (winner selected)
-			collector.RecordEvent(ctx, types.MetricEvent{
-				Type:         types.MetricEventProviderSwitch,
-				ProviderName: r.name,
-				ProviderType: r.Type(),
-				ModelID:      modelID,
-				Timestamp:    time.Now(),
-				ToProvider:   best.provider.Name(),
-				SwitchReason: "race_winner_weighted",
-				Latency:      best.latency,
-			})
-
-			// Record success
-			collector.RecordEvent(ctx, types.MetricEvent{
-				Type:         types.MetricEventSuccess,
-				ProviderName: r.name,
-				ProviderType: r.Type(),
-				ModelID:      modelID,
-				Timestamp:    time.Now(),
-				Latency:      best.latency,
-			})
-		}
+		r.emitRaceWinnerEvents(ctx, collector, best, raceParticipants, raceLatencies, modelID, "race_winner_weighted")
 
 		return &racingStream{
 			inner:    best.stream,
@@ -355,41 +284,7 @@ func (r *RacingProvider) pickBestCandidate(ctx context.Context, candidates []*ra
 	// This should not happen in practice, but we check bounds for safety
 	if len(candidates) > 0 {
 		r.performance.RecordWin(candidates[0].provider.Name(), candidates[0].latency)
-
-		// Emit events for fallback case
-		if collector != nil {
-			collector.RecordEvent(ctx, types.MetricEvent{
-				Type:             types.MetricEventRaceComplete,
-				ProviderName:     r.name,
-				ProviderType:     r.Type(),
-				ModelID:          modelID,
-				Timestamp:        time.Now(),
-				RaceParticipants: raceParticipants,
-				RaceLatencies:    raceLatencies,
-				RaceWinner:       candidates[0].provider.Name(),
-				Latency:          candidates[0].latency,
-			})
-
-			collector.RecordEvent(ctx, types.MetricEvent{
-				Type:         types.MetricEventProviderSwitch,
-				ProviderName: r.name,
-				ProviderType: r.Type(),
-				ModelID:      modelID,
-				Timestamp:    time.Now(),
-				ToProvider:   candidates[0].provider.Name(),
-				SwitchReason: "race_winner_fallback",
-				Latency:      candidates[0].latency,
-			})
-
-			collector.RecordEvent(ctx, types.MetricEvent{
-				Type:         types.MetricEventSuccess,
-				ProviderName: r.name,
-				ProviderType: r.Type(),
-				ModelID:      modelID,
-				Timestamp:    time.Now(),
-				Latency:      candidates[0].latency,
-			})
-		}
+		r.emitRaceWinnerEvents(ctx, collector, candidates[0], raceParticipants, raceLatencies, modelID, "race_winner_fallback")
 
 		return &racingStream{
 			inner:    candidates[0].stream,
@@ -403,6 +298,48 @@ func (r *RacingProvider) pickBestCandidate(ctx context.Context, candidates []*ra
 
 func (r *RacingProvider) GetPerformanceStats() map[string]*ProviderStats {
 	return r.performance.GetAllStats()
+}
+
+// emitRaceWinnerEvents emits the standard set of events for a race winner
+func (r *RacingProvider) emitRaceWinnerEvents(ctx context.Context, collector types.MetricsCollector, winner *raceResult, raceParticipants []string, raceLatencies map[string]time.Duration, modelID, switchReason string) {
+	if collector == nil {
+		return
+	}
+
+	// Emit race complete event
+	_ = collector.RecordEvent(ctx, types.MetricEvent{
+		Type:             types.MetricEventRaceComplete,
+		ProviderName:     r.name,
+		ProviderType:     r.Type(),
+		ModelID:          modelID,
+		Timestamp:        time.Now(),
+		RaceParticipants: raceParticipants,
+		RaceLatencies:    raceLatencies,
+		RaceWinner:       winner.provider.Name(),
+		Latency:          winner.latency,
+	})
+
+	// Emit provider switch event (winner selected)
+	_ = collector.RecordEvent(ctx, types.MetricEvent{
+		Type:         types.MetricEventProviderSwitch,
+		ProviderName: r.name,
+		ProviderType: r.Type(),
+		ModelID:      modelID,
+		Timestamp:    time.Now(),
+		ToProvider:   winner.provider.Name(),
+		SwitchReason: switchReason,
+		Latency:      winner.latency,
+	})
+
+	// Record success
+	_ = collector.RecordEvent(ctx, types.MetricEvent{
+		Type:         types.MetricEventSuccess,
+		ProviderName: r.name,
+		ProviderType: r.Type(),
+		ModelID:      modelID,
+		Timestamp:    time.Now(),
+		Latency:      winner.latency,
+	})
 }
 
 type racingStream struct {

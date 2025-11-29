@@ -18,7 +18,7 @@ func TestBaseProvider_SetMetricsCollector(t *testing.T) {
 	}
 	provider := NewBaseProvider("test-provider", config, &http.Client{}, nil)
 	collector := metrics.NewDefaultMetricsCollector()
-	defer collector.Close()
+	defer func() { _ = collector.Close() }()
 
 	// Initially, no collector should be set
 	if provider.metricsCollector != nil {
@@ -41,7 +41,7 @@ func TestBaseProvider_RecordRequest(t *testing.T) {
 	}
 	provider := NewBaseProvider("test-provider", config, &http.Client{}, nil)
 	collector := metrics.NewDefaultMetricsCollector()
-	defer collector.Close()
+	defer func() { _ = collector.Close() }()
 
 	provider.SetMetricsCollector(collector)
 
@@ -93,7 +93,7 @@ func TestBaseProvider_RecordSuccessWithModel(t *testing.T) {
 	}
 	provider := NewBaseProvider("claude-provider", config, &http.Client{}, nil)
 	collector := metrics.NewDefaultMetricsCollector()
-	defer collector.Close()
+	defer func() { _ = collector.Close() }()
 
 	provider.SetMetricsCollector(collector)
 
@@ -154,7 +154,7 @@ func TestBaseProvider_RecordErrorWithModel(t *testing.T) {
 	}
 	provider := NewBaseProvider("gemini-provider", config, &http.Client{}, nil)
 	collector := metrics.NewDefaultMetricsCollector()
-	defer collector.Close()
+	defer func() { _ = collector.Close() }()
 
 	provider.SetMetricsCollector(collector)
 
@@ -215,7 +215,7 @@ func TestBaseProvider_RecordSuccess_BackwardsCompatibility(t *testing.T) {
 	}
 	provider := NewBaseProvider("test-provider", config, &http.Client{}, nil)
 	collector := metrics.NewDefaultMetricsCollector()
-	defer collector.Close()
+	defer func() { _ = collector.Close() }()
 
 	provider.SetMetricsCollector(collector)
 
@@ -255,7 +255,7 @@ func TestBaseProvider_RecordError_BackwardsCompatibility(t *testing.T) {
 	}
 	provider := NewBaseProvider("test-provider", config, &http.Client{}, nil)
 	collector := metrics.NewDefaultMetricsCollector()
-	defer collector.Close()
+	defer func() { _ = collector.Close() }()
 
 	provider.SetMetricsCollector(collector)
 
@@ -325,7 +325,7 @@ func TestBaseProvider_ProviderMetrics(t *testing.T) {
 	}
 	provider := NewBaseProvider("openai-prod", config, &http.Client{}, nil)
 	collector := metrics.NewDefaultMetricsCollector()
-	defer collector.Close()
+	defer func() { _ = collector.Close() }()
 
 	provider.SetMetricsCollector(collector)
 	ctx := context.Background()
@@ -373,7 +373,7 @@ func TestBaseProvider_ModelMetrics(t *testing.T) {
 	}
 	provider := NewBaseProvider("openai-prod", config, &http.Client{}, nil)
 	collector := metrics.NewDefaultMetricsCollector()
-	defer collector.Close()
+	defer func() { _ = collector.Close() }()
 
 	provider.SetMetricsCollector(collector)
 	ctx := context.Background()
@@ -413,7 +413,7 @@ func TestBaseProvider_ModelMetrics(t *testing.T) {
 // TestBaseProvider_MultipleProviders tests that multiple providers can share the same collector
 func TestBaseProvider_MultipleProviders(t *testing.T) {
 	collector := metrics.NewDefaultMetricsCollector()
-	defer collector.Close()
+	defer func() { _ = collector.Close() }()
 
 	// Create multiple providers with the same collector
 	provider1 := NewBaseProvider("openai-prod", types.ProviderConfig{Type: types.ProviderTypeOpenAI}, &http.Client{}, nil)
@@ -468,7 +468,7 @@ func TestBaseProvider_ConcurrentMetricsWithCollector(t *testing.T) {
 	}
 	provider := NewBaseProvider("test-provider", config, &http.Client{}, nil)
 	collector := metrics.NewDefaultMetricsCollector()
-	defer collector.Close()
+	defer func() { _ = collector.Close() }()
 
 	provider.SetMetricsCollector(collector)
 	ctx := context.Background()
@@ -478,11 +478,11 @@ func TestBaseProvider_ConcurrentMetricsWithCollector(t *testing.T) {
 	done := make(chan bool, numGoroutines)
 
 	for i := 0; i < numGoroutines; i++ {
-		go func(id int) {
+		go func() {
 			defer func() { done <- true }()
 			provider.RecordRequest(ctx, "gpt-4")
 			provider.RecordSuccessWithModel(ctx, 100*time.Millisecond, 50, "gpt-4")
-		}(i)
+		}()
 	}
 
 	// Wait for all goroutines to complete

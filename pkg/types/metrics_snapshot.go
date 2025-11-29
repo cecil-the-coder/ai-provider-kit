@@ -61,11 +61,11 @@ type ProviderMetricsSnapshot struct {
 	Streaming *StreamMetrics `json:"streaming,omitempty"`
 
 	// Provider-specific operations
-	Initializations  int64 `json:"initializations"`
-	HealthChecks     int64 `json:"health_checks"`
-	HealthCheckFails int64 `json:"health_check_fails"`
+	Initializations  int64   `json:"initializations"`
+	HealthChecks     int64   `json:"health_checks"`
+	HealthCheckFails int64   `json:"health_check_fails"`
 	HealthCheckRate  float64 `json:"health_check_success_rate"` // Calculated: (checks - fails) / checks
-	RateLimitHits    int64 `json:"rate_limit_hits"`
+	RateLimitHits    int64   `json:"rate_limit_hits"`
 
 	// Model usage breakdown for this provider
 	ModelUsage map[string]int64 `json:"model_usage"`
@@ -113,8 +113,8 @@ type ModelMetricsSnapshot struct {
 // LatencyMetrics represents latency statistics including percentiles
 type LatencyMetrics struct {
 	// Summary statistics
-	TotalRequests int64         `json:"total_requests"` // Number of requests measured
-	TotalLatency  time.Duration `json:"total_latency"`  // Sum of all latencies
+	TotalRequests  int64         `json:"total_requests"`  // Number of requests measured
+	TotalLatency   time.Duration `json:"total_latency"`   // Sum of all latencies
 	AverageLatency time.Duration `json:"average_latency"` // Calculated: total_latency / total_requests
 
 	// Min/Max
@@ -144,10 +144,10 @@ type StreamMetrics struct {
 	TimeToFirstToken TimeToFirstTokenMetrics `json:"time_to_first_token"`
 
 	// Throughput metrics
-	AverageTokensPerSecond float64       `json:"average_tokens_per_second"` // Calculated: total_tokens / total_duration
-	MinTokensPerSecond     float64       `json:"min_tokens_per_second"`
-	MaxTokensPerSecond     float64       `json:"max_tokens_per_second"`
-	MedianTokensPerSecond  float64       `json:"median_tokens_per_second"`
+	AverageTokensPerSecond float64 `json:"average_tokens_per_second"` // Calculated: total_tokens / total_duration
+	MinTokensPerSecond     float64 `json:"min_tokens_per_second"`
+	MaxTokensPerSecond     float64 `json:"max_tokens_per_second"`
+	MedianTokensPerSecond  float64 `json:"median_tokens_per_second"`
 
 	// Stream duration statistics
 	AverageStreamDuration time.Duration `json:"average_stream_duration"`
@@ -155,11 +155,11 @@ type StreamMetrics struct {
 	MaxStreamDuration     time.Duration `json:"max_stream_duration"`
 
 	// Token statistics for streaming
-	TotalStreamedTokens      int64   `json:"total_streamed_tokens"`
-	AverageTokensPerStream   float64 `json:"average_tokens_per_stream"` // Calculated: total_streamed_tokens / successful_streams
+	TotalStreamedTokens    int64   `json:"total_streamed_tokens"`
+	AverageTokensPerStream float64 `json:"average_tokens_per_stream"` // Calculated: total_streamed_tokens / successful_streams
 
 	// Chunk statistics
-	TotalChunks        int64   `json:"total_chunks"`
+	TotalChunks            int64   `json:"total_chunks"`
 	AverageChunksPerStream float64 `json:"average_chunks_per_stream"` // Calculated: total_chunks / successful_streams
 	AverageChunkSize       float64 `json:"average_chunk_size"`        // Calculated: total_streamed_tokens / total_chunks
 
@@ -191,38 +191,38 @@ type TimeToFirstTokenMetrics struct {
 // TokenMetrics represents comprehensive token usage breakdown
 type TokenMetrics struct {
 	// Total token counts
-	TotalTokens      int64 `json:"total_tokens"`
-	InputTokens      int64 `json:"input_tokens"`
-	OutputTokens     int64 `json:"output_tokens"`
+	TotalTokens  int64 `json:"total_tokens"`
+	InputTokens  int64 `json:"input_tokens"`
+	OutputTokens int64 `json:"output_tokens"`
 
 	// Cached token usage (for providers that support prompt caching)
-	CachedTokens         int64 `json:"cached_tokens,omitempty"`
-	CacheReadTokens      int64 `json:"cache_read_tokens,omitempty"`
-	CacheCreationTokens  int64 `json:"cache_creation_tokens,omitempty"`
+	CachedTokens        int64 `json:"cached_tokens,omitempty"`
+	CacheReadTokens     int64 `json:"cache_read_tokens,omitempty"`
+	CacheCreationTokens int64 `json:"cache_creation_tokens,omitempty"`
 
 	// Reasoning tokens (for models with extended thinking)
-	ReasoningTokens      int64 `json:"reasoning_tokens,omitempty"`
+	ReasoningTokens int64 `json:"reasoning_tokens,omitempty"`
 
 	// Average token usage per request
-	AverageInputTokens   float64 `json:"average_input_tokens"`   // Calculated: input_tokens / requests
-	AverageOutputTokens  float64 `json:"average_output_tokens"`  // Calculated: output_tokens / requests
-	AverageTotalTokens   float64 `json:"average_total_tokens"`   // Calculated: total_tokens / requests
+	AverageInputTokens  float64 `json:"average_input_tokens"`  // Calculated: input_tokens / requests
+	AverageOutputTokens float64 `json:"average_output_tokens"` // Calculated: output_tokens / requests
+	AverageTotalTokens  float64 `json:"average_total_tokens"`  // Calculated: total_tokens / requests
 
 	// Token efficiency metrics
-	InputOutputRatio     float64 `json:"input_output_ratio"`     // Calculated: input_tokens / output_tokens
-	CacheHitRate         float64 `json:"cache_hit_rate,omitempty"` // Calculated: cache_read_tokens / input_tokens
+	InputOutputRatio float64 `json:"input_output_ratio"`       // Calculated: input_tokens / output_tokens
+	CacheHitRate     float64 `json:"cache_hit_rate,omitempty"` // Calculated: cache_read_tokens / input_tokens
 
 	// Cost estimation
-	EstimatedCost        float64 `json:"estimated_cost"`
-	Currency             string  `json:"currency"`
-	EstimatedInputCost   float64 `json:"estimated_input_cost"`
-	EstimatedOutputCost  float64 `json:"estimated_output_cost"`
-	EstimatedCachedCost  float64 `json:"estimated_cached_cost,omitempty"`
+	EstimatedCost       float64 `json:"estimated_cost"`
+	Currency            string  `json:"currency"`
+	EstimatedInputCost  float64 `json:"estimated_input_cost"`
+	EstimatedOutputCost float64 `json:"estimated_output_cost"`
+	EstimatedCachedCost float64 `json:"estimated_cached_cost,omitempty"`
 
 	// Cost per token (for reference)
-	InputCostPerToken    float64 `json:"input_cost_per_token,omitempty"`
-	OutputCostPerToken   float64 `json:"output_cost_per_token,omitempty"`
-	CachedCostPerToken   float64 `json:"cached_cost_per_token,omitempty"`
+	InputCostPerToken  float64 `json:"input_cost_per_token,omitempty"`
+	OutputCostPerToken float64 `json:"output_cost_per_token,omitempty"`
+	CachedCostPerToken float64 `json:"cached_cost_per_token,omitempty"`
 
 	// Last updated
 	LastUpdated time.Time `json:"last_updated"`
@@ -231,8 +231,8 @@ type TokenMetrics struct {
 // ErrorMetrics represents comprehensive error categorization and tracking
 type ErrorMetrics struct {
 	// Total error counts
-	TotalErrors      int64   `json:"total_errors"`
-	ErrorRate        float64 `json:"error_rate"` // Calculated: errors / total_requests
+	TotalErrors int64   `json:"total_errors"`
+	ErrorRate   float64 `json:"error_rate"` // Calculated: errors / total_requests
 
 	// Error categorization by type
 	ErrorsByType map[string]int64 `json:"errors_by_type"` // e.g., "rate_limit", "timeout", "authentication", "invalid_request"
@@ -247,19 +247,19 @@ type ErrorMetrics struct {
 	ErrorsByModel map[string]int64 `json:"errors_by_model,omitempty"`
 
 	// Specific error categories
-	RateLimitErrors     int64 `json:"rate_limit_errors"`
-	TimeoutErrors       int64 `json:"timeout_errors"`
+	RateLimitErrors      int64 `json:"rate_limit_errors"`
+	TimeoutErrors        int64 `json:"timeout_errors"`
 	AuthenticationErrors int64 `json:"authentication_errors"`
 	InvalidRequestErrors int64 `json:"invalid_request_errors"`
-	ServerErrors        int64 `json:"server_errors"` // 5xx errors
-	NetworkErrors       int64 `json:"network_errors"`
-	UnknownErrors       int64 `json:"unknown_errors"`
+	ServerErrors         int64 `json:"server_errors"` // 5xx errors
+	NetworkErrors        int64 `json:"network_errors"`
+	UnknownErrors        int64 `json:"unknown_errors"`
 
 	// Error percentages (for quick analysis)
-	RateLimitErrorRate     float64 `json:"rate_limit_error_rate"`     // Calculated: rate_limit_errors / total_errors
-	TimeoutErrorRate       float64 `json:"timeout_error_rate"`        // Calculated: timeout_errors / total_errors
+	RateLimitErrorRate      float64 `json:"rate_limit_error_rate"`     // Calculated: rate_limit_errors / total_errors
+	TimeoutErrorRate        float64 `json:"timeout_error_rate"`        // Calculated: timeout_errors / total_errors
 	AuthenticationErrorRate float64 `json:"authentication_error_rate"` // Calculated: auth_errors / total_errors
-	ServerErrorRate        float64 `json:"server_error_rate"`         // Calculated: server_errors / total_errors
+	ServerErrorRate         float64 `json:"server_error_rate"`         // Calculated: server_errors / total_errors
 
 	// Recent error tracking
 	ConsecutiveErrors int64     `json:"consecutive_errors"` // Current consecutive error count
@@ -268,10 +268,10 @@ type ErrorMetrics struct {
 	LastErrorTime     time.Time `json:"last_error_time"`
 
 	// Error recovery metrics
-	TotalRetries         int64   `json:"total_retries"`
-	SuccessfulRetries    int64   `json:"successful_retries"`
-	FailedRetries        int64   `json:"failed_retries"`
-	RetrySuccessRate     float64 `json:"retry_success_rate"` // Calculated: successful_retries / total_retries
+	TotalRetries      int64   `json:"total_retries"`
+	SuccessfulRetries int64   `json:"successful_retries"`
+	FailedRetries     int64   `json:"failed_retries"`
+	RetrySuccessRate  float64 `json:"retry_success_rate"` // Calculated: successful_retries / total_retries
 
 	// Last updated
 	LastUpdated time.Time `json:"last_updated"`

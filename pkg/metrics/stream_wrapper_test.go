@@ -284,7 +284,7 @@ func TestMetricsStreamWrapper_TTFT(t *testing.T) {
 		}
 	}
 
-	wrapper.Close()
+	_ = wrapper.Close()
 
 	// Check TTFT
 	metrics := wrapper.GetMetrics()
@@ -349,7 +349,7 @@ func TestMetricsStreamWrapper_TokensPerSecond(t *testing.T) {
 		}
 	}
 
-	wrapper.Close()
+	_ = wrapper.Close()
 
 	// Check metrics
 	metrics := wrapper.GetMetrics()
@@ -416,7 +416,7 @@ func TestMetricsStreamWrapper_StreamAbort(t *testing.T) {
 		}
 	}
 
-	wrapper.Close()
+	_ = wrapper.Close()
 
 	// Verify stream was marked as aborted
 	metrics := wrapper.GetMetrics()
@@ -479,7 +479,7 @@ func TestMetricsStreamWrapper_ChunkEvents(t *testing.T) {
 		}
 	}
 
-	wrapper.Close()
+	_ = wrapper.Close()
 
 	// Verify chunk events were emitted
 	chunkEvents := collector.getEventsByType(types.MetricEventStreamChunk)
@@ -530,7 +530,7 @@ func TestMetricsStreamWrapper_ChunkEventsDisabled(t *testing.T) {
 		}
 	}
 
-	wrapper.Close()
+	_ = wrapper.Close()
 
 	// Verify NO chunk events were emitted
 	chunkEvents := collector.getEventsByType(types.MetricEventStreamChunk)
@@ -673,7 +673,7 @@ func TestMetricsStreamWrapper_ThreadSafety(t *testing.T) {
 	}
 
 	<-done
-	wrapper.Close()
+	_ = wrapper.Close()
 
 	// Verify final metrics
 	metrics := wrapper.GetMetrics()
@@ -751,7 +751,7 @@ func TestMetricsStreamWrapper_EmptyStream(t *testing.T) {
 		t.Errorf("Expected io.EOF, got %v", err)
 	}
 
-	wrapper.Close()
+	_ = wrapper.Close()
 
 	// Verify metrics for empty stream
 	metrics := wrapper.GetMetrics()
@@ -787,7 +787,7 @@ func TestMetricsStreamWrapper_MultipleClose(t *testing.T) {
 	}
 
 	// Consume stream
-	wrapper.Next()
+	_, _ = wrapper.Next()
 
 	// Close multiple times
 	err1 := wrapper.Close()
@@ -844,6 +844,6 @@ func BenchmarkMetricsStreamWrapper(b *testing.B) {
 			}
 		}
 
-		wrapper.Close()
+		_ = wrapper.Close()
 	}
 }

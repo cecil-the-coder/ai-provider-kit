@@ -197,7 +197,7 @@ func (p *BaseProvider) RecordRequest(ctx context.Context, modelID string) {
 			ModelID:      modelID,
 			Timestamp:    time.Now(),
 		}
-		collector.RecordEvent(ctx, event)
+		_ = collector.RecordEvent(ctx, event)
 	}
 }
 
@@ -232,7 +232,7 @@ func (p *BaseProvider) RecordSuccessWithModel(ctx context.Context, latency time.
 			Latency:      latency,
 			TokensUsed:   tokensUsed,
 		}
-		collector.RecordEvent(ctx, event)
+		_ = collector.RecordEvent(ctx, event)
 	}
 }
 
@@ -266,7 +266,7 @@ func (p *BaseProvider) RecordErrorWithModel(ctx context.Context, err error, mode
 			ErrorMessage: errorMsg,
 			ErrorType:    errorType,
 		}
-		collector.RecordEvent(ctx, event)
+		_ = collector.RecordEvent(ctx, event)
 	}
 }
 

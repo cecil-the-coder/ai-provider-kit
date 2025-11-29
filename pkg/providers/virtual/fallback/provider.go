@@ -46,7 +46,7 @@ func (f *FallbackProvider) GenerateChatCompletion(ctx context.Context, opts type
 
 	// Record request
 	if collector != nil {
-		collector.RecordEvent(ctx, types.MetricEvent{
+		_ = collector.RecordEvent(ctx, types.MetricEvent{
 			Type:         types.MetricEventRequest,
 			ProviderName: f.name,
 			ProviderType: f.Type(),
@@ -72,7 +72,7 @@ func (f *FallbackProvider) GenerateChatCompletion(ctx context.Context, opts type
 			// Success - emit provider switch event if not the first provider
 			if collector != nil {
 				if i > 0 {
-					collector.RecordEvent(ctx, types.MetricEvent{
+					_ = collector.RecordEvent(ctx, types.MetricEvent{
 						Type:          types.MetricEventProviderSwitch,
 						ProviderName:  f.name,
 						ProviderType:  f.Type(),
@@ -87,7 +87,7 @@ func (f *FallbackProvider) GenerateChatCompletion(ctx context.Context, opts type
 				}
 
 				// Record success
-				collector.RecordEvent(ctx, types.MetricEvent{
+				_ = collector.RecordEvent(ctx, types.MetricEvent{
 					Type:         types.MetricEventSuccess,
 					ProviderName: f.name,
 					ProviderType: f.Type(),
@@ -106,7 +106,7 @@ func (f *FallbackProvider) GenerateChatCompletion(ctx context.Context, opts type
 
 		// Record fallback attempt failure
 		if collector != nil && i > 0 {
-			collector.RecordEvent(ctx, types.MetricEvent{
+			_ = collector.RecordEvent(ctx, types.MetricEvent{
 				Type:          types.MetricEventProviderSwitch,
 				ProviderName:  f.name,
 				ProviderType:  f.Type(),
@@ -132,7 +132,7 @@ func (f *FallbackProvider) GenerateChatCompletion(ctx context.Context, opts type
 			errorMsg = fmt.Sprintf("all providers failed, last error: %v", lastErr)
 		}
 
-		collector.RecordEvent(ctx, types.MetricEvent{
+		_ = collector.RecordEvent(ctx, types.MetricEvent{
 			Type:          types.MetricEventError,
 			ProviderName:  f.name,
 			ProviderType:  f.Type(),

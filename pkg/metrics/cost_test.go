@@ -9,9 +9,11 @@ import (
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 )
 
+const floatTolerance = 1e-6
+
 // Helper function to compare floats with tolerance
-func floatEquals(a, b, tolerance float64) bool {
-	return math.Abs(a-b) < tolerance
+func floatEquals(a, b float64) bool {
+	return math.Abs(a-b) < floatTolerance
 }
 
 // MockCostCalculator is a test implementation of CostCalculator
@@ -33,9 +35,9 @@ func NewMockCostCalculator() *MockCostCalculator {
 	}
 
 	// Add some example pricing
-	mc.SetPricing("anthropic", "claude-3-5-sonnet-20241022", 3.0/1000, 15.0/1000)   // $3 per 1M input, $15 per 1M output
-	mc.SetPricing("openai", "gpt-4", 30.0/1000, 60.0/1000)                          // $30 per 1M input, $60 per 1M output
-	mc.SetPricing("openai", "gpt-3.5-turbo", 0.5/1000, 1.5/1000)                    // $0.50 per 1M input, $1.50 per 1M output
+	mc.SetPricing("anthropic", "claude-3-5-sonnet-20241022", 3.0/1000, 15.0/1000) // $3 per 1M input, $15 per 1M output
+	mc.SetPricing("openai", "gpt-4", 30.0/1000, 60.0/1000)                        // $30 per 1M input, $60 per 1M output
+	mc.SetPricing("openai", "gpt-3.5-turbo", 0.5/1000, 1.5/1000)                  // $0.50 per 1M input, $1.50 per 1M output
 
 	return mc
 }
@@ -137,13 +139,13 @@ func TestMockCostCalculator(t *testing.T) {
 	// 500 output tokens at $15/1M = $0.0075
 	// Total = $0.0105
 	cost := calc.CalculateCost("anthropic", "claude-3-5-sonnet-20241022", 1000, 500)
-	if !floatEquals(cost.InputCost, 0.003, 0.000001) {
+	if !floatEquals(cost.InputCost, 0.003) {
 		t.Errorf("Expected InputCost to be 0.003, got %f", cost.InputCost)
 	}
-	if !floatEquals(cost.OutputCost, 0.0075, 0.000001) {
+	if !floatEquals(cost.OutputCost, 0.0075) {
 		t.Errorf("Expected OutputCost to be 0.0075, got %f", cost.OutputCost)
 	}
-	if !floatEquals(cost.TotalCost, 0.0105, 0.000001) {
+	if !floatEquals(cost.TotalCost, 0.0105) {
 		t.Errorf("Expected TotalCost to be 0.0105, got %f", cost.TotalCost)
 	}
 	if cost.Currency != "USD" {
@@ -213,13 +215,13 @@ func TestCollectorWithMockCostCalculator(t *testing.T) {
 	expectedOutputCost := 0.0075
 	expectedTotalCost := 0.0105
 
-	if !floatEquals(snapshot.Tokens.EstimatedInputCost, expectedInputCost, 0.000001) {
+	if !floatEquals(snapshot.Tokens.EstimatedInputCost, expectedInputCost) {
 		t.Errorf("Expected EstimatedInputCost to be %f, got %f", expectedInputCost, snapshot.Tokens.EstimatedInputCost)
 	}
-	if !floatEquals(snapshot.Tokens.EstimatedOutputCost, expectedOutputCost, 0.000001) {
+	if !floatEquals(snapshot.Tokens.EstimatedOutputCost, expectedOutputCost) {
 		t.Errorf("Expected EstimatedOutputCost to be %f, got %f", expectedOutputCost, snapshot.Tokens.EstimatedOutputCost)
 	}
-	if !floatEquals(snapshot.Tokens.EstimatedCost, expectedTotalCost, 0.000001) {
+	if !floatEquals(snapshot.Tokens.EstimatedCost, expectedTotalCost) {
 		t.Errorf("Expected EstimatedCost to be %f, got %f", expectedTotalCost, snapshot.Tokens.EstimatedCost)
 	}
 	if snapshot.Tokens.Currency != "USD" {
@@ -306,7 +308,7 @@ func TestCollectorWithMultipleEvents(t *testing.T) {
 	// Event 3: 5000 * 0.0005/1000 + 2000 * 0.0015/1000 = 0.0025 + 0.003 = 0.0055
 	// Total: 0.0105 + 0.12 + 0.0055 = 0.136
 	expectedTotalCost := 0.136
-	if !floatEquals(snapshot.Tokens.EstimatedCost, expectedTotalCost, 0.000001) {
+	if !floatEquals(snapshot.Tokens.EstimatedCost, expectedTotalCost) {
 		t.Errorf("Expected EstimatedCost to be %f, got %f", expectedTotalCost, snapshot.Tokens.EstimatedCost)
 	}
 
@@ -315,7 +317,7 @@ func TestCollectorWithMultipleEvents(t *testing.T) {
 	if anthropicSnapshot == nil {
 		t.Fatal("Expected anthropic provider snapshot")
 	}
-	if !floatEquals(anthropicSnapshot.Tokens.EstimatedCost, 0.0105, 0.000001) {
+	if !floatEquals(anthropicSnapshot.Tokens.EstimatedCost, 0.0105) {
 		t.Errorf("Expected anthropic cost to be 0.0105, got %f", anthropicSnapshot.Tokens.EstimatedCost)
 	}
 
@@ -324,7 +326,7 @@ func TestCollectorWithMultipleEvents(t *testing.T) {
 		t.Fatal("Expected openai provider snapshot")
 	}
 	expectedOpenAICost := 0.12 + 0.0055 // 0.1255
-	if !floatEquals(openaiSnapshot.Tokens.EstimatedCost, expectedOpenAICost, 0.000001) {
+	if !floatEquals(openaiSnapshot.Tokens.EstimatedCost, expectedOpenAICost) {
 		t.Errorf("Expected openai cost to be %f, got %f", expectedOpenAICost, openaiSnapshot.Tokens.EstimatedCost)
 	}
 
@@ -333,10 +335,10 @@ func TestCollectorWithMultipleEvents(t *testing.T) {
 	if claudeSnapshot == nil {
 		t.Fatal("Expected claude model snapshot")
 	}
-	if !floatEquals(claudeSnapshot.Tokens.EstimatedCost, 0.0105, 0.000001) {
+	if !floatEquals(claudeSnapshot.Tokens.EstimatedCost, 0.0105) {
 		t.Errorf("Expected claude cost to be 0.0105, got %f", claudeSnapshot.Tokens.EstimatedCost)
 	}
-	if !floatEquals(claudeSnapshot.EstimatedCostPerRequest, 0.0105, 0.000001) {
+	if !floatEquals(claudeSnapshot.EstimatedCostPerRequest, 0.0105) {
 		t.Errorf("Expected claude EstimatedCostPerRequest to be 0.0105, got %f", claudeSnapshot.EstimatedCostPerRequest)
 	}
 
@@ -344,10 +346,10 @@ func TestCollectorWithMultipleEvents(t *testing.T) {
 	if gpt4Snapshot == nil {
 		t.Fatal("Expected gpt-4 model snapshot")
 	}
-	if !floatEquals(gpt4Snapshot.Tokens.EstimatedCost, 0.12, 0.000001) {
+	if !floatEquals(gpt4Snapshot.Tokens.EstimatedCost, 0.12) {
 		t.Errorf("Expected gpt-4 cost to be 0.12, got %f", gpt4Snapshot.Tokens.EstimatedCost)
 	}
-	if !floatEquals(gpt4Snapshot.EstimatedCostPerRequest, 0.12, 0.000001) {
+	if !floatEquals(gpt4Snapshot.EstimatedCostPerRequest, 0.12) {
 		t.Errorf("Expected gpt-4 EstimatedCostPerRequest to be 0.12, got %f", gpt4Snapshot.EstimatedCostPerRequest)
 	}
 }
@@ -419,13 +421,13 @@ func TestCollectorCostAveragePerRequest(t *testing.T) {
 	// Each request: 1000 * 0.0005/1000 + 500 * 0.0015/1000 = 0.0005 + 0.00075 = 0.00125
 	// Total for 3 requests: 0.00375
 	expectedTotalCost := 0.00375
-	if !floatEquals(modelSnapshot.Tokens.EstimatedCost, expectedTotalCost, 0.000001) {
+	if !floatEquals(modelSnapshot.Tokens.EstimatedCost, expectedTotalCost) {
 		t.Errorf("Expected total cost to be %f, got %f", expectedTotalCost, modelSnapshot.Tokens.EstimatedCost)
 	}
 
 	// Average per request: 0.00375 / 3 = 0.00125
 	expectedAvgCost := 0.00125
-	if !floatEquals(modelSnapshot.EstimatedCostPerRequest, expectedAvgCost, 0.000001) {
+	if !floatEquals(modelSnapshot.EstimatedCostPerRequest, expectedAvgCost) {
 		t.Errorf("Expected EstimatedCostPerRequest to be %f, got %f", expectedAvgCost, modelSnapshot.EstimatedCostPerRequest)
 	}
 }

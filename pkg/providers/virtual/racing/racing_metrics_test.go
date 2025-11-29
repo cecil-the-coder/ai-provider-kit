@@ -15,7 +15,7 @@ import (
 func TestRacingProvider_MetricsCollector_SetAndEmit(t *testing.T) {
 	// Create a metrics collector
 	collector := metrics.NewDefaultMetricsCollector()
-	defer collector.Close()
+	defer func() { _ = collector.Close() }()
 
 	// Subscribe to events
 	sub := collector.Subscribe(100)
@@ -128,7 +128,7 @@ collectLoop:
 // TestRacingProvider_MetricsCollector_AllFailed tests metrics when all providers fail
 func TestRacingProvider_MetricsCollector_AllFailed(t *testing.T) {
 	collector := metrics.NewDefaultMetricsCollector()
-	defer collector.Close()
+	defer func() { _ = collector.Close() }()
 
 	sub := collector.Subscribe(100)
 	defer sub.Unsubscribe()
