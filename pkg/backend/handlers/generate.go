@@ -101,7 +101,9 @@ func (h *GenerateHandler) Generate(w http.ResponseWriter, r *http.Request) {
 		SendError(w, r, "GENERATION_ERROR", "Failed to generate: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
-	defer stream.Close()
+	defer func() {
+		_ = stream.Close() // Explicitly ignore close error in cleanup
+	}()
 
 	// For non-streaming requests, collect the full response
 	if !req.Stream {

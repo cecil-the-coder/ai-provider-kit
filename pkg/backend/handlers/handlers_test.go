@@ -833,7 +833,7 @@ func TestGenerateHandler_Generate_WithExtensions(t *testing.T) {
 
 	ext := &mockExtension{}
 	registry := &mockExtensionRegistry{}
-	registry.Register(ext)
+	_ = registry.Register(ext)
 
 	handler := NewGenerateHandler(providers, registry, "test")
 
@@ -858,7 +858,7 @@ func TestGenerateHandler_Generate_ExtensionError(t *testing.T) {
 
 	ext := &mockExtension{beforeErr: errors.New("extension failed")}
 	registry := &mockExtensionRegistry{}
-	registry.Register(ext)
+	_ = registry.Register(ext)
 
 	handler := NewGenerateHandler(providers, registry, "test")
 
@@ -1946,7 +1946,7 @@ func TestStreamHandler_StreamGenerate_WithExtensions(t *testing.T) {
 
 	ext := &mockExtension{}
 	registry := &mockExtensionRegistry{}
-	registry.Register(ext)
+	_ = registry.Register(ext)
 
 	handler := NewStreamHandler(providers, registry, "test")
 
@@ -1969,7 +1969,7 @@ func TestStreamHandler_StreamGenerate_ExtensionBeforeError(t *testing.T) {
 
 	ext := &mockExtension{beforeErr: errors.New("before failed")}
 	registry := &mockExtensionRegistry{}
-	registry.Register(ext)
+	_ = registry.Register(ext)
 
 	handler := NewStreamHandler(providers, registry, "test")
 
@@ -1993,7 +1993,7 @@ func TestStreamHandler_StreamGenerate_ExtensionOnSelectedError(t *testing.T) {
 
 	ext := &mockExtension{onSelectedErr: errors.New("selected failed")}
 	registry := &mockExtensionRegistry{}
-	registry.Register(ext)
+	_ = registry.Register(ext)
 
 	handler := NewStreamHandler(providers, registry, "test")
 
@@ -2058,7 +2058,7 @@ func TestGenerateHandler_Generate_OnSelectedError(t *testing.T) {
 
 	ext := &mockExtension{onSelectedErr: errors.New("selected failed")}
 	registry := &mockExtensionRegistry{}
-	registry.Register(ext)
+	_ = registry.Register(ext)
 
 	handler := NewGenerateHandler(providers, registry, "test")
 
@@ -2087,7 +2087,7 @@ func TestGenerateHandler_Generate_AfterGenerateError(t *testing.T) {
 
 	ext := &mockExtension{afterErr: errors.New("after failed")}
 	registry := &mockExtensionRegistry{}
-	registry.Register(ext)
+	_ = registry.Register(ext)
 
 	handler := NewGenerateHandler(providers, registry, "test")
 

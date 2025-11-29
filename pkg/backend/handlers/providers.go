@@ -252,7 +252,9 @@ func (h *ProviderHandler) TestProvider(w http.ResponseWriter, r *http.Request) {
 		SendError(w, r, "TEST_FAILED", fmt.Sprintf("Provider test failed: %v", err), http.StatusInternalServerError)
 		return
 	}
-	defer stream.Close()
+	defer func() {
+		_ = stream.Close() // Explicitly ignore close error in cleanup
+	}()
 
 	// Read the response
 	chunk, err := stream.Next()

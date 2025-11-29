@@ -16,7 +16,7 @@ func Recovery(next http.Handler) http.Handler {
 
                 w.Header().Set("Content-Type", "application/json")
                 w.WriteHeader(http.StatusInternalServerError)
-                json.NewEncoder(w).Encode(map[string]interface{}{
+                _ = json.NewEncoder(w).Encode(map[string]interface{}{
                     "success": false,
                     "error": map[string]string{
                         "code":    "INTERNAL_ERROR",

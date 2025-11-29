@@ -17,7 +17,7 @@ import (
 func testHandler(statusCode int, body string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(statusCode)
-		w.Write([]byte(body))
+		_, _ = w.Write([]byte(body))
 	})
 }
 
@@ -316,7 +316,7 @@ func TestLogging_ResponseWriter(t *testing.T) {
 
 	handler := RequestID(Logging(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusCreated)
-		w.Write([]byte("Created"))
+		_, _ = w.Write([]byte("Created"))
 	})))
 
 	req := httptest.NewRequest(http.MethodPost, "/test", nil)
@@ -343,7 +343,7 @@ func TestLogging_DefaultStatusCode(t *testing.T) {
 
 	handler := RequestID(Logging(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Don't explicitly set status code
-		w.Write([]byte("OK"))
+		_, _ = w.Write([]byte("OK"))
 	})))
 
 	req := httptest.NewRequest(http.MethodGet, "/test", nil)
@@ -547,8 +547,8 @@ func TestAuth_ReadsFromEnvVariable(t *testing.T) {
 	expectedKey := "env-key-456"
 
 	// Set environment variable
-	os.Setenv(envKey, expectedKey)
-	defer os.Unsetenv(envKey)
+	_ = os.Setenv(envKey, expectedKey)
+	defer func() { _ = os.Unsetenv(envKey) }()
 
 	config := AuthConfig{
 		Enabled:   true,
@@ -620,8 +620,8 @@ func TestAuth_EmptyAPIKey(t *testing.T) {
 // TestAuth_PrefersAPIPasswordOverEnv tests that APIPassword takes precedence over env
 func TestAuth_PrefersAPIPasswordOverEnv(t *testing.T) {
 	envKey := "TEST_API_KEY_PRECEDENCE"
-	os.Setenv(envKey, "env-key")
-	defer os.Unsetenv(envKey)
+	_ = os.Setenv(envKey, "env-key")
+	defer func() { _ = os.Unsetenv(envKey) }()
 
 	config := AuthConfig{
 		Enabled:     true,

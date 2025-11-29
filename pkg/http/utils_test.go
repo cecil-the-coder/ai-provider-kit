@@ -390,8 +390,7 @@ func TestRequestBuilder_WithJSONBody(t *testing.T) {
 	}
 
 	var decodedBody map[string]string
-	err = json.NewDecoder(req.Body).Decode(&decodedBody)
-	if err != nil {
+	if err = json.NewDecoder(req.Body).Decode(&decodedBody); err != nil {
 		t.Fatalf("failed to decode body: %v", err)
 	}
 	if decodedBody["key"] != "value" {
@@ -440,7 +439,7 @@ func TestStreamingResponse_ReadLine(t *testing.T) {
 	}
 
 	sr := NewStreamingResponse(resp)
-	defer sr.Close()
+	defer func() { _ = sr.Close() }()
 
 	line1, err := sr.ReadLine()
 	if err != nil {
@@ -466,7 +465,7 @@ func TestStreamingResponse_ReadLine_EOF(t *testing.T) {
 	}
 
 	sr := NewStreamingResponse(resp)
-	defer sr.Close()
+	defer func() { _ = sr.Close() }()
 
 	line, err := sr.ReadLine()
 	if err != nil {
@@ -491,7 +490,7 @@ func TestStreamingResponse_ReadChunk(t *testing.T) {
 	}
 
 	sr := NewStreamingResponse(resp)
-	defer sr.Close()
+	defer func() { _ = sr.Close() }()
 
 	chunk, err := sr.ReadChunk(delimiter)
 	if err != nil {
@@ -760,7 +759,7 @@ func TestStreamingResponse_ReadChunk_EOF(t *testing.T) {
 	}
 
 	sr := NewStreamingResponse(resp)
-	defer sr.Close()
+	defer func() { _ = sr.Close() }()
 
 	chunk, err := sr.ReadChunk("NOTFOUND")
 	if err != nil {
@@ -782,13 +781,13 @@ func TestRequestBuilder_Integration(t *testing.T) {
 		}
 
 		var body map[string]string
-		json.NewDecoder(r.Body).Decode(&body)
+		_ = json.NewDecoder(r.Body).Decode(&body)
 		if body["message"] != "hello" {
 			t.Errorf("expected message=hello, got %s", body["message"])
 		}
 
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(map[string]string{"response": "ok"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"response": "ok"})
 	}))
 	defer server.Close()
 
@@ -806,7 +805,7 @@ func TestRequestBuilder_Integration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		t.Errorf("expected status 200, got %d", resp.StatusCode)

@@ -573,7 +573,7 @@ func TestCreateOpenAIStream(t *testing.T) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.WriteHeader(http.StatusOK)
 		flusher, _ := w.(http.Flusher)
-		w.Write([]byte("data: {\"choices\":[{\"delta\":{\"content\":\"test\"}}]}\n\n"))
+		_, _ = w.Write([]byte("data: {\"choices\":[{\"delta\":{\"content\":\"test\"}}]}\n\n"))
 		flusher.Flush()
 	}))
 	defer ts.Close()
@@ -589,7 +589,7 @@ func TestCreateOpenAIStream(t *testing.T) {
 	}
 
 	// Clean up
-	stream.Close()
+	_ = stream.Close()
 }
 
 func TestCreateAnthropicStream(t *testing.T) {
@@ -603,7 +603,7 @@ func TestCreateAnthropicStream(t *testing.T) {
 		t.Fatal("expected non-nil stream")
 	}
 
-	stream.Close()
+	_ = stream.Close()
 }
 
 func TestErrorStream(t *testing.T) {
@@ -668,7 +668,7 @@ func TestBaseStream_Integration(t *testing.T) {
 		t.Error("expected done chunk")
 	}
 
-	stream.Close()
+	_ = stream.Close()
 }
 
 func TestStreamProcessor_ThreadSafety(t *testing.T) {
@@ -721,8 +721,8 @@ func TestCreateCustomStream(t *testing.T) {
 	if stream == nil {
 		t.Fatal("expected non-nil stream")
 	}
-	
-	stream.Close()
+
+	_ = stream.Close()
 }
 
 func TestSSELineProcessor(t *testing.T) {

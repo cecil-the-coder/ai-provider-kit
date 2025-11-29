@@ -420,7 +420,7 @@ func TestHTTPClient_GetMetrics(t *testing.T) {
 		req, _ := http.NewRequest("GET", server.URL, nil)
 		resp, err := client.Do(context.Background(), req)
 		if err == nil {
-			resp.Body.Close()
+			_ = resp.Body.Close()
 		}
 	}
 
@@ -448,7 +448,7 @@ func TestHTTPClient_ResetMetrics(t *testing.T) {
 	req, _ := http.NewRequest("GET", server.URL, nil)
 	resp, err := client.Do(context.Background(), req)
 	if err == nil {
-		resp.Body.Close()
+		_ = resp.Body.Close()
 	}
 
 	// Verify metrics are set
@@ -747,7 +747,7 @@ func TestHTTPClient_ConcurrentRequests(t *testing.T) {
 			req, _ := http.NewRequest("GET", server.URL, nil)
 			resp, err := client.Do(context.Background(), req)
 			if err == nil {
-				resp.Body.Close()
+				_ = resp.Body.Close()
 				completed.Add(1)
 			}
 		}()
@@ -845,7 +845,7 @@ func TestHTTPClient_MetricsErrorsByType(t *testing.T) {
 		req, _ := http.NewRequest("GET", server.URL, nil)
 		resp, err := client.Do(context.Background(), req)
 		if err == nil {
-			resp.Body.Close()
+			_ = resp.Body.Close()
 		}
 	}
 

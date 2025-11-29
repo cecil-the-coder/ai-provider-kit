@@ -196,7 +196,7 @@ func TestRoundRobinStrategy_DistributesEvenly(t *testing.T) {
 		// Read from stream to identify which provider was used
 		chunk, _ := stream.Next()
 		content := chunk.Content
-		stream.Close()
+		_ = stream.Close()
 
 		selectedProviders[content]++
 	}
@@ -231,12 +231,12 @@ func TestRoundRobinStrategy_CounterIncrementsCorrectly(t *testing.T) {
 	// First call should use provider1 (counter=0)
 	stream1, _ := lb.GenerateChatCompletion(ctx, opts)
 	chunk1, _ := stream1.Next()
-	stream1.Close()
+	_ = stream1.Close()
 
 	// Second call should use provider2 (counter=1)
 	stream2, _ := lb.GenerateChatCompletion(ctx, opts)
 	chunk2, _ := stream2.Next()
-	stream2.Close()
+	_ = stream2.Close()
 
 	if chunk1.Content == chunk2.Content {
 		t.Error("expected different providers to be selected")
@@ -264,7 +264,7 @@ func TestRoundRobinStrategy_WrapsAround(t *testing.T) {
 		stream, _ := lb.GenerateChatCompletion(ctx, opts)
 		chunk, _ := stream.Next()
 		responses = append(responses, chunk.Content)
-		stream.Close()
+		_ = stream.Close()
 	}
 
 	// Pattern should be: a, b, a, b, a
@@ -306,7 +306,7 @@ func TestRandomStrategy_SelectsProviders(t *testing.T) {
 
 		chunk, _ := stream.Next()
 		selectedProviders[chunk.Content] = true
-		stream.Close()
+		_ = stream.Close()
 	}
 
 	// We should see at least 2 different providers selected over 50 iterations
@@ -421,7 +421,7 @@ func TestRoundRobinStrategy_ConcurrentAccess(t *testing.T) {
 				errChan <- err
 				return
 			}
-			stream.Close()
+			_ = stream.Close()
 		}()
 	}
 
@@ -805,7 +805,7 @@ func TestLoadBalanceProvider_SingleProvider(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error on iteration %d: %v", i, err)
 		}
-		stream.Close()
+		_ = stream.Close()
 	}
 
 	// Counter should have incremented
@@ -831,15 +831,15 @@ func TestLoadBalanceProvider_DefaultStrategy(t *testing.T) {
 	// Should use round-robin by default
 	stream1, _ := lb.GenerateChatCompletion(ctx, opts)
 	chunk1, _ := stream1.Next()
-	stream1.Close()
+	_ = stream1.Close()
 
 	stream2, _ := lb.GenerateChatCompletion(ctx, opts)
 	chunk2, _ := stream2.Next()
-	stream2.Close()
+	_ = stream2.Close()
 
 	stream3, _ := lb.GenerateChatCompletion(ctx, opts)
 	chunk3, _ := stream3.Next()
-	stream3.Close()
+	_ = stream3.Close()
 
 	// Should cycle through providers
 	if chunk1.Content == chunk2.Content {
@@ -903,11 +903,11 @@ func TestWeightedStrategy_FallsBackToRoundRobin(t *testing.T) {
 	// Should fall back to round-robin behavior
 	stream1, _ := lb.GenerateChatCompletion(ctx, opts)
 	chunk1, _ := stream1.Next()
-	stream1.Close()
+	_ = stream1.Close()
 
 	stream2, _ := lb.GenerateChatCompletion(ctx, opts)
 	chunk2, _ := stream2.Next()
-	stream2.Close()
+	_ = stream2.Close()
 
 	// Should cycle through providers like round-robin
 	if chunk1.Content == chunk2.Content {
@@ -934,7 +934,7 @@ func TestLoadBalanceProvider_StreamReturned(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	defer stream.Close()
+	defer func() { _ = stream.Close() }()
 
 	// Read all chunks
 	var content string
@@ -1007,7 +1007,7 @@ func BenchmarkRoundRobinSelection(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		stream, _ := lb.GenerateChatCompletion(ctx, opts)
-		stream.Close()
+		_ = stream.Close()
 	}
 }
 
@@ -1030,6 +1030,6 @@ func BenchmarkRandomSelection(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		stream, _ := lb.GenerateChatCompletion(ctx, opts)
-		stream.Close()
+		_ = stream.Close()
 	}
 }

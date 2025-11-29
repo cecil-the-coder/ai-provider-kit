@@ -105,7 +105,9 @@ func (h *StreamHandler) StreamGenerate(w http.ResponseWriter, r *http.Request) {
 		h.sendSSEError(w, flusher, "GENERATION_ERROR", "Failed to generate: "+err.Error())
 		return
 	}
-	defer stream.Close()
+	defer func() {
+		_ = stream.Close() // Explicitly ignore close error in cleanup
+	}()
 
 	// 7. Stream chunks as SSE events
 	var fullContent string

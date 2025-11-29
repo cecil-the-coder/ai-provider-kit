@@ -175,7 +175,7 @@ func TestFirstWinsStrategy_FastProviderWins(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	defer stream.Close()
+	defer func() { _ = stream.Close() }()
 
 	chunk, err := stream.Next()
 	if err != nil && err != io.EOF {
@@ -230,7 +230,7 @@ func TestFirstWinsStrategy_FirstSuccessWins(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	defer stream.Close()
+	defer func() { _ = stream.Close() }()
 
 	chunk, _ := stream.Next()
 	winner := chunk.Metadata["racing_winner"].(string)
@@ -370,7 +370,7 @@ func TestWeightedStrategy_ScoreBasedSelection(t *testing.T) {
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
-			defer stream.Close()
+			defer func() { _ = stream.Close() }()
 
 			chunk, _ := stream.Next()
 			winner := chunk.Metadata["racing_winner"].(string)
@@ -433,7 +433,7 @@ func TestQualityStrategy(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	defer stream.Close()
+	defer func() { _ = stream.Close() }()
 
 	chunk, _ := stream.Next()
 	if chunk.Metadata["racing_winner"] == nil {
@@ -1265,7 +1265,7 @@ func TestWeightedStrategy_GracePeriodExpires(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	defer stream.Close()
+	defer func() { _ = stream.Close() }()
 
 	chunk, _ := stream.Next()
 	winner := chunk.Metadata["racing_winner"].(string)

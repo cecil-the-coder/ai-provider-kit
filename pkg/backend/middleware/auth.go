@@ -48,7 +48,7 @@ func Auth(config AuthConfig) func(http.Handler) http.Handler {
             if token != expectedKey {
                 w.Header().Set("Content-Type", "application/json")
                 w.WriteHeader(http.StatusUnauthorized)
-                json.NewEncoder(w).Encode(map[string]interface{}{
+                _ = json.NewEncoder(w).Encode(map[string]interface{}{
                     "success": false,
                     "error": map[string]string{
                         "code":    "UNAUTHORIZED",

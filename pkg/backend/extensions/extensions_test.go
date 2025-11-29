@@ -231,7 +231,7 @@ func TestRegistry_Get(t *testing.T) {
 	t.Run("get existing extension", func(t *testing.T) {
 		reg := NewRegistry()
 		ext := &mockExtension{name: "test-ext"}
-		reg.Register(ext)
+		_ = reg.Register(ext)
 
 		retrieved, ok := reg.Get("test-ext")
 		assert.True(t, ok)
@@ -255,9 +255,9 @@ func TestRegistry_List(t *testing.T) {
 		ext2 := &mockExtension{name: "ext2"}
 		ext3 := &mockExtension{name: "ext3"}
 
-		reg.Register(ext1)
-		reg.Register(ext2)
-		reg.Register(ext3)
+		_ = reg.Register(ext1)
+		_ = reg.Register(ext2)
+		_ = reg.Register(ext3)
 
 		list := reg.List()
 		assert.Len(t, list, 3)
@@ -284,9 +284,9 @@ func TestRegistry_Initialize(t *testing.T) {
 		ext2 := &mockExtension{name: "ext2", deps: []string{"ext1"}}
 		ext3 := &mockExtension{name: "ext3", deps: []string{"ext2"}}
 
-		reg.Register(ext1)
-		reg.Register(ext2)
-		reg.Register(ext3)
+		_ = reg.Register(ext1)
+		_ = reg.Register(ext2)
+		_ = reg.Register(ext3)
 
 		configs := map[string]ExtensionConfig{
 			"ext1": {Enabled: true, Config: map[string]interface{}{"key": "value1"}},
@@ -308,8 +308,8 @@ func TestRegistry_Initialize(t *testing.T) {
 		ext1 := &mockExtension{name: "ext1"}
 		ext2 := &mockExtension{name: "ext2"}
 
-		reg.Register(ext1)
-		reg.Register(ext2)
+		_ = reg.Register(ext1)
+		_ = reg.Register(ext2)
 
 		configs := map[string]ExtensionConfig{
 			"ext1": {Enabled: true},
@@ -328,8 +328,8 @@ func TestRegistry_Initialize(t *testing.T) {
 		ext1 := &mockExtension{name: "ext1"}
 		ext2 := &mockExtension{name: "ext2"}
 
-		reg.Register(ext1)
-		reg.Register(ext2)
+		_ = reg.Register(ext1)
+		_ = reg.Register(ext2)
 
 		configs := map[string]ExtensionConfig{
 			"ext1": {Enabled: true},
@@ -350,7 +350,7 @@ func TestRegistry_Initialize(t *testing.T) {
 			initError: errors.New("initialization failed"),
 		}
 
-		reg.Register(ext)
+		_ = reg.Register(ext)
 
 		configs := map[string]ExtensionConfig{
 			"test-ext": {Enabled: true},
@@ -365,7 +365,7 @@ func TestRegistry_Initialize(t *testing.T) {
 	t.Run("initialize with empty config map", func(t *testing.T) {
 		reg := NewRegistry()
 		ext := &mockExtension{name: "test-ext"}
-		reg.Register(ext)
+		_ = reg.Register(ext)
 
 		err := reg.Initialize(map[string]ExtensionConfig{})
 		assert.NoError(t, err)
@@ -381,9 +381,9 @@ func TestRegistry_Shutdown(t *testing.T) {
 		ext2 := &mockExtension{name: "ext2"}
 		ext3 := &mockExtension{name: "ext3"}
 
-		reg.Register(ext1)
-		reg.Register(ext2)
-		reg.Register(ext3)
+		_ = reg.Register(ext1)
+		_ = reg.Register(ext2)
+		_ = reg.Register(ext3)
 
 		ctx := context.Background()
 		err := reg.Shutdown(ctx)
@@ -402,7 +402,7 @@ func TestRegistry_Shutdown(t *testing.T) {
 			shutdownErr: errors.New("shutdown failed"),
 		}
 
-		reg.Register(ext)
+		_ = reg.Register(ext)
 
 		ctx := context.Background()
 		err := reg.Shutdown(ctx)
@@ -427,8 +427,8 @@ func TestRegistry_TopologicalSort(t *testing.T) {
 		ext1 := &mockExtension{name: "ext1"}
 		ext2 := &mockExtension{name: "ext2", deps: []string{"ext1"}}
 
-		reg.Register(ext1)
-		reg.Register(ext2)
+		_ = reg.Register(ext1)
+		_ = reg.Register(ext2)
 
 		sorted, err := reg.topologicalSort()
 		assert.NoError(t, err)
@@ -462,10 +462,10 @@ func TestRegistry_TopologicalSort(t *testing.T) {
 		ext3 := &mockExtension{name: "ext3", deps: []string{"ext1"}}
 		ext4 := &mockExtension{name: "ext4", deps: []string{"ext2", "ext3"}}
 
-		reg.Register(ext1)
-		reg.Register(ext2)
-		reg.Register(ext3)
-		reg.Register(ext4)
+		_ = reg.Register(ext1)
+		_ = reg.Register(ext2)
+		_ = reg.Register(ext3)
+		_ = reg.Register(ext4)
 
 		sorted, err := reg.topologicalSort()
 		assert.NoError(t, err)
@@ -491,7 +491,7 @@ func TestRegistry_TopologicalSort(t *testing.T) {
 		// ext2 depends on ext1, but ext1 is not registered
 		ext2 := &mockExtension{name: "ext2", deps: []string{"ext1"}}
 
-		reg.Register(ext2)
+		_ = reg.Register(ext2)
 
 		sorted, err := reg.topologicalSort()
 		assert.NoError(t, err) // Missing dependencies are ignored
@@ -506,9 +506,9 @@ func TestRegistry_TopologicalSort(t *testing.T) {
 		ext2 := &mockExtension{name: "ext2"}
 		ext3 := &mockExtension{name: "ext3"}
 
-		reg.Register(ext1)
-		reg.Register(ext2)
-		reg.Register(ext3)
+		_ = reg.Register(ext1)
+		_ = reg.Register(ext2)
+		_ = reg.Register(ext3)
 
 		sorted, err := reg.topologicalSort()
 		assert.NoError(t, err)
@@ -581,7 +581,7 @@ func TestRegistry_ConcurrentAccess(t *testing.T) {
 		// Register some extensions first
 		for i := 0; i < 10; i++ {
 			ext := &mockExtension{name: fmt.Sprintf("ext-%d", i)}
-			reg.Register(ext)
+			_ = reg.Register(ext)
 		}
 
 		var wg sync.WaitGroup
