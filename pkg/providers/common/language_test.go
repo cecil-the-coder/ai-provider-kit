@@ -85,7 +85,7 @@ func TestDetectByFilename(t *testing.T) {
 		{"README.md", "markdown"},
 		{"other.txt", ""},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.filename, func(t *testing.T) {
 			result := DetectLanguage(tt.filename)
@@ -110,7 +110,7 @@ func TestDetectByExtension(t *testing.T) {
 		{"test.GO", "go"},
 		{"app.PY", "python"},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.filename, func(t *testing.T) {
 			result := DetectLanguage(tt.filename)

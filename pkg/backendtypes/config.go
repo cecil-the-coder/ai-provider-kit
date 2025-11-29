@@ -8,12 +8,12 @@ import (
 
 // BackendConfig defines the configuration for the backend server
 type BackendConfig struct {
-	Server     ServerConfig                      `yaml:"server"`
-	Auth       AuthConfig                        `yaml:"auth"`
-	Logging    LoggingConfig                     `yaml:"logging"`
-	CORS       CORSConfig                        `yaml:"cors"`
-	Providers  map[string]*types.ProviderConfig  `yaml:"providers"`
-	Extensions map[string]ExtensionConfig        `yaml:"extensions"`
+	Server     ServerConfig                     `yaml:"server"`
+	Auth       AuthConfig                       `yaml:"auth"`
+	Logging    LoggingConfig                    `yaml:"logging"`
+	CORS       CORSConfig                       `yaml:"cors"`
+	Providers  map[string]*types.ProviderConfig `yaml:"providers"`
+	Extensions map[string]ExtensionConfig       `yaml:"extensions"`
 }
 
 type ServerConfig struct {

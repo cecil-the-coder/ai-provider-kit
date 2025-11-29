@@ -193,7 +193,7 @@ func TestChatCompletionWithHTTPError(t *testing.T) {
 				"message": "Invalid API key",
 			},
 		}
-		json.NewEncoder(w).Encode(response)
+		_ = json.NewEncoder(w).Encode(response)
 	}))
 	defer server.Close()
 
@@ -228,7 +228,7 @@ func TestChatCompletionWithNoContent(t *testing.T) {
 				"output_tokens": 0,
 			},
 		}
-		json.NewEncoder(w).Encode(response)
+		_ = json.NewEncoder(w).Encode(response)
 	}))
 	defer server.Close()
 
@@ -287,7 +287,7 @@ func TestStreamingWithAPIKey(t *testing.T) {
 		}
 
 		for _, event := range events {
-			w.Write([]byte(event + "\n"))
+			_, _ = w.Write([]byte(event + "\n"))
 			flusher.Flush()
 			time.Sleep(5 * time.Millisecond)
 		}
@@ -324,7 +324,7 @@ func TestStreamingWithAPIKey(t *testing.T) {
 	}
 
 	assert.NotEmpty(t, chunks)
-	stream.Close()
+	_ = stream.Close()
 }
 
 // TestStreamingWithError tests streaming error handling
@@ -338,7 +338,7 @@ func TestStreamingWithError(t *testing.T) {
 				"message": "Invalid request",
 			},
 		}
-		json.NewEncoder(w).Encode(response)
+		_ = json.NewEncoder(w).Encode(response)
 	}))
 	defer server.Close()
 
@@ -399,7 +399,7 @@ func TestFetchModelsHelper(t *testing.T) {
 			},
 			"has_more": false,
 		}
-		json.NewEncoder(w).Encode(response)
+		_ = json.NewEncoder(w).Encode(response)
 	}))
 	defer server.Close()
 
@@ -442,7 +442,7 @@ func TestFetchModelsWithOAuth(t *testing.T) {
 			},
 			"has_more": false,
 		}
-		json.NewEncoder(w).Encode(response)
+		_ = json.NewEncoder(w).Encode(response)
 	}))
 	defer server.Close()
 
@@ -490,7 +490,7 @@ func TestMakeAPICallWithOAuth(t *testing.T) {
 				"output_tokens": 5,
 			},
 		}
-		json.NewEncoder(w).Encode(response)
+		_ = json.NewEncoder(w).Encode(response)
 	}))
 	defer server.Close()
 
@@ -543,7 +543,7 @@ func TestMakeStreamingAPICallWithOAuth(t *testing.T) {
 		}
 
 		for _, event := range events {
-			w.Write([]byte(event + "\n"))
+			_, _ = w.Write([]byte(event + "\n"))
 			flusher.Flush()
 		}
 	}))
@@ -564,7 +564,7 @@ func TestMakeStreamingAPICallWithOAuth(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, stream)
 
-	stream.Close()
+	_ = stream.Close()
 }
 
 // TestNoModelSpecifiedError tests error when no model is specified

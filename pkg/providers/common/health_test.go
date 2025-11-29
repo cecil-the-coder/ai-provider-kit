@@ -85,11 +85,11 @@ func TestHealthChecker_GetHealthStatus(t *testing.T) {
 
 	// Set up a status manually
 	checker.healthStatus[types.ProviderTypeOpenAI] = &ProviderHealth{
-		Provider:    types.ProviderTypeOpenAI,
-		Healthy:     true,
-		LastCheck:   time.Now(),
-		CheckCount:  5,
-		Details:     map[string]interface{}{"test": "value"},
+		Provider:   types.ProviderTypeOpenAI,
+		Healthy:    true,
+		LastCheck:  time.Now(),
+		CheckCount: 5,
+		Details:    map[string]interface{}{"test": "value"},
 	}
 
 	status = checker.GetHealthStatus(types.ProviderTypeOpenAI)

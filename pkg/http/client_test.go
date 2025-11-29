@@ -42,8 +42,8 @@ func (m *mockResponseInterceptor) Intercept(resp *http.Response) error {
 
 func TestNewHTTPClient(t *testing.T) {
 	tests := []struct {
-		name           string
-		config         HTTPClientConfig
+		name            string
+		config          HTTPClientConfig
 		expectedTimeout time.Duration
 		expectedRetries int
 	}{
@@ -111,7 +111,7 @@ func TestHTTPClient_Do_Success(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		t.Errorf("expected status 200, got %d", resp.StatusCode)
@@ -152,7 +152,7 @@ func TestHTTPClient_Do_WithRetry(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		t.Errorf("expected status 200, got %d", resp.StatusCode)
@@ -189,7 +189,7 @@ func TestHTTPClient_Do_MaxRetriesExceeded(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusServiceUnavailable {
 		t.Errorf("expected status 503, got %d", resp.StatusCode)
@@ -251,7 +251,7 @@ func TestHTTPClient_Do_WithRequestInterceptor(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if !interceptor.called {
 		t.Error("expected interceptor to be called")
@@ -301,7 +301,7 @@ func TestHTTPClient_Do_WithResponseInterceptor(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if !interceptor.called {
 		t.Error("expected interceptor to be called")
@@ -377,7 +377,7 @@ func TestHTTPClient_PostJSON(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		t.Errorf("expected status 200, got %d", resp.StatusCode)
@@ -400,7 +400,7 @@ func TestHTTPClient_DoJSON(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		t.Errorf("expected status 200, got %d", resp.StatusCode)
@@ -620,7 +620,7 @@ func TestHTTPClientBuilder(t *testing.T) {
 	}
 
 	client := builder.
-		WithTimeout(30 * time.Second).
+		WithTimeout(30*time.Second).
 		WithRetry(5, 500*time.Millisecond).
 		WithHeaders(map[string]string{"X-Custom": "value"}).
 		WithUserAgent("test-agent").
@@ -692,7 +692,7 @@ func TestHTTPClient_DefaultHeaders(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	// After NewHTTPClient sets headers, they should be applied
 	// However, there's a bug in client.go where headers are set AFTER
@@ -728,7 +728,7 @@ func TestHTTPClient_CustomHeaders(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 }
 
 func TestHTTPClient_ConcurrentRequests(t *testing.T) {
@@ -882,7 +882,7 @@ func TestHTTPClient_CustomRetryableErrors(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		t.Errorf("expected status 200, got %d", resp.StatusCode)

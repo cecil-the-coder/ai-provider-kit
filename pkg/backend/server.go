@@ -85,16 +85,16 @@ func (s *Server) routeProviderRequests(h *handlers.ProviderHandler) http.Handler
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Check if it's a health check request
 		if r.URL.Path == "/api/providers/health" ||
-		   (len(r.URL.Path) > len("/api/providers/") &&
-		    r.URL.Path[len(r.URL.Path)-7:] == "/health") {
+			(len(r.URL.Path) > len("/api/providers/") &&
+				r.URL.Path[len(r.URL.Path)-7:] == "/health") {
 			h.HealthCheckProvider(w, r)
 			return
 		}
 
 		// Check if it's a test request
 		if r.URL.Path == "/api/providers/test" ||
-		   (len(r.URL.Path) > len("/api/providers/") &&
-		    r.URL.Path[len(r.URL.Path)-5:] == "/test") {
+			(len(r.URL.Path) > len("/api/providers/") &&
+				r.URL.Path[len(r.URL.Path)-5:] == "/test") {
 			h.TestProvider(w, r)
 			return
 		}

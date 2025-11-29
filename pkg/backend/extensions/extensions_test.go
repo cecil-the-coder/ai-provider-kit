@@ -90,10 +90,10 @@ type mockProvider struct {
 	name string
 }
 
-func (m *mockProvider) Name() string                  { return m.name }
-func (m *mockProvider) Type() types.ProviderType      { return "mock" }
-func (m *mockProvider) Description() string           { return "Mock Provider" }
-func (m *mockProvider) GetDefaultModel() string       { return "mock-model" }
+func (m *mockProvider) Name() string             { return m.name }
+func (m *mockProvider) Type() types.ProviderType { return "mock" }
+func (m *mockProvider) Description() string      { return "Mock Provider" }
+func (m *mockProvider) GetDefaultModel() string  { return "mock-model" }
 func (m *mockProvider) GetModels(ctx context.Context) ([]types.Model, error) {
 	return []types.Model{}, nil
 }

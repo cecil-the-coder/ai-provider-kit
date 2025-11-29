@@ -377,7 +377,7 @@ func TestGeminiProvider_GenerateChatCompletion_WithAPIKey(t *testing.T) {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(response)
+		_ = json.NewEncoder(w).Encode(response)
 	}))
 	defer mockServer.Close()
 
@@ -449,7 +449,7 @@ func TestGeminiProvider_GenerateChatCompletion_WithMessages(t *testing.T) {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(response)
+		_ = json.NewEncoder(w).Encode(response)
 	}))
 	defer mockServer.Close()
 
@@ -512,7 +512,7 @@ func TestGeminiProvider_GenerateChatCompletion_Streaming(t *testing.T) {
 		}
 
 		for _, chunk := range chunks {
-			fmt.Fprintf(w, "%s\n\n", chunk)
+			_, _ = fmt.Fprintf(w, "%s\n\n", chunk)
 			if f, ok := w.(http.Flusher); ok {
 				f.Flush()
 			}
@@ -596,7 +596,7 @@ func TestGeminiProvider_GenerateChatCompletion_ErrorHandling(t *testing.T) {
 			// Create a mock server that returns error
 			mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(tt.statusCode)
-				w.Write([]byte(tt.responseBody))
+				_, _ = w.Write([]byte(tt.responseBody))
 			}))
 			defer mockServer.Close()
 
@@ -839,7 +839,7 @@ func TestGeminiProvider_GenerateChatCompletion_WithTools(t *testing.T) {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(response)
+		_ = json.NewEncoder(w).Encode(response)
 	}))
 	defer mockServer.Close()
 
@@ -898,7 +898,7 @@ func TestGeminiProvider_GenerateChatCompletion_SafetyFilter(t *testing.T) {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(response)
+		_ = json.NewEncoder(w).Encode(response)
 	}))
 	defer mockServer.Close()
 
@@ -935,7 +935,7 @@ func TestGeminiProvider_GenerateChatCompletion_EmptyResponse(t *testing.T) {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(response)
+		_ = json.NewEncoder(w).Encode(response)
 	}))
 	defer mockServer.Close()
 
@@ -1081,7 +1081,7 @@ func TestGeminiProvider_GenerateChatCompletion_ModelResolution(t *testing.T) {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(response)
+		_ = json.NewEncoder(w).Encode(response)
 	}))
 	defer mockServer.Close()
 
@@ -1279,11 +1279,11 @@ func TestPrepareStandardRequest_WithTools(t *testing.T) {
 
 func TestResolveModel(t *testing.T) {
 	tests := []struct {
-		name           string
-		providerModel  string
-		inputModel     string
-		optionsModel   string
-		expectedModel  string
+		name          string
+		providerModel string
+		inputModel    string
+		optionsModel  string
+		expectedModel string
 	}{
 		{
 			name:          "Use input model",

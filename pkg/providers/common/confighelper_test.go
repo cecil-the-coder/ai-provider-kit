@@ -403,10 +403,10 @@ func TestConfigHelper_ExtractDefaultOAuthClientID(t *testing.T) {
 
 func TestConfigHelper_GetProviderCapabilities(t *testing.T) {
 	tests := []struct {
-		providerType        types.ProviderType
-		expectToolCalling   bool
-		expectStreaming     bool
-		expectResponsesAPI  bool
+		providerType       types.ProviderType
+		expectToolCalling  bool
+		expectStreaming    bool
+		expectResponsesAPI bool
 	}{
 		{
 			providerType:       types.ProviderTypeOpenAI,
@@ -617,7 +617,7 @@ func TestConfigHelper_ExtractProviderSpecificConfig(t *testing.T) {
 func TestConfigHelper_ExtractBaseURL_AllProviders(t *testing.T) {
 	qwen := types.ProviderTypeQwen
 	helper := NewConfigHelper("qwen", qwen)
-	
+
 	result := helper.ExtractBaseURL(types.ProviderConfig{})
 	if result == "" {
 		t.Error("expected non-empty base URL for Qwen")
@@ -629,7 +629,7 @@ func TestConfigHelper_ExtractMaxTokens_AllProviders(t *testing.T) {
 		types.ProviderTypeQwen,
 		types.ProviderTypeOpenRouter,
 	}
-	
+
 	for _, pt := range tests {
 		helper := NewConfigHelper(string(pt), pt)
 		result := helper.ExtractMaxTokens(types.ProviderConfig{})
@@ -641,26 +641,26 @@ func TestConfigHelper_ExtractMaxTokens_AllProviders(t *testing.T) {
 
 func TestConfigHelper_ApplyTopLevelOverrides(t *testing.T) {
 	helper := NewConfigHelper("test", types.ProviderTypeOpenAI)
-	
+
 	config := types.ProviderConfig{
 		APIKey:       "test-key",
 		BaseURL:      "https://test.com",
 		DefaultModel: "test-model",
 	}
-	
+
 	type ProviderConfig struct {
 		APIKey  string `json:"api_key"`
 		BaseURL string `json:"base_url"`
 		Model   string `json:"model"`
 	}
-	
+
 	providerConfig := &ProviderConfig{}
-	
+
 	err := helper.ApplyTopLevelOverrides(config, providerConfig)
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
-	
+
 	if providerConfig.APIKey != "test-key" {
 		t.Errorf("got API key %q, expected %q", providerConfig.APIKey, "test-key")
 	}
@@ -669,7 +669,7 @@ func TestConfigHelper_ApplyTopLevelOverrides(t *testing.T) {
 func TestConfigHelper_ExtractDefaultOAuthClientID_AllProviders(t *testing.T) {
 	unknownProvider := types.ProviderTypeCerebras
 	helper := NewConfigHelper("cerebras", unknownProvider)
-	
+
 	result := helper.ExtractDefaultOAuthClientID()
 	if result != "" {
 		t.Errorf("expected empty client ID for Cerebras, got %q", result)

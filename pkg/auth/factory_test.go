@@ -14,7 +14,7 @@ func TestNewAuthenticatorFactory(t *testing.T) {
 		factory := NewAuthenticatorFactory(config, storage)
 
 		if factory == nil {
-			t.Error("Expected non-nil factory")
+			t.Fatal("Expected non-nil factory")
 		}
 		if factory.config != config {
 			t.Error("Expected config to be set")
@@ -29,7 +29,7 @@ func TestNewAuthenticatorFactory(t *testing.T) {
 		factory := NewAuthenticatorFactory(nil, storage)
 
 		if factory == nil {
-			t.Error("Expected non-nil factory")
+			t.Fatal("Expected non-nil factory")
 		}
 		if factory.config == nil {
 			t.Error("Expected default config")

@@ -239,10 +239,10 @@ func TestAuthHelper_SetAuthHeaders(t *testing.T) {
 
 func TestAuthHelper_SetProviderSpecificHeaders(t *testing.T) {
 	tests := []struct {
-		name         string
-		providerName string
-		config       types.ProviderConfig
-		authMethod   string
+		name            string
+		providerName    string
+		config          types.ProviderConfig
+		authMethod      string
 		expectedHeaders map[string]string
 	}{
 		{

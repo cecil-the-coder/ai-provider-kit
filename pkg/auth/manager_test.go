@@ -264,8 +264,8 @@ func TestRefreshAllTokens(t *testing.T) {
 
 	t.Run("WithRefreshError", func(t *testing.T) {
 		auth := &MockAuthenticator{
-			authenticated:   true,
-			refreshError:    errors.New("refresh failed"),
+			authenticated: true,
+			refreshError:  errors.New("refresh failed"),
 		}
 		manager2 := NewAuthManager(storage, nil)
 		_ = manager2.RegisterAuthenticator("failing", auth)

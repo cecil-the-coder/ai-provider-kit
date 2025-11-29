@@ -88,68 +88,68 @@ func TestAPIError_Error(t *testing.T) {
 
 func TestIsRetryableError(t *testing.T) {
 	tests := []struct {
-		name       string
-		err        error
-		retryable  bool
+		name      string
+		err       error
+		retryable bool
 	}{
 		{
-			name: "429 too many requests",
-			err: &APIError{StatusCode: http.StatusTooManyRequests},
+			name:      "429 too many requests",
+			err:       &APIError{StatusCode: http.StatusTooManyRequests},
 			retryable: true,
 		},
 		{
-			name: "500 internal server error",
-			err: &APIError{StatusCode: http.StatusInternalServerError},
+			name:      "500 internal server error",
+			err:       &APIError{StatusCode: http.StatusInternalServerError},
 			retryable: true,
 		},
 		{
-			name: "502 bad gateway",
-			err: &APIError{StatusCode: http.StatusBadGateway},
+			name:      "502 bad gateway",
+			err:       &APIError{StatusCode: http.StatusBadGateway},
 			retryable: true,
 		},
 		{
-			name: "503 service unavailable",
-			err: &APIError{StatusCode: http.StatusServiceUnavailable},
+			name:      "503 service unavailable",
+			err:       &APIError{StatusCode: http.StatusServiceUnavailable},
 			retryable: true,
 		},
 		{
-			name: "504 gateway timeout",
-			err: &APIError{StatusCode: http.StatusGatewayTimeout},
+			name:      "504 gateway timeout",
+			err:       &APIError{StatusCode: http.StatusGatewayTimeout},
 			retryable: true,
 		},
 		{
-			name: "404 not found",
-			err: &APIError{StatusCode: http.StatusNotFound},
+			name:      "404 not found",
+			err:       &APIError{StatusCode: http.StatusNotFound},
 			retryable: false,
 		},
 		{
-			name: "400 bad request",
-			err: &APIError{StatusCode: http.StatusBadRequest},
+			name:      "400 bad request",
+			err:       &APIError{StatusCode: http.StatusBadRequest},
 			retryable: false,
 		},
 		{
-			name: "connection refused",
-			err: errors.New("connection refused"),
+			name:      "connection refused",
+			err:       errors.New("connection refused"),
 			retryable: true,
 		},
 		{
-			name: "timeout error",
-			err: errors.New("timeout exceeded"),
+			name:      "timeout error",
+			err:       errors.New("timeout exceeded"),
 			retryable: true,
 		},
 		{
-			name: "network error",
-			err: errors.New("network unreachable"),
+			name:      "network error",
+			err:       errors.New("network unreachable"),
 			retryable: true,
 		},
 		{
-			name: "temporary error",
-			err: errors.New("temporary failure"),
+			name:      "temporary error",
+			err:       errors.New("temporary failure"),
 			retryable: true,
 		},
 		{
-			name: "non-retryable error",
-			err: errors.New("invalid request"),
+			name:      "non-retryable error",
+			err:       errors.New("invalid request"),
 			retryable: false,
 		},
 	}
@@ -577,10 +577,10 @@ func TestCommonHTTPHeaders(t *testing.T) {
 
 func TestAuthHeaders(t *testing.T) {
 	tests := []struct {
-		name       string
-		method     string
-		token      string
-		expectedKey string
+		name          string
+		method        string
+		token         string
+		expectedKey   string
 		expectedValue string
 	}{
 		{
@@ -641,28 +641,28 @@ func TestDefaultConfigProvider_GetHTTPConfig(t *testing.T) {
 	provider := &DefaultConfigProvider{}
 
 	tests := []struct {
-		name         string
-		providerType types.ProviderType
+		name            string
+		providerType    types.ProviderType
 		expectedTimeout time.Duration
 	}{
 		{
-			name:         "anthropic provider",
-			providerType: types.ProviderTypeAnthropic,
+			name:            "anthropic provider",
+			providerType:    types.ProviderTypeAnthropic,
 			expectedTimeout: 60 * time.Second,
 		},
 		{
-			name:         "openai provider",
-			providerType: types.ProviderTypeOpenAI,
+			name:            "openai provider",
+			providerType:    types.ProviderTypeOpenAI,
 			expectedTimeout: 120 * time.Second,
 		},
 		{
-			name:         "cerebras provider",
-			providerType: types.ProviderTypeCerebras,
+			name:            "cerebras provider",
+			providerType:    types.ProviderTypeCerebras,
 			expectedTimeout: 120 * time.Second,
 		},
 		{
-			name:         "generic provider",
-			providerType: types.ProviderTypeGemini,
+			name:            "generic provider",
+			providerType:    types.ProviderTypeGemini,
 			expectedTimeout: 60 * time.Second,
 		},
 	}

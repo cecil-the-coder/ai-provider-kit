@@ -415,12 +415,12 @@ func TestModelRegistry_InferCategories(t *testing.T) {
 	registry := NewModelRegistry(time.Hour)
 
 	tests := []struct {
-		modelID      string
-		provider     types.ProviderType
-		expectText   bool
-		expectCode   bool
-		expectChat   bool
-		expectEmbed  bool
+		modelID     string
+		provider    types.ProviderType
+		expectText  bool
+		expectCode  bool
+		expectChat  bool
+		expectEmbed bool
 	}{
 		{
 			modelID:    "gpt-4",
@@ -498,7 +498,7 @@ func TestFindSubstring(t *testing.T) {
 		{"test string", "str", true},
 		{"noMatch", "xyz", false},
 	}
-	
+
 	for _, tt := range tests {
 		result := findSubstring(tt.s, tt.substr)
 		if result != tt.expected {
@@ -509,7 +509,7 @@ func TestFindSubstring(t *testing.T) {
 
 func TestModelRegistry_InferModelCapability(t *testing.T) {
 	registry := NewModelRegistry(time.Hour)
-	
+
 	model := types.Model{
 		ID:                  "gpt-4",
 		Name:                "GPT-4",
@@ -518,21 +518,21 @@ func TestModelRegistry_InferModelCapability(t *testing.T) {
 		SupportsStreaming:   true,
 		SupportsToolCalling: true,
 	}
-	
+
 	capability := registry.inferModelCapability(model)
-	
+
 	if capability.MaxTokens != 8192 {
 		t.Errorf("got max tokens %d, expected 8192", capability.MaxTokens)
 	}
-	
+
 	if !capability.SupportsStreaming {
 		t.Error("expected streaming support")
 	}
-	
+
 	if !capability.SupportsTools {
 		t.Error("expected tools support")
 	}
-	
+
 	if len(capability.Categories) == 0 {
 		t.Error("expected some categories")
 	}
@@ -540,9 +540,9 @@ func TestModelRegistry_InferModelCapability(t *testing.T) {
 
 func TestModelRegistry_HasAnyCategory(t *testing.T) {
 	registry := NewModelRegistry(time.Hour)
-	
+
 	modelCategories := []string{"text", "code", "chat"}
-	
+
 	tests := []struct {
 		name               string
 		requiredCategories []string
@@ -553,7 +553,7 @@ func TestModelRegistry_HasAnyCategory(t *testing.T) {
 		{"no match", []string{"vision"}, false},
 		{"empty required", []string{}, false},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := registry.hasAnyCategory(modelCategories, tt.requiredCategories)
@@ -566,7 +566,7 @@ func TestModelRegistry_HasAnyCategory(t *testing.T) {
 
 func TestModelRegistry_MatchesCriteria(t *testing.T) {
 	registry := NewModelRegistry(time.Hour)
-	
+
 	model := types.Model{
 		ID:                  "gpt-4",
 		Name:                "GPT-4",
@@ -575,10 +575,10 @@ func TestModelRegistry_MatchesCriteria(t *testing.T) {
 		SupportsStreaming:   true,
 		SupportsToolCalling: true,
 	}
-	
+
 	// Register model for category checking
 	registry.CacheModels(types.ProviderTypeOpenAI, []types.Model{model})
-	
+
 	tests := []struct {
 		name     string
 		criteria SearchCriteria
@@ -604,7 +604,7 @@ func TestModelRegistry_MatchesCriteria(t *testing.T) {
 			expected: false,
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := registry.matchesCriteria(model, tt.criteria)

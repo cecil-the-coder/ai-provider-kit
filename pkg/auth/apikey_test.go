@@ -467,7 +467,7 @@ func TestCircuitBreaker(t *testing.T) {
 	t.Run("NewCircuitBreakerNilConfig", func(t *testing.T) {
 		cb := newCircuitBreaker(nil)
 		if cb == nil {
-			t.Error("Expected non-nil circuit breaker")
+			t.Fatal("Expected non-nil circuit breaker")
 		}
 		if cb.config == nil {
 			t.Error("Expected default config")

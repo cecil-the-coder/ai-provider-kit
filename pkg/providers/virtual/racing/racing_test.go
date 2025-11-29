@@ -22,9 +22,9 @@ type mockChatProvider struct {
 	response string
 }
 
-func (m *mockChatProvider) Name() string { return m.name }
+func (m *mockChatProvider) Name() string             { return m.name }
 func (m *mockChatProvider) Type() types.ProviderType { return "mock" }
-func (m *mockChatProvider) Description() string { return "mock provider" }
+func (m *mockChatProvider) Description() string      { return "mock provider" }
 
 func (m *mockChatProvider) GenerateChatCompletion(ctx context.Context, opts types.GenerateOptions) (types.ChatCompletionStream, error) {
 	select {
@@ -40,19 +40,23 @@ func (m *mockChatProvider) GenerateChatCompletion(ctx context.Context, opts type
 
 // Unused interface methods for full Provider interface compliance
 func (m *mockChatProvider) GetModels(ctx context.Context) ([]types.Model, error) { return nil, nil }
-func (m *mockChatProvider) GetDefaultModel() string { return "" }
-func (m *mockChatProvider) Authenticate(ctx context.Context, authConfig types.AuthConfig) error { return nil }
-func (m *mockChatProvider) IsAuthenticated() bool { return true }
-func (m *mockChatProvider) Logout(ctx context.Context) error { return nil }
+func (m *mockChatProvider) GetDefaultModel() string                              { return "" }
+func (m *mockChatProvider) Authenticate(ctx context.Context, authConfig types.AuthConfig) error {
+	return nil
+}
+func (m *mockChatProvider) IsAuthenticated() bool                       { return true }
+func (m *mockChatProvider) Logout(ctx context.Context) error            { return nil }
 func (m *mockChatProvider) Configure(config types.ProviderConfig) error { return nil }
-func (m *mockChatProvider) GetConfig() types.ProviderConfig { return types.ProviderConfig{} }
-func (m *mockChatProvider) InvokeServerTool(ctx context.Context, toolName string, params interface{}) (interface{}, error) { return nil, nil }
-func (m *mockChatProvider) SupportsToolCalling() bool { return false }
-func (m *mockChatProvider) GetToolFormat() types.ToolFormat { return "" }
-func (m *mockChatProvider) SupportsStreaming() bool { return true }
-func (m *mockChatProvider) SupportsResponsesAPI() bool { return false }
+func (m *mockChatProvider) GetConfig() types.ProviderConfig             { return types.ProviderConfig{} }
+func (m *mockChatProvider) InvokeServerTool(ctx context.Context, toolName string, params interface{}) (interface{}, error) {
+	return nil, nil
+}
+func (m *mockChatProvider) SupportsToolCalling() bool             { return false }
+func (m *mockChatProvider) GetToolFormat() types.ToolFormat       { return "" }
+func (m *mockChatProvider) SupportsStreaming() bool               { return true }
+func (m *mockChatProvider) SupportsResponsesAPI() bool            { return false }
 func (m *mockChatProvider) HealthCheck(ctx context.Context) error { return nil }
-func (m *mockChatProvider) GetMetrics() types.ProviderMetrics { return types.ProviderMetrics{} }
+func (m *mockChatProvider) GetMetrics() types.ProviderMetrics     { return types.ProviderMetrics{} }
 
 type mockStream struct {
 	content string
@@ -289,12 +293,12 @@ func TestFirstWinsStrategy_AllProvidersFail(t *testing.T) {
 // even if a faster provider with worse history finishes first.
 func TestWeightedStrategy_ScoreBasedSelection(t *testing.T) {
 	tests := []struct {
-		name           string
-		gracePeriodMS  int
+		name             string
+		gracePeriodMS    int
 		performanceSetup func(*PerformanceTracker)
-		providers      []types.Provider
-		expectedWinner string
-		description    string
+		providers        []types.Provider
+		expectedWinner   string
+		description      string
 	}{
 		{
 			name:          "CollectsDuringGracePeriod",
@@ -477,10 +481,10 @@ func TestRacingStream_PreservesExistingMetadata(t *testing.T) {
 		latency:  50 * time.Millisecond,
 	}
 
-	chunk, _ := rs.Next()
+	_, _ = rs.Next()
 
 	// Get another chunk to verify metadata is consistently added
-	chunk, _ = rs.Next()
+	chunk, _ := rs.Next()
 
 	if chunk.Metadata["racing_winner"] != "test-provider" {
 		t.Error("expected racing_winner to be preserved")

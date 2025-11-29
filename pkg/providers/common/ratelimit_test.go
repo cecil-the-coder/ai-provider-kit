@@ -233,11 +233,11 @@ func TestRateLimitHelper_ProviderSpecificLogging(t *testing.T) {
 		{
 			providerName: "anthropic",
 			info: &ratelimit.Info{
-				Model:                  "claude-3",
-				InputTokensRemaining:   10000,
-				InputTokensLimit:       100000,
-				OutputTokensRemaining:  5000,
-				OutputTokensLimit:      50000,
+				Model:                 "claude-3",
+				InputTokensRemaining:  10000,
+				InputTokensLimit:      100000,
+				OutputTokensRemaining: 5000,
+				OutputTokensLimit:     50000,
 			},
 		},
 		{

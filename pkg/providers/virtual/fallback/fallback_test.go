@@ -17,7 +17,7 @@ type mockChatProvider struct {
 	shouldClose bool
 }
 
-func (m *mockChatProvider) Name() string              { return m.name }
+func (m *mockChatProvider) Name() string             { return m.name }
 func (m *mockChatProvider) Type() types.ProviderType { return "mock" }
 func (m *mockChatProvider) Description() string      { return "Mock provider for testing" }
 
@@ -131,7 +131,7 @@ type mockNonChatProvider struct {
 	name string
 }
 
-func (m *mockNonChatProvider) Name() string              { return m.name }
+func (m *mockNonChatProvider) Name() string             { return m.name }
 func (m *mockNonChatProvider) Type() types.ProviderType { return "non-chat" }
 func (m *mockNonChatProvider) Description() string      { return "Non-chat provider" }
 

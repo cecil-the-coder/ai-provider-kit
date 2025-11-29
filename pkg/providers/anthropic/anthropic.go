@@ -343,8 +343,20 @@ func (p *AnthropicProvider) GenerateChatCompletion(
 	log.Printf("🟣 [Anthropic] GenerateChatCompletion ENTRY - options.Model=%s, options.Stream=%v", options.Model, options.Stream)
 	log.Printf("🟣 [Anthropic] authHelper=%p, OAuthManager=%p, KeyManager=%p",
 		p.authHelper,
-		func() interface{} { if p.authHelper != nil { return p.authHelper.OAuthManager } else { return nil } }(),
-		func() interface{} { if p.authHelper != nil { return p.authHelper.KeyManager } else { return nil } }())
+		func() interface{} {
+			if p.authHelper != nil {
+				return p.authHelper.OAuthManager
+			} else {
+				return nil
+			}
+		}(),
+		func() interface{} {
+			if p.authHelper != nil {
+				return p.authHelper.KeyManager
+			} else {
+				return nil
+			}
+		}())
 
 	p.IncrementRequestCount()
 	startTime := time.Now()

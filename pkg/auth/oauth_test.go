@@ -22,7 +22,7 @@ func TestNewOAuthAuthenticator(t *testing.T) {
 
 	auth := NewOAuthAuthenticator("test", storage, config)
 	if auth == nil {
-		t.Error("Expected non-nil authenticator")
+		t.Fatal("Expected non-nil authenticator")
 	}
 	if auth.provider != "test" {
 		t.Error("Expected provider to be 'test'")
@@ -564,7 +564,7 @@ func TestOAuthTokenExchange(t *testing.T) {
 		t.Errorf("Expected no error, got: %v", err)
 	}
 	if tokenResp == nil {
-		t.Error("Expected token response")
+		t.Fatal("Expected token response")
 	}
 	if tokenResp.AccessToken != "new-access-token" {
 		t.Error("Expected access token to match")

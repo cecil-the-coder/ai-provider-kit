@@ -714,10 +714,10 @@ func TestCreateCustomStream(t *testing.T) {
 	resp := &http.Response{
 		Body: io.NopCloser(body),
 	}
-	
+
 	parser := NewStandardStreamParser()
 	stream := CreateCustomStream(resp, parser)
-	
+
 	if stream == nil {
 		t.Fatal("expected non-nil stream")
 	}
@@ -727,21 +727,21 @@ func TestCreateCustomStream(t *testing.T) {
 
 func TestSSELineProcessor(t *testing.T) {
 	data := `{"content": "test"}`
-	
+
 	responseParser := func(s string) (types.ChatCompletionChunk, bool) {
 		return types.ChatCompletionChunk{Content: "test"}, false
 	}
-	
+
 	chunk, err, isDone := SSELineProcessor(data, responseParser)
-	
+
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
-	
+
 	if isDone {
 		t.Error("expected not done")
 	}
-	
+
 	if chunk.Content != "test" {
 		t.Errorf("got content %q, expected %q", chunk.Content, "test")
 	}
@@ -749,7 +749,7 @@ func TestSSELineProcessor(t *testing.T) {
 
 func TestJSONLineProcessor(t *testing.T) {
 	data := `{"text": "hello"}`
-	
+
 	var target map[string]interface{}
 	chunkExtractor := func(i interface{}) types.ChatCompletionChunk {
 		if m, ok := i.(*map[string]interface{}); ok {
@@ -759,13 +759,13 @@ func TestJSONLineProcessor(t *testing.T) {
 		}
 		return types.ChatCompletionChunk{}
 	}
-	
+
 	chunk, err, _ := JSONLineProcessor(data, &target, chunkExtractor)
-	
+
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
-	
+
 	if chunk.Content != "hello" {
 		t.Errorf("got content %q, expected %q", chunk.Content, "hello")
 	}

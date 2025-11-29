@@ -41,10 +41,10 @@ func NewMockProvider(name string, providerType types.ProviderType) *MockProvider
 	}
 }
 
-func (m *MockProvider) Name() string                         { return m.name }
-func (m *MockProvider) Type() types.ProviderType             { return m.providerType }
-func (m *MockProvider) Description() string                  { return "Mock provider for testing" }
-func (m *MockProvider) GetConfig() types.ProviderConfig      { return m.config }
+func (m *MockProvider) Name() string                    { return m.name }
+func (m *MockProvider) Type() types.ProviderType        { return m.providerType }
+func (m *MockProvider) Description() string             { return "Mock provider for testing" }
+func (m *MockProvider) GetConfig() types.ProviderConfig { return m.config }
 func (m *MockProvider) Configure(config types.ProviderConfig) error {
 	m.config = config
 	return nil
@@ -57,14 +57,14 @@ func (m *MockProvider) Authenticate(ctx context.Context, authConfig types.AuthCo
 	m.authenticated = true
 	return nil
 }
-func (m *MockProvider) IsAuthenticated() bool                        { return m.authenticated }
-func (m *MockProvider) Logout(ctx context.Context) error             { return nil }
-func (m *MockProvider) HealthCheck(ctx context.Context) error        { return m.healthErr }
-func (m *MockProvider) GetMetrics() types.ProviderMetrics            { return m.metrics }
-func (m *MockProvider) SupportsToolCalling() bool                    { return false }
-func (m *MockProvider) SupportsStreaming() bool                      { return true }
-func (m *MockProvider) SupportsResponsesAPI() bool                   { return false }
-func (m *MockProvider) GetToolFormat() types.ToolFormat              { return types.ToolFormatOpenAI }
+func (m *MockProvider) IsAuthenticated() bool                 { return m.authenticated }
+func (m *MockProvider) Logout(ctx context.Context) error      { return nil }
+func (m *MockProvider) HealthCheck(ctx context.Context) error { return m.healthErr }
+func (m *MockProvider) GetMetrics() types.ProviderMetrics     { return m.metrics }
+func (m *MockProvider) SupportsToolCalling() bool             { return false }
+func (m *MockProvider) SupportsStreaming() bool               { return true }
+func (m *MockProvider) SupportsResponsesAPI() bool            { return false }
+func (m *MockProvider) GetToolFormat() types.ToolFormat       { return types.ToolFormatOpenAI }
 func (m *MockProvider) InvokeServerTool(ctx context.Context, toolName string, params interface{}) (interface{}, error) {
 	return nil, nil
 }
@@ -280,7 +280,7 @@ func TestServer_applyMiddleware(t *testing.T) {
 
 		handler := server.applyMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte("OK"))
+			_, _ = w.Write([]byte("OK"))
 		}))
 
 		req := httptest.NewRequest(http.MethodGet, "/test", nil)
@@ -317,7 +317,7 @@ func TestServer_applyMiddleware(t *testing.T) {
 
 		handler := server.applyMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte("OK"))
+			_, _ = w.Write([]byte("OK"))
 		}))
 
 		// Test without auth - should be unauthorized
@@ -360,7 +360,7 @@ func TestServer_applyMiddleware(t *testing.T) {
 
 		handler := server.applyMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte("OK"))
+			_, _ = w.Write([]byte("OK"))
 		}))
 
 		req := httptest.NewRequest(http.MethodOptions, "/test", nil)
@@ -399,7 +399,7 @@ func TestServer_applyMiddleware(t *testing.T) {
 
 		handler := server.applyMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte("OK"))
+			_, _ = w.Write([]byte("OK"))
 		}))
 
 		req := httptest.NewRequest(http.MethodGet, "/health", nil)
@@ -804,7 +804,7 @@ func BenchmarkServer_MiddlewareChain(b *testing.B) {
 			Enabled: false,
 		},
 		CORS: backendtypes.CORSConfig{
-			Enabled: true,
+			Enabled:        true,
 			AllowedOrigins: []string{"*"},
 		},
 	}

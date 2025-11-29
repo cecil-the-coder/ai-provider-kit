@@ -128,7 +128,7 @@ func TestModelCache_GetModels(t *testing.T) {
 	time.Sleep(1100 * time.Millisecond)
 
 	// Third call - cache is stale, should fetch again
-	models, err = cache.GetModels(fetchFunc, fallbackFunc)
+	_, err = cache.GetModels(fetchFunc, fallbackFunc)
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}

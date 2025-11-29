@@ -56,7 +56,7 @@ func (r *RacingProvider) SetProviders(providers []types.Provider) {
 	r.providers = providers
 }
 
-func (r *RacingProvider) Name() string              { return r.name }
+func (r *RacingProvider) Name() string             { return r.name }
 func (r *RacingProvider) Type() types.ProviderType { return "racing" }
 func (r *RacingProvider) Description() string      { return "Races multiple providers for fastest response" }
 

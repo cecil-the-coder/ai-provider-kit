@@ -454,10 +454,10 @@ func TestProviderMetrics_MinResponseTime_NoRequests(t *testing.T) {
 
 func TestProviderMetrics_Concurrency(t *testing.T) {
 	metrics := NewProviderMetrics()
-	
+
 	// Test concurrent access to all methods
 	done := make(chan bool)
-	
+
 	// Multiple goroutines recording metrics
 	for i := 0; i < 20; i++ {
 		go func(id int) {
@@ -476,12 +476,12 @@ func TestProviderMetrics_Concurrency(t *testing.T) {
 			done <- true
 		}(i)
 	}
-	
+
 	// Wait for all goroutines
 	for i := 0; i < 20; i++ {
 		<-done
 	}
-	
+
 	// Verify we have some data
 	snapshot := metrics.GetSnapshot()
 	if snapshot.TotalRequests == 0 {
@@ -491,18 +491,18 @@ func TestProviderMetrics_Concurrency(t *testing.T) {
 
 func TestProviderMetrics_EdgeCases(t *testing.T) {
 	metrics := NewProviderMetrics()
-	
+
 	// Test with zero/empty values
 	metrics.RecordSuccess(types.ProviderTypeOpenAI, 0, 0, "")
-	
+
 	snapshot := metrics.GetSnapshot()
 	if snapshot.SuccessRequests != 1 {
 		t.Errorf("expected 1 success request, got %d", snapshot.SuccessRequests)
 	}
-	
+
 	// Test with very large values
 	metrics.RecordSuccess(types.ProviderTypeAnthropic, 10*time.Second, 1000000, "large-model")
-	
+
 	topModels := metrics.GetTopModels(10)
 	hasLargeModel := false
 	for _, m := range topModels {

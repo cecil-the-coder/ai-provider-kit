@@ -20,7 +20,7 @@ type mockChatProvider struct {
 	response string
 }
 
-func (m *mockChatProvider) Name() string              { return m.name }
+func (m *mockChatProvider) Name() string             { return m.name }
 func (m *mockChatProvider) Type() types.ProviderType { return "mock" }
 func (m *mockChatProvider) Description() string      { return "mock provider" }
 
@@ -35,23 +35,23 @@ func (m *mockChatProvider) GenerateChatCompletion(ctx context.Context, opts type
 func (m *mockChatProvider) GetModels(ctx context.Context) ([]types.Model, error) {
 	return nil, nil
 }
-func (m *mockChatProvider) GetDefaultModel() string                                { return "" }
+func (m *mockChatProvider) GetDefaultModel() string { return "" }
 func (m *mockChatProvider) Authenticate(ctx context.Context, authConfig types.AuthConfig) error {
 	return nil
 }
-func (m *mockChatProvider) IsAuthenticated() bool { return true }
-func (m *mockChatProvider) Logout(ctx context.Context) error { return nil }
+func (m *mockChatProvider) IsAuthenticated() bool                       { return true }
+func (m *mockChatProvider) Logout(ctx context.Context) error            { return nil }
 func (m *mockChatProvider) Configure(config types.ProviderConfig) error { return nil }
-func (m *mockChatProvider) GetConfig() types.ProviderConfig { return types.ProviderConfig{} }
+func (m *mockChatProvider) GetConfig() types.ProviderConfig             { return types.ProviderConfig{} }
 func (m *mockChatProvider) InvokeServerTool(ctx context.Context, toolName string, params interface{}) (interface{}, error) {
 	return nil, nil
 }
-func (m *mockChatProvider) SupportsToolCalling() bool    { return false }
-func (m *mockChatProvider) GetToolFormat() types.ToolFormat { return "" }
-func (m *mockChatProvider) SupportsStreaming() bool      { return true }
-func (m *mockChatProvider) SupportsResponsesAPI() bool   { return false }
+func (m *mockChatProvider) SupportsToolCalling() bool             { return false }
+func (m *mockChatProvider) GetToolFormat() types.ToolFormat       { return "" }
+func (m *mockChatProvider) SupportsStreaming() bool               { return true }
+func (m *mockChatProvider) SupportsResponsesAPI() bool            { return false }
 func (m *mockChatProvider) HealthCheck(ctx context.Context) error { return nil }
-func (m *mockChatProvider) GetMetrics() types.ProviderMetrics { return types.ProviderMetrics{} }
+func (m *mockChatProvider) GetMetrics() types.ProviderMetrics     { return types.ProviderMetrics{} }
 
 type mockStream struct {
 	content string
@@ -86,7 +86,7 @@ type mockNonChatProvider struct {
 	name string
 }
 
-func (m *mockNonChatProvider) Name() string              { return m.name }
+func (m *mockNonChatProvider) Name() string             { return m.name }
 func (m *mockNonChatProvider) Type() types.ProviderType { return "non-chat" }
 func (m *mockNonChatProvider) Description() string      { return "Non-chat provider" }
 func (m *mockNonChatProvider) GetModels(ctx context.Context) ([]types.Model, error) {
@@ -96,22 +96,22 @@ func (m *mockNonChatProvider) GetDefaultModel() string { return "" }
 func (m *mockNonChatProvider) Authenticate(ctx context.Context, authConfig types.AuthConfig) error {
 	return nil
 }
-func (m *mockNonChatProvider) IsAuthenticated() bool { return true }
-func (m *mockNonChatProvider) Logout(ctx context.Context) error { return nil }
+func (m *mockNonChatProvider) IsAuthenticated() bool                       { return true }
+func (m *mockNonChatProvider) Logout(ctx context.Context) error            { return nil }
 func (m *mockNonChatProvider) Configure(config types.ProviderConfig) error { return nil }
-func (m *mockNonChatProvider) GetConfig() types.ProviderConfig { return types.ProviderConfig{} }
+func (m *mockNonChatProvider) GetConfig() types.ProviderConfig             { return types.ProviderConfig{} }
 func (m *mockNonChatProvider) GenerateChatCompletion(ctx context.Context, opts types.GenerateOptions) (types.ChatCompletionStream, error) {
 	return nil, errors.New("non-chat provider does not support chat")
 }
 func (m *mockNonChatProvider) InvokeServerTool(ctx context.Context, toolName string, params interface{}) (interface{}, error) {
 	return nil, nil
 }
-func (m *mockNonChatProvider) SupportsToolCalling() bool    { return false }
-func (m *mockNonChatProvider) GetToolFormat() types.ToolFormat { return "" }
-func (m *mockNonChatProvider) SupportsStreaming() bool      { return false }
-func (m *mockNonChatProvider) SupportsResponsesAPI() bool   { return false }
+func (m *mockNonChatProvider) SupportsToolCalling() bool             { return false }
+func (m *mockNonChatProvider) GetToolFormat() types.ToolFormat       { return "" }
+func (m *mockNonChatProvider) SupportsStreaming() bool               { return false }
+func (m *mockNonChatProvider) SupportsResponsesAPI() bool            { return false }
 func (m *mockNonChatProvider) HealthCheck(ctx context.Context) error { return nil }
-func (m *mockNonChatProvider) GetMetrics() types.ProviderMetrics { return types.ProviderMetrics{} }
+func (m *mockNonChatProvider) GetMetrics() types.ProviderMetrics     { return types.ProviderMetrics{} }
 
 type mockHealthCheckProvider struct {
 	mockChatProvider

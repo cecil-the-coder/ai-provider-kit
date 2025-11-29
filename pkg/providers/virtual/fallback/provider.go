@@ -30,7 +30,7 @@ func (f *FallbackProvider) SetProviders(providers []types.Provider) {
 	f.providers = providers
 }
 
-func (f *FallbackProvider) Name() string              { return f.name }
+func (f *FallbackProvider) Name() string             { return f.name }
 func (f *FallbackProvider) Type() types.ProviderType { return "fallback" }
 func (f *FallbackProvider) Description() string      { return "Tries providers in order until one succeeds" }
 

@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -61,9 +60,9 @@ func (h *OAuthHandler) InitiateOAuth(w http.ResponseWriter, r *http.Request) {
 	// Check if client wants JSON response or redirect
 	if r.URL.Query().Get("response") == "json" {
 		SendSuccess(w, r, map[string]interface{}{
-			"provider":      provider,
+			"provider":          provider,
 			"authorization_url": authURL,
-			"message":       "Navigate to the authorization URL to complete OAuth flow",
+			"message":           "Navigate to the authorization URL to complete OAuth flow",
 		})
 		return
 	}
@@ -118,9 +117,9 @@ func (h *OAuthHandler) OAuthCallback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	SendSuccess(w, r, map[string]interface{}{
-		"provider":    provider,
-		"status":      "authenticated",
-		"message":     "OAuth flow completed successfully",
+		"provider": provider,
+		"status":   "authenticated",
+		"message":  "OAuth flow completed successfully",
 		"token_info": map[string]interface{}{
 			"has_access_token":  tokenInfo.AccessToken != "",
 			"has_refresh_token": tokenInfo.RefreshToken != "",
@@ -228,8 +227,8 @@ func (h *OAuthHandler) GetTokenStatus(w http.ResponseWriter, r *http.Request) {
 
 	// Build response
 	response := map[string]interface{}{
-		"provider":        provider,
-		"authenticated":   isAuthenticated,
+		"provider":      provider,
+		"authenticated": isAuthenticated,
 	}
 
 	if err == nil && tokenInfo != nil {
@@ -360,13 +359,4 @@ type OAuthRequest struct {
 	Scopes   []string `json:"scopes,omitempty"`
 	Code     string   `json:"code,omitempty"`
 	State    string   `json:"state,omitempty"`
-}
-
-// parseOAuthRequest is a helper to parse OAuth request bodies
-func parseOAuthRequest(r *http.Request) (*OAuthRequest, error) {
-	var req OAuthRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		return nil, err
-	}
-	return &req, nil
 }

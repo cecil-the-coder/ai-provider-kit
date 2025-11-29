@@ -38,20 +38,20 @@ type mockProvider struct {
 	config               types.ProviderConfig
 }
 
-func (m *mockProvider) Name() string                          { return m.name }
-func (m *mockProvider) Type() types.ProviderType              { return m.providerType }
-func (m *mockProvider) Description() string                   { return m.description }
+func (m *mockProvider) Name() string                                         { return m.name }
+func (m *mockProvider) Type() types.ProviderType                             { return m.providerType }
+func (m *mockProvider) Description() string                                  { return m.description }
 func (m *mockProvider) GetModels(ctx context.Context) ([]types.Model, error) { return m.models, nil }
-func (m *mockProvider) GetDefaultModel() string               { return m.defaultModel }
+func (m *mockProvider) GetDefaultModel() string                              { return m.defaultModel }
 func (m *mockProvider) Authenticate(ctx context.Context, config types.AuthConfig) error {
 	m.authenticated = true
 	return nil
 }
-func (m *mockProvider) IsAuthenticated() bool                 { return m.authenticated }
-func (m *mockProvider) Logout(ctx context.Context) error      { m.authenticated = false; return nil }
-func (m *mockProvider) GetToken() (string, error)             { return "mock-token", nil }
+func (m *mockProvider) IsAuthenticated() bool                  { return m.authenticated }
+func (m *mockProvider) Logout(ctx context.Context) error       { m.authenticated = false; return nil }
+func (m *mockProvider) GetToken() (string, error)              { return "mock-token", nil }
 func (m *mockProvider) RefreshToken(ctx context.Context) error { return nil }
-func (m *mockProvider) GetAuthMethod() types.AuthMethod       { return types.AuthMethodAPIKey }
+func (m *mockProvider) GetAuthMethod() types.AuthMethod        { return types.AuthMethodAPIKey }
 func (m *mockProvider) Configure(config types.ProviderConfig) error {
 	if m.configureErr != nil {
 		return m.configureErr
@@ -138,15 +138,15 @@ func (m *mockExtensionRegistry) Shutdown(ctx context.Context) error {
 // Mock Extension
 type mockExtension struct {
 	extensions.BaseExtension
-	beforeErr error
-	afterErr  error
-	onErrorErr error
+	beforeErr     error
+	afterErr      error
+	onErrorErr    error
 	onSelectedErr error
 }
 
-func (m *mockExtension) Name() string        { return "mock-extension" }
-func (m *mockExtension) Version() string     { return "1.0.0" }
-func (m *mockExtension) Description() string { return "Mock extension for testing" }
+func (m *mockExtension) Name() string                                   { return "mock-extension" }
+func (m *mockExtension) Version() string                                { return "1.0.0" }
+func (m *mockExtension) Description() string                            { return "Mock extension for testing" }
 func (m *mockExtension) Initialize(config map[string]interface{}) error { return nil }
 
 func (m *mockExtension) BeforeGenerate(ctx context.Context, req *extensions.GenerateRequest) error {
@@ -216,7 +216,7 @@ func (m *mockAuthManager) GetAuthenticatedProviders() []string {
 	return providers
 }
 func (m *mockAuthManager) GetAuthStatus() map[string]*auth.AuthState { return nil }
-func (m *mockAuthManager) CleanupExpired() error { return nil }
+func (m *mockAuthManager) CleanupExpired() error                     { return nil }
 func (m *mockAuthManager) ForEachAuthenticated(ctx context.Context, fn func(provider string, authenticator auth.Authenticator) error) error {
 	return nil
 }
@@ -251,8 +251,8 @@ func (m *mockOAuthAuthenticator) Authenticate(ctx context.Context, config types.
 	return nil
 }
 
-func (m *mockOAuthAuthenticator) IsAuthenticated() bool { return m.authenticated }
-func (m *mockOAuthAuthenticator) GetToken() (string, error) { return "mock-token", nil }
+func (m *mockOAuthAuthenticator) IsAuthenticated() bool                  { return m.authenticated }
+func (m *mockOAuthAuthenticator) GetToken() (string, error)              { return "mock-token", nil }
 func (m *mockOAuthAuthenticator) RefreshToken(ctx context.Context) error { return m.refreshErr }
 func (m *mockOAuthAuthenticator) Logout(ctx context.Context) error {
 	m.authenticated = false
@@ -877,7 +877,7 @@ func TestGenerateHandler_Generate_ExtensionError(t *testing.T) {
 
 func TestGenerateHandler_Generate_StreamingNotImplemented(t *testing.T) {
 	provider := &mockProvider{
-		name:         "test",
+		name:             "test",
 		generateResponse: &types.ChatCompletionChunk{Content: "test"},
 	}
 	providers := map[string]types.Provider{"test": provider}

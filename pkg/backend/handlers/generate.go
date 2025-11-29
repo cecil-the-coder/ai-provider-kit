@@ -151,7 +151,7 @@ func (h *GenerateHandler) Generate(w http.ResponseWriter, r *http.Request) {
 func (h *GenerateHandler) collectStreamResponse(stream types.ChatCompletionStream) (string, *backendtypes.UsageInfo, error) {
 	// Get a buffer from the pool
 	buf := bufferPool.Get().(*bytes.Buffer)
-	buf.Reset() // Ensure buffer is clean
+	buf.Reset()               // Ensure buffer is clean
 	defer bufferPool.Put(buf) // Return buffer to pool when done
 
 	var usage *backendtypes.UsageInfo

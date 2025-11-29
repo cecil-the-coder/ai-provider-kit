@@ -384,7 +384,7 @@ func TestHealthCheck(t *testing.T) {
 	// Create a mock server for health check
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"is_free_tier": false,
 		})
 	}))
@@ -658,7 +658,7 @@ func TestChatCompletionWithMockServer(t *testing.T) {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(response)
+		_ = json.NewEncoder(w).Encode(response)
 	}))
 	defer server.Close()
 
@@ -689,7 +689,7 @@ func TestChatCompletionWithMockServer(t *testing.T) {
 		t.Errorf("Expected content 'Hello! How can I help?', got '%s'", chunk.Content)
 	}
 
-	stream.Close()
+	_ = stream.Close()
 }
 
 func TestFetchModelsFromAPIErrors(t *testing.T) {

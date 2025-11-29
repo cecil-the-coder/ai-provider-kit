@@ -69,14 +69,16 @@ type ExtensionRegistry interface {
 // BaseExtension provides default implementations for optional methods
 type BaseExtension struct{}
 
-func (b *BaseExtension) Dependencies() []string                                                      { return nil }
-func (b *BaseExtension) RegisterRoutes(r RouteRegistrar) error                                       { return nil }
-func (b *BaseExtension) BeforeGenerate(ctx context.Context, req *GenerateRequest) error              { return nil }
+func (b *BaseExtension) Dependencies() []string                                         { return nil }
+func (b *BaseExtension) RegisterRoutes(r RouteRegistrar) error                          { return nil }
+func (b *BaseExtension) BeforeGenerate(ctx context.Context, req *GenerateRequest) error { return nil }
 func (b *BaseExtension) AfterGenerate(ctx context.Context, req *GenerateRequest, resp *GenerateResponse) error {
 	return nil
 }
 func (b *BaseExtension) OnProviderError(ctx context.Context, provider types.Provider, err error) error {
 	return nil
 }
-func (b *BaseExtension) OnProviderSelected(ctx context.Context, provider types.Provider) error { return nil }
-func (b *BaseExtension) Shutdown(ctx context.Context) error                                    { return nil }
+func (b *BaseExtension) OnProviderSelected(ctx context.Context, provider types.Provider) error {
+	return nil
+}
+func (b *BaseExtension) Shutdown(ctx context.Context) error { return nil }

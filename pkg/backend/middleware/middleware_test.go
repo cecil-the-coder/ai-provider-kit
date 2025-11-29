@@ -188,9 +188,9 @@ func TestCORS_DisallowedOrigin(t *testing.T) {
 // TestCORS_PreflightRequest tests CORS preflight OPTIONS request
 func TestCORS_PreflightRequest(t *testing.T) {
 	config := CORSConfig{
-		AllowedOrigins: []string{"https://example.com"},
-		AllowedMethods: []string{"GET", "POST", "DELETE"},
-		AllowedHeaders: []string{"Content-Type", "Authorization"},
+		AllowedOrigins:   []string{"https://example.com"},
+		AllowedMethods:   []string{"GET", "POST", "DELETE"},
+		AllowedHeaders:   []string{"Content-Type", "Authorization"},
 		AllowCredentials: true,
 	}
 

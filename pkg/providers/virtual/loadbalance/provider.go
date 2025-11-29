@@ -41,7 +41,7 @@ func (lb *LoadBalanceProvider) SetProviders(providers []types.Provider) {
 	lb.providers = providers
 }
 
-func (lb *LoadBalanceProvider) Name() string              { return lb.name }
+func (lb *LoadBalanceProvider) Name() string             { return lb.name }
 func (lb *LoadBalanceProvider) Type() types.ProviderType { return "loadbalance" }
 func (lb *LoadBalanceProvider) Description() string      { return "Distributes requests across providers" }
 

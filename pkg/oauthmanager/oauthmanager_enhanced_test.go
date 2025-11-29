@@ -45,10 +45,10 @@ func TestCredentialMetrics_GetSnapshot(t *testing.T) {
 
 func TestCredentialMetrics_GetSuccessRate(t *testing.T) {
 	tests := []struct {
-		name          string
-		successes     int
-		failures      int
-		wantRate      float64
+		name      string
+		successes int
+		failures  int
+		wantRate  float64
 	}{
 		{
 			name:      "100% success",
@@ -384,28 +384,28 @@ func TestRefreshStrategy_ShouldRefresh(t *testing.T) {
 	strategy := DefaultRefreshStrategy()
 
 	tests := []struct {
-		name       string
-		expiresAt  time.Time
+		name        string
+		expiresAt   time.Time
 		wantRefresh bool
 	}{
 		{
-			name:       "token expiring in 1 hour",
-			expiresAt:  time.Now().Add(1 * time.Hour),
+			name:        "token expiring in 1 hour",
+			expiresAt:   time.Now().Add(1 * time.Hour),
 			wantRefresh: false,
 		},
 		{
-			name:       "token expiring in 3 minutes",
-			expiresAt:  time.Now().Add(3 * time.Minute),
+			name:        "token expiring in 3 minutes",
+			expiresAt:   time.Now().Add(3 * time.Minute),
 			wantRefresh: true,
 		},
 		{
-			name:       "token already expired",
-			expiresAt:  time.Now().Add(-1 * time.Hour),
+			name:        "token already expired",
+			expiresAt:   time.Now().Add(-1 * time.Hour),
 			wantRefresh: true,
 		},
 		{
-			name:       "token expiring in 6 minutes",
-			expiresAt:  time.Now().Add(6 * time.Minute),
+			name:        "token expiring in 6 minutes",
+			expiresAt:   time.Now().Add(6 * time.Minute),
 			wantRefresh: false,
 		},
 	}
