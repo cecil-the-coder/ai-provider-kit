@@ -17,7 +17,6 @@ import (
 
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/base"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common"
-	"github.com/cecil-the-coder/ai-provider-kit/pkg/ratelimit"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 	"github.com/google/uuid"
 	"golang.org/x/time/rate"
@@ -44,28 +43,32 @@ type QwenProvider struct {
 
 // NewQwenProvider creates a new Qwen provider
 func NewQwenProvider(config types.ProviderConfig) *QwenProvider {
-	// Use explicit timeout like the working debug implementation
-	client := &http.Client{
-		Timeout: 10 * time.Second,
+	// Initialize common provider components using the factory pattern
+	components, err := base.InitializeProviderComponents(base.ProviderInitConfig{
+		ProviderType:             types.ProviderTypeQwen,
+		ProviderName:             "qwen",
+		Config:                   config,
+		HTTPTimeout:              10 * time.Second,
+		EnableClientRateLimiting: true,
+		ClientRateLimitRPM:       60, // Qwen free tier: 60 requests/minute
+		ClientRateLimitBurst:     60,
+	})
+	if err != nil {
+		// This should rarely happen, but log and return nil if it does
+		log.Printf("Failed to initialize Qwen provider: %v", err)
+		return nil
 	}
-
-	// Create auth helper
-	authHelper := common.NewAuthHelper("qwen", config, client)
-
-	// Setup API keys using shared helper
-	authHelper.SetupAPIKeys()
 
 	p := &QwenProvider{
-		BaseProvider:    base.NewBaseProvider("qwen", config, client, log.Default()),
-		httpClient:      client,
-		authHelper:      authHelper,
-		rateLimitHelper: common.NewRateLimitHelper(ratelimit.NewQwenParser(true)), // Enable logging to capture real headers
-		// Client-side rate limiting (Qwen free tier: 60 requests/minute, 2000/day)
-		// NOTE: Qwen API does NOT provide rate limit headers, so we use client-side token bucket
-		clientSideLimiter: rate.NewLimiter(rate.Every(time.Minute/60), 60),
+		BaseProvider:      components.BaseProvider,
+		httpClient:        components.HTTPClient,
+		authHelper:        components.AuthHelper,
+		rateLimitHelper:   components.RateLimitHelper,
+		clientSideLimiter: components.ClientSideLimiter,
 	}
 
-	// Setup OAuth using shared helper with refresh function (now that provider is created)
+	// Setup OAuth with provider-specific refresh function
+	// This must be done after provider is created since refresh function needs provider reference
 	p.authHelper.SetupOAuth(p.refreshOAuthTokenForMulti)
 
 	return p

@@ -3,8 +3,6 @@
 package cerebras
 
 import (
-	"fmt"
-
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 )
 
@@ -203,11 +201,13 @@ func (e *CerebrasExtension) handleCustomInferenceParams(req *CerebrasRequest, me
 func (e *CerebrasExtension) ProviderToStandard(response interface{}) (*types.StandardResponse, error) {
 	cerebrasResp, ok := response.(*CerebrasResponse)
 	if !ok {
-		return nil, fmt.Errorf("response is not a Cerebras response")
+		return nil, types.NewInvalidRequestError(types.ProviderTypeCerebras, "response is not a Cerebras response").
+			WithOperation("convert_response")
 	}
 
 	if len(cerebrasResp.Choices) == 0 {
-		return nil, fmt.Errorf("no choices in Cerebras API response")
+		return nil, types.NewInvalidRequestError(types.ProviderTypeCerebras, "no choices in Cerebras API response").
+			WithOperation("convert_response")
 	}
 
 	choice := cerebrasResp.Choices[0]
@@ -257,11 +257,13 @@ func (e *CerebrasExtension) ProviderToStandard(response interface{}) (*types.Sta
 func (e *CerebrasExtension) ProviderToStandardChunk(chunk interface{}) (*types.StandardStreamChunk, error) {
 	cerebrasChunk, ok := chunk.(*CerebrasResponse)
 	if !ok {
-		return nil, fmt.Errorf("chunk is not a Cerebras stream response")
+		return nil, types.NewInvalidRequestError(types.ProviderTypeCerebras, "chunk is not a Cerebras stream response").
+			WithOperation("convert_chunk")
 	}
 
 	if len(cerebrasChunk.Choices) == 0 {
-		return nil, fmt.Errorf("no choices in Cerebras stream chunk")
+		return nil, types.NewInvalidRequestError(types.ProviderTypeCerebras, "no choices in Cerebras stream chunk").
+			WithOperation("convert_chunk")
 	}
 
 	choice := cerebrasChunk.Choices[0]
@@ -319,14 +321,16 @@ func (e *CerebrasExtension) ValidateOptions(options map[string]interface{}) erro
 	// Validate temperature if provided
 	if temperature, ok := options["temperature"].(float64); ok {
 		if temperature < 0 || temperature > 2 {
-			return fmt.Errorf("temperature must be between 0 and 2")
+			return types.NewInvalidRequestError(types.ProviderTypeCerebras, "temperature must be between 0 and 2").
+				WithOperation("validate_options")
 		}
 	}
 
 	// Validate max_tokens if provided
 	if maxTokens, ok := options["max_tokens"].(int); ok {
 		if maxTokens < 1 || maxTokens > 131072 {
-			return fmt.Errorf("max_tokens must be between 1 and 131072")
+			return types.NewInvalidRequestError(types.ProviderTypeCerebras, "max_tokens must be between 1 and 131072").
+				WithOperation("validate_options")
 		}
 	}
 
@@ -334,7 +338,8 @@ func (e *CerebrasExtension) ValidateOptions(options map[string]interface{}) erro
 	if fastMode, ok := options["fast_inference"].(bool); ok && fastMode {
 		// Fast inference mode specific validations
 		if temperature, ok := options["temperature"].(float64); ok && temperature > 1.0 {
-			return fmt.Errorf("temperature should be <= 1.0 for fast inference mode")
+			return types.NewInvalidRequestError(types.ProviderTypeCerebras, "temperature should be <= 1.0 for fast inference mode").
+				WithOperation("validate_options")
 		}
 	}
 
@@ -342,7 +347,8 @@ func (e *CerebrasExtension) ValidateOptions(options map[string]interface{}) erro
 	if codeGen, ok := options["code_generation"].(bool); ok && codeGen {
 		// Code generation specific validations
 		if temperature, ok := options["temperature"].(float64); ok && temperature > 0.5 {
-			return fmt.Errorf("temperature should be <= 0.5 for code generation mode")
+			return types.NewInvalidRequestError(types.ProviderTypeCerebras, "temperature should be <= 0.5 for code generation mode").
+				WithOperation("validate_options")
 		}
 	}
 

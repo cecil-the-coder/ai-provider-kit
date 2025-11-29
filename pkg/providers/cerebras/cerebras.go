@@ -98,7 +98,8 @@ func (p *CerebrasProvider) GetModels(ctx context.Context) ([]types.Model, error)
 // fetchModelsFromAPI fetches models from Cerebras API
 func (p *CerebrasProvider) fetchModelsFromAPI(ctx context.Context) ([]types.Model, error) {
 	if !p.authHelper.IsAuthenticated() {
-		return nil, fmt.Errorf("no Cerebras API key configured")
+		return nil, types.NewAuthError(types.ProviderTypeCerebras, "no Cerebras API key configured").
+			WithOperation("list_models")
 	}
 
 	baseURL := p.config.BaseURL
@@ -109,17 +110,22 @@ func (p *CerebrasProvider) fetchModelsFromAPI(ctx context.Context) ([]types.Mode
 
 	// Get API key from auth helper
 	if p.authHelper.KeyManager == nil || len(p.authHelper.KeyManager.GetKeys()) == 0 {
-		return nil, fmt.Errorf("no API keys available")
+		return nil, types.NewAuthError(types.ProviderTypeCerebras, "no API keys available").
+			WithOperation("list_models")
 	}
 
 	apiKey, err := p.authHelper.KeyManager.GetNextKey()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get API key: %w", err)
+		return nil, types.NewAuthError(types.ProviderTypeCerebras, "failed to get API key").
+			WithOperation("list_models").
+			WithOriginalErr(err)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
+		return nil, types.NewInvalidRequestError(types.ProviderTypeCerebras, "failed to create request").
+			WithOperation("list_models").
+			WithOriginalErr(err)
 	}
 
 	// Use auth helper to set headers
@@ -127,7 +133,9 @@ func (p *CerebrasProvider) fetchModelsFromAPI(ctx context.Context) ([]types.Mode
 
 	resp, err := p.httpClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch models: %w", err)
+		return nil, types.NewNetworkError(types.ProviderTypeCerebras, "failed to fetch models").
+			WithOperation("list_models").
+			WithOriginalErr(err)
 	}
 	defer func() {
 		//nolint:staticcheck // Empty branch is intentional - we ignore close errors
@@ -138,17 +146,25 @@ func (p *CerebrasProvider) fetchModelsFromAPI(ctx context.Context) ([]types.Mode
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("failed to fetch models: HTTP %d - %s", resp.StatusCode, string(body))
+		errCode := types.ClassifyHTTPError(resp.StatusCode)
+		return nil, types.NewProviderError(types.ProviderTypeCerebras, errCode,
+			fmt.Sprintf("failed to fetch models: %s", string(body))).
+			WithOperation("list_models").
+			WithStatusCode(resp.StatusCode)
 	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read response: %w", err)
+		return nil, types.NewNetworkError(types.ProviderTypeCerebras, "failed to read response").
+			WithOperation("list_models").
+			WithOriginalErr(err)
 	}
 
 	var modelsResp CerebrasModelsResponse
 	if err := json.Unmarshal(body, &modelsResp); err != nil {
-		return nil, fmt.Errorf("failed to parse models response: %w", err)
+		return nil, types.NewInvalidRequestError(types.ProviderTypeCerebras, "failed to parse models response").
+			WithOperation("list_models").
+			WithOriginalErr(err)
 	}
 
 	// Convert to internal Model format
@@ -286,7 +302,8 @@ func (p *CerebrasProvider) GenerateChatCompletion(
 // validateAndSetup performs initial validation and setup
 func (p *CerebrasProvider) validateAndSetup() error {
 	if !p.authHelper.IsAuthenticated() {
-		return fmt.Errorf("no API key configured for Cerebras")
+		return types.NewAuthError(types.ProviderTypeCerebras, "no API key configured for Cerebras").
+			WithOperation("chat_completion")
 	}
 	return nil
 }
@@ -459,7 +476,8 @@ func (p *CerebrasProvider) handleNonStreamingRequest(ctx context.Context, baseUR
 			return p.executeAPICall(ctx, url, request, apiKey, &responseMessage)
 		})
 	} else {
-		callErr = fmt.Errorf("no authentication manager available")
+		callErr = types.NewAuthError(types.ProviderTypeCerebras, "no authentication manager available").
+			WithOperation("chat_completion")
 	}
 
 	if callErr != nil {
@@ -483,7 +501,8 @@ func (p *CerebrasProvider) executeAPICall(ctx context.Context, url string, reque
 	}
 
 	if len(response.Choices) == 0 {
-		return "", nil, fmt.Errorf("no choices in Cerebras API response")
+		return "", nil, types.NewInvalidRequestError(types.ProviderTypeCerebras, "no choices in Cerebras API response").
+			WithOperation("chat_completion")
 	}
 
 	cerebrasMsg := response.Choices[0].Message
@@ -553,12 +572,16 @@ func (p *CerebrasProvider) createResponseStream(responseContent string, usage *t
 func (p *CerebrasProvider) makeAPICall(ctx context.Context, url string, request CerebrasRequest, apiKey string) (*CerebrasResponse, error) {
 	jsonBody, err := json.Marshal(request)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal request: %w", err)
+		return nil, types.NewInvalidRequestError(types.ProviderTypeCerebras, "failed to marshal request").
+			WithOperation("chat_completion").
+			WithOriginalErr(err)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonBody))
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
+		return nil, types.NewInvalidRequestError(types.ProviderTypeCerebras, "failed to create request").
+			WithOperation("chat_completion").
+			WithOriginalErr(err)
 	}
 
 	req.Header.Set("Content-Type", "application/json")
@@ -567,7 +590,9 @@ func (p *CerebrasProvider) makeAPICall(ctx context.Context, url string, request 
 	startTime := time.Now()
 	resp, err := p.httpClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("request failed: %w", err)
+		return nil, types.NewNetworkError(types.ProviderTypeCerebras, "request failed").
+			WithOperation("chat_completion").
+			WithOriginalErr(err)
 	}
 	defer func() {
 		//nolint:staticcheck // Empty branch is intentional - we ignore close errors
@@ -584,16 +609,23 @@ func (p *CerebrasProvider) makeAPICall(ctx context.Context, url string, request 
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read response body: %w", err)
+		return nil, types.NewNetworkError(types.ProviderTypeCerebras, "failed to read response body").
+			WithOperation("chat_completion").
+			WithOriginalErr(err)
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(body))
+		errCode := types.ClassifyHTTPError(resp.StatusCode)
+		return nil, types.NewProviderError(types.ProviderTypeCerebras, errCode, string(body)).
+			WithOperation("chat_completion").
+			WithStatusCode(resp.StatusCode)
 	}
 
 	var response CerebrasResponse
 	if err := json.Unmarshal(body, &response); err != nil {
-		return nil, fmt.Errorf("failed to parse API response: %w", err)
+		return nil, types.NewInvalidRequestError(types.ProviderTypeCerebras, "failed to parse API response").
+			WithOperation("chat_completion").
+			WithOriginalErr(err)
 	}
 
 	return &response, nil
@@ -605,13 +637,15 @@ func (p *CerebrasProvider) InvokeServerTool(
 	toolName string,
 	params interface{},
 ) (interface{}, error) {
-	return nil, fmt.Errorf("tool invocation not yet implemented for Cerebras provider")
+	return nil, types.NewInvalidRequestError(types.ProviderTypeCerebras, "tool invocation not yet implemented for Cerebras provider").
+		WithOperation("invoke_tool")
 }
 
 // Authenticate handles authentication
 func (p *CerebrasProvider) Authenticate(ctx context.Context, authConfig types.AuthConfig) error {
 	if authConfig.Method != types.AuthMethodAPIKey {
-		return fmt.Errorf("cerebras only supports API key authentication")
+		return types.NewInvalidRequestError(types.ProviderTypeCerebras, "cerebras only supports API key authentication").
+			WithOperation("authenticate")
 	}
 
 	newConfig := p.GetConfig()
@@ -642,7 +676,8 @@ func (p *CerebrasProvider) Configure(config types.ProviderConfig) error {
 	// Validate configuration
 	validation := configHelper.ValidateProviderConfig(config)
 	if !validation.Valid {
-		return fmt.Errorf("configuration validation failed: %s", validation.Errors[0])
+		return types.NewInvalidRequestError(types.ProviderTypeCerebras, validation.Errors[0]).
+			WithOperation("configure")
 	}
 
 	// Merge with defaults
@@ -687,7 +722,8 @@ func (p *CerebrasProvider) GetToolFormat() types.ToolFormat {
 // HealthCheck performs a health check
 func (p *CerebrasProvider) HealthCheck(ctx context.Context) error {
 	if !p.authHelper.IsAuthenticated() {
-		err := fmt.Errorf("no API keys configured")
+		err := types.NewAuthError(types.ProviderTypeCerebras, "no API keys configured").
+			WithOperation("health_check")
 		p.UpdateHealthStatus(false, err.Error())
 		return err
 	}
@@ -700,23 +736,28 @@ func (p *CerebrasProvider) HealthCheck(ctx context.Context) error {
 
 	req, err := http.NewRequestWithContext(ctx, "GET", baseURL+"/models", nil)
 	if err != nil {
-		errMsg := fmt.Sprintf("failed to create health check request: %v", err)
-		p.UpdateHealthStatus(false, errMsg)
-		return fmt.Errorf("failed to create health check request: %w", err)
+		providerErr := types.NewInvalidRequestError(types.ProviderTypeCerebras, "failed to create health check request").
+			WithOperation("health_check").
+			WithOriginalErr(err)
+		p.UpdateHealthStatus(false, providerErr.Error())
+		return providerErr
 	}
 
 	// Get API key from auth helper
 	if p.authHelper.KeyManager == nil || len(p.authHelper.KeyManager.GetKeys()) == 0 {
-		err := fmt.Errorf("no API keys available for health check")
+		err := types.NewAuthError(types.ProviderTypeCerebras, "no API keys available for health check").
+			WithOperation("health_check")
 		p.UpdateHealthStatus(false, err.Error())
 		return err
 	}
 
 	apiKey, err := p.authHelper.KeyManager.GetNextKey()
 	if err != nil {
-		errMsg := fmt.Sprintf("failed to get API key: %v", err)
-		p.UpdateHealthStatus(false, errMsg)
-		return fmt.Errorf("failed to get API key: %w", err)
+		providerErr := types.NewAuthError(types.ProviderTypeCerebras, "failed to get API key").
+			WithOperation("health_check").
+			WithOriginalErr(err)
+		p.UpdateHealthStatus(false, providerErr.Error())
+		return providerErr
 	}
 
 	// Use auth helper to set headers
@@ -725,9 +766,11 @@ func (p *CerebrasProvider) HealthCheck(ctx context.Context) error {
 	startTime := time.Now()
 	resp, err := p.httpClient.Do(req)
 	if err != nil {
-		errMsg := fmt.Sprintf("health check request failed: %v", err)
-		p.UpdateHealthStatus(false, errMsg)
-		return fmt.Errorf("health check request failed: %w", err)
+		providerErr := types.NewNetworkError(types.ProviderTypeCerebras, "health check request failed").
+			WithOperation("health_check").
+			WithOriginalErr(err)
+		p.UpdateHealthStatus(false, providerErr.Error())
+		return providerErr
 	}
 	defer func() {
 		//nolint:staticcheck // Empty branch is intentional - we ignore close errors
@@ -737,9 +780,13 @@ func (p *CerebrasProvider) HealthCheck(ctx context.Context) error {
 	}()
 
 	if resp.StatusCode != http.StatusOK {
-		errMsg := fmt.Sprintf("health check failed with status %d", resp.StatusCode)
-		p.UpdateHealthStatus(false, errMsg)
-		return fmt.Errorf("health check failed with status %d", resp.StatusCode)
+		errCode := types.ClassifyHTTPError(resp.StatusCode)
+		providerErr := types.NewProviderError(types.ProviderTypeCerebras, errCode,
+			fmt.Sprintf("health check failed with status %d", resp.StatusCode)).
+			WithOperation("health_check").
+			WithStatusCode(resp.StatusCode)
+		p.UpdateHealthStatus(false, providerErr.Error())
+		return providerErr
 	}
 
 	// Update health status with response time
@@ -761,12 +808,16 @@ func (p *CerebrasProvider) GetMetrics() types.ProviderMetrics {
 func (p *CerebrasProvider) makeStreamingAPICall(ctx context.Context, url string, request CerebrasRequest, apiKey string) (types.ChatCompletionStream, error) {
 	jsonBody, err := json.Marshal(request)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal request: %w", err)
+		return nil, types.NewInvalidRequestError(types.ProviderTypeCerebras, "failed to marshal request").
+			WithOperation("chat_completion_stream").
+			WithOriginalErr(err)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonBody))
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
+		return nil, types.NewInvalidRequestError(types.ProviderTypeCerebras, "failed to create request").
+			WithOperation("chat_completion_stream").
+			WithOriginalErr(err)
 	}
 
 	req.Header.Set("Content-Type", "application/json")
@@ -774,7 +825,9 @@ func (p *CerebrasProvider) makeStreamingAPICall(ctx context.Context, url string,
 
 	resp, err := p.httpClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("request failed: %w", err)
+		return nil, types.NewNetworkError(types.ProviderTypeCerebras, "request failed").
+			WithOperation("chat_completion_stream").
+			WithOriginalErr(err)
 	}
 
 	if resp.StatusCode != http.StatusOK {
@@ -783,7 +836,10 @@ func (p *CerebrasProvider) makeStreamingAPICall(ctx context.Context, url string,
 			//nolint:staticcheck // Empty branch is intentional - we ignore close errors
 			_ = resp.Body.Close()
 		}()
-		return nil, fmt.Errorf("cerebras API error: %d - %s", resp.StatusCode, string(body))
+		errCode := types.ClassifyHTTPError(resp.StatusCode)
+		return nil, types.NewProviderError(types.ProviderTypeCerebras, errCode, string(body)).
+			WithOperation("chat_completion_stream").
+			WithStatusCode(resp.StatusCode)
 	}
 
 	// Parse rate limit headers for streaming responses

@@ -45,7 +45,8 @@ type OpenRouterProvider struct {
 	freeOnly      bool
 
 	// Rate limiting (header-based tracking)
-	rateLimitHelper *common.RateLimitHelper
+	rateLimitHelper  *common.RateLimitHelper
+	rateLimitTracker *common.RateLimitTracker
 }
 
 // ProviderConfig holds OpenRouter-specific configuration
@@ -126,21 +127,25 @@ func NewOpenRouterProvider(config types.ProviderConfig) *OpenRouterProvider {
 	// Setup API keys using shared helper
 	authHelper.SetupAPIKeys()
 
+	// Create parser once for both helper and tracker
+	openRouterParser := ratelimit.NewOpenRouterParser()
+
 	provider := &OpenRouterProvider{
-		BaseProvider:    base.NewBaseProvider("openrouter", config, client, log.Default()),
-		config:          providerConfig,
-		client:          client,
-		authHelper:      authHelper,
-		modelSelector:   NewModelSelector(models, modelStrategy),
-		apiKey:          apiKey,
-		baseURL:         baseURL,
-		siteURL:         siteURL,
-		siteName:        siteName,
-		models:          models,
-		modelStrategy:   modelStrategy,
-		freeOnly:        providerConfig.FreeOnly,
-		modelCache:      common.NewModelCache(common.GetModelCacheTTL(types.ProviderTypeOpenRouter)),
-		rateLimitHelper: common.NewRateLimitHelper(ratelimit.NewOpenRouterParser()),
+		BaseProvider:     base.NewBaseProvider("openrouter", config, client, log.Default()),
+		config:           providerConfig,
+		client:           client,
+		authHelper:       authHelper,
+		modelSelector:    NewModelSelector(models, modelStrategy),
+		apiKey:           apiKey,
+		baseURL:          baseURL,
+		siteURL:          siteURL,
+		siteName:         siteName,
+		models:           models,
+		modelStrategy:    modelStrategy,
+		freeOnly:         providerConfig.FreeOnly,
+		modelCache:       common.NewModelCache(common.GetModelCacheTTL(types.ProviderTypeOpenRouter)),
+		rateLimitHelper:  common.NewRateLimitHelper(openRouterParser),
+		rateLimitTracker: common.NewRateLimitTracker(openRouterParser),
 	}
 
 	return provider
@@ -610,8 +615,8 @@ func (p *OpenRouterProvider) makeAPICallWithKey(ctx context.Context, requestData
 	}
 	defer func() { _ = resp.Body.Close() }() //nolint:staticcheck // Empty branch is intentional - we ignore close errors //nolint:staticcheck // Empty branch is intentional - we ignore close errors
 
-	// Parse rate limit headers from response
-	p.rateLimitHelper.ParseAndUpdateRateLimits(resp.Header, requestData.Model)
+	// Track rate limit headers from response (single call replaces ParseAndUpdateRateLimits)
+	p.rateLimitTracker.TrackResponse(resp.Header, requestData.Model)
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -750,8 +755,8 @@ func (p *OpenRouterProvider) makeStreamingAPICallWithKey(ctx context.Context, re
 		return nil, fmt.Errorf("request failed: %w", err)
 	}
 
-	// Parse rate limit headers from streaming response
-	p.rateLimitHelper.ParseAndUpdateRateLimits(resp.Header, requestData.Model)
+	// Track rate limit headers from streaming response (single call replaces ParseAndUpdateRateLimits)
+	p.rateLimitTracker.TrackResponse(resp.Header, requestData.Model)
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
