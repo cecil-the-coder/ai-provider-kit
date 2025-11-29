@@ -508,16 +508,18 @@ func TestHealthChecker_GetHealthCheckEndpoint_UnsupportedProvider(t *testing.T) 
 func TestHealthChecker_ThreadSafety(t *testing.T) {
 	checker := NewHealthChecker(time.Minute)
 
-	// Start the checker
-	checker.Start()
-	defer checker.Stop()
-
-	// Add some initial status
+	// Add some initial status BEFORE starting (to avoid race)
+	checker.mu.Lock()
 	checker.healthStatus[types.ProviderTypeOpenAI] = &ProviderHealth{
 		Provider: types.ProviderTypeOpenAI,
 		Healthy:  true,
 		Details:  make(map[string]interface{}),
 	}
+	checker.mu.Unlock()
+
+	// Start the checker after initialization
+	checker.Start()
+	defer checker.Stop()
 
 	// Concurrent operations
 	done := make(chan bool)
