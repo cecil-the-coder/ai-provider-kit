@@ -115,12 +115,12 @@ func TestAPIError_IsRetryable(t *testing.T) {
 
 func TestClassifyHTTPError(t *testing.T) {
 	tests := []struct {
-		name           string
-		statusCode     int
-		body           []byte
-		expectedType   APIErrorType
-		expectedMsg    string
-		expectedRetry  bool
+		name          string
+		statusCode    int
+		body          []byte
+		expectedType  APIErrorType
+		expectedMsg   string
+		expectedRetry bool
 	}{
 		{
 			name:          "unauthorized",
