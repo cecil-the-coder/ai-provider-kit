@@ -164,21 +164,46 @@ func (bs *BaseStream) Close() error {
 // StandardStreamParser provides a standard parser for OpenAI-compatible streaming responses
 type StandardStreamParser struct {
 	// Custom field mappings for provider-specific responses
-	ContentField   string
-	DoneField      string
-	UsageField     string
-	ToolCallsField string
-	FinishReason   string
+	ContentField          string
+	ReasoningField        string // For GLM-4.6, OpenCode/Zen style
+	ReasoningContentField string // For vLLM/Synthetic style
+	DoneField             string
+	UsageField            string
+	ToolCallsField        string
+	FinishReason          string
 }
 
 // NewStandardStreamParser creates a new standard stream parser with default OpenAI mappings
 func NewStandardStreamParser() *StandardStreamParser {
 	return &StandardStreamParser{
-		ContentField:   "choices.0.delta.content",
-		DoneField:      "choices.0.finish_reason",
-		UsageField:     "usage",
-		ToolCallsField: "choices.0.delta.tool_calls",
-		FinishReason:   "",
+		ContentField:          "choices.0.delta.content",
+		ReasoningField:        "choices.0.delta.reasoning",
+		ReasoningContentField: "choices.0.delta.reasoning_content",
+		DoneField:             "choices.0.finish_reason",
+		UsageField:            "usage",
+		ToolCallsField:        "choices.0.delta.tool_calls",
+		FinishReason:          "",
+	}
+}
+
+// extractStringField extracts a string value from a nested field path
+func extractStringField(data map[string]interface{}, fieldPath string) string {
+	if value, ok := getNestedValue(data, fieldPath); ok {
+		if str, isStr := value.(string); isStr {
+			return str
+		}
+	}
+	return ""
+}
+
+// applyReasoningFallback applies reasoning field fallback when content is empty
+func applyReasoningFallback(chunk *types.ChatCompletionChunk) {
+	if chunk.Content == "" || chunk.Content == "\n" {
+		if chunk.ReasoningContent != "" {
+			chunk.Content = chunk.ReasoningContent
+		} else if chunk.Reasoning != "" {
+			chunk.Content = chunk.Reasoning
+		}
 	}
 }
 
@@ -191,12 +216,13 @@ func (p *StandardStreamParser) ParseLine(data string) (types.ChatCompletionChunk
 
 	chunk := types.ChatCompletionChunk{}
 
-	// Extract content
-	if content, ok := getNestedValue(streamResp, p.ContentField); ok {
-		if contentStr, isStr := content.(string); isStr {
-			chunk.Content = contentStr
-		}
-	}
+	// Extract content and reasoning fields
+	chunk.Content = extractStringField(streamResp, p.ContentField)
+	chunk.Reasoning = extractStringField(streamResp, p.ReasoningField)
+	chunk.ReasoningContent = extractStringField(streamResp, p.ReasoningContentField)
+
+	// Apply reasoning fallback if content is empty
+	applyReasoningFallback(&chunk)
 
 	// Check if done
 	if finishReason, ok := getNestedValue(streamResp, p.DoneField); ok {

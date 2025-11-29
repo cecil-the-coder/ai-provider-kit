@@ -1310,3 +1310,117 @@ func TestOpenAIProvider_ProviderInterface(t *testing.T) {
 	metrics := provider.GetMetrics()
 	assert.NotNil(t, metrics)
 }
+
+// TestOpenAIProvider_ReasoningFieldFallback tests that reasoning fields are used as fallback when content is empty
+func TestOpenAIProvider_ReasoningFieldFallback(t *testing.T) {
+	tests := []struct {
+		name            string
+		responseMessage map[string]interface{}
+		expectedContent string
+		description     string
+	}{
+		{
+			name: "reasoning field fallback (GLM-4.6 style)",
+			responseMessage: map[string]interface{}{
+				"role":      "assistant",
+				"content":   "",
+				"reasoning": "This is the reasoning content from GLM-4.6",
+			},
+			expectedContent: "This is the reasoning content from GLM-4.6",
+			description:     "When content is empty, should use reasoning field",
+		},
+		{
+			name: "reasoning_content field fallback (vLLM/Synthetic style)",
+			responseMessage: map[string]interface{}{
+				"role":              "assistant",
+				"content":           "",
+				"reasoning_content": "This is reasoning_content from vLLM",
+			},
+			expectedContent: "This is reasoning_content from vLLM",
+			description:     "When content is empty, should use reasoning_content field",
+		},
+		{
+			name: "reasoning_content takes precedence over reasoning",
+			responseMessage: map[string]interface{}{
+				"role":              "assistant",
+				"content":           "",
+				"reasoning":         "reasoning field",
+				"reasoning_content": "reasoning_content field",
+			},
+			expectedContent: "reasoning_content field",
+			description:     "reasoning_content should take precedence when both are present",
+		},
+		{
+			name: "normal content takes precedence",
+			responseMessage: map[string]interface{}{
+				"role":      "assistant",
+				"content":   "Normal content response",
+				"reasoning": "reasoning field",
+			},
+			expectedContent: "Normal content response",
+			description:     "Content should be used when present",
+		},
+		{
+			name: "newline-only content triggers fallback",
+			responseMessage: map[string]interface{}{
+				"role":      "assistant",
+				"content":   "\n",
+				"reasoning": "Fallback when content is just newline",
+			},
+			expectedContent: "Fallback when content is just newline",
+			description:     "When content is only newline, should fallback to reasoning",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create mock server that returns the test response
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				response := map[string]interface{}{
+					"id":      "chatcmpl-test",
+					"object":  "chat.completion",
+					"created": time.Now().Unix(),
+					"model":   "gpt-4",
+					"choices": []map[string]interface{}{
+						{
+							"index":         0,
+							"message":       tt.responseMessage,
+							"finish_reason": "stop",
+						},
+					},
+					"usage": map[string]interface{}{
+						"prompt_tokens":     10,
+						"completion_tokens": 15,
+						"total_tokens":      25,
+					},
+				}
+
+				w.Header().Set("Content-Type", "application/json")
+				_ = json.NewEncoder(w).Encode(response)
+			}))
+			defer server.Close()
+
+			config := types.ProviderConfig{
+				Type:    types.ProviderTypeOpenAI,
+				APIKey:  "sk-test-key",
+				BaseURL: server.URL,
+			}
+
+			provider := NewOpenAIProvider(config)
+
+			options := types.GenerateOptions{
+				Messages: []types.ChatMessage{
+					{Role: "user", Content: "Hello"},
+				},
+			}
+
+			stream, err := provider.GenerateChatCompletion(context.Background(), options)
+			require.NoError(t, err, tt.description)
+			defer func() { _ = stream.Close() }()
+
+			chunk, err := stream.Next()
+			require.NoError(t, err, tt.description)
+			assert.Equal(t, tt.expectedContent, chunk.Content, tt.description)
+		})
+	}
+}

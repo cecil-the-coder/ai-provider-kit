@@ -43,11 +43,13 @@ type CodeGenerationResult struct {
 
 // ChatMessage represents a chat message
 type ChatMessage struct {
-	Role       string                 `json:"role"`
-	Content    string                 `json:"content"`
-	ToolCalls  []ToolCall             `json:"tool_calls,omitempty"`
-	ToolCallID string                 `json:"tool_call_id,omitempty"`
-	Metadata   map[string]interface{} `json:"metadata,omitempty"`
+	Role             string                 `json:"role"`
+	Content          string                 `json:"content"`
+	Reasoning        string                 `json:"reasoning,omitempty"`         // Reasoning content (e.g., from GLM-4.6, OpenCode/Zen)
+	ReasoningContent string                 `json:"reasoning_content,omitempty"` // Alternative reasoning field (e.g., from vLLM/Synthetic)
+	ToolCalls        []ToolCall             `json:"tool_calls,omitempty"`
+	ToolCallID       string                 `json:"tool_call_id,omitempty"`
+	Metadata         map[string]interface{} `json:"metadata,omitempty"`
 }
 
 // ToolCall represents a tool call
@@ -95,16 +97,18 @@ type ChatCompletionStream interface {
 
 // ChatCompletionChunk represents a chunk of a streaming response
 type ChatCompletionChunk struct {
-	ID       string                 `json:"id"`
-	Object   string                 `json:"object"`
-	Created  int64                  `json:"created"`
-	Model    string                 `json:"model"`
-	Choices  []ChatChoice           `json:"choices"`
-	Usage    Usage                  `json:"usage"`
-	Done     bool                   `json:"done"`
-	Content  string                 `json:"content"`
-	Error    string                 `json:"error"`
-	Metadata map[string]interface{} `json:"metadata,omitempty"`
+	ID               string                 `json:"id"`
+	Object           string                 `json:"object"`
+	Created          int64                  `json:"created"`
+	Model            string                 `json:"model"`
+	Choices          []ChatChoice           `json:"choices"`
+	Usage            Usage                  `json:"usage"`
+	Done             bool                   `json:"done"`
+	Content          string                 `json:"content"`
+	Reasoning        string                 `json:"reasoning,omitempty"`         // Reasoning content for clients that want it
+	ReasoningContent string                 `json:"reasoning_content,omitempty"` // Alternative reasoning field
+	Error            string                 `json:"error"`
+	Metadata         map[string]interface{} `json:"metadata,omitempty"`
 }
 
 // ChatChoice represents a choice in a chat completion

@@ -52,10 +52,12 @@ type OpenAIFunctionDef struct {
 
 // OpenAIMessage represents a message in the OpenAI API
 type OpenAIMessage struct {
-	Role       string           `json:"role"`
-	Content    string           `json:"content"`
-	ToolCalls  []OpenAIToolCall `json:"tool_calls,omitempty"`
-	ToolCallID string           `json:"tool_call_id,omitempty"`
+	Role             string           `json:"role"`
+	Content          string           `json:"content"`
+	Reasoning        string           `json:"reasoning,omitempty"`         // Reasoning content (GLM-4.6, OpenCode/Zen)
+	ReasoningContent string           `json:"reasoning_content,omitempty"` // Alternative reasoning field (vLLM/Synthetic)
+	ToolCalls        []OpenAIToolCall `json:"tool_calls,omitempty"`
+	ToolCallID       string           `json:"tool_call_id,omitempty"`
 }
 
 // OpenAIToolCall represents a tool call in the OpenAI API
@@ -116,9 +118,11 @@ type OpenAIStreamChoice struct {
 
 // OpenAIDelta represents the delta content in a streaming response
 type OpenAIDelta struct {
-	Role      string           `json:"role,omitempty"`
-	Content   string           `json:"content,omitempty"`
-	ToolCalls []OpenAIToolCall `json:"tool_calls,omitempty"`
+	Role             string           `json:"role,omitempty"`
+	Content          string           `json:"content,omitempty"`
+	Reasoning        string           `json:"reasoning,omitempty"`         // Reasoning content (GLM-4.6, OpenCode/Zen)
+	ReasoningContent string           `json:"reasoning_content,omitempty"` // Alternative reasoning field (vLLM/Synthetic)
+	ToolCalls        []OpenAIToolCall `json:"tool_calls,omitempty"`
 }
 
 // OpenAIErrorResponse represents an error response from OpenAI
@@ -715,10 +719,24 @@ func (p *OpenAIProvider) makeAPICall(ctx context.Context, requestData OpenAIRequ
 	// Extract message from response
 	openaiMsg := response.Choices[0].Message
 
+	// Determine effective content - fallback to reasoning fields if content is empty
+	effectiveContent := openaiMsg.Content
+	if effectiveContent == "" || effectiveContent == "\n" {
+		// Try reasoning_content first (vLLM/Synthetic style)
+		if openaiMsg.ReasoningContent != "" {
+			effectiveContent = openaiMsg.ReasoningContent
+		} else if openaiMsg.Reasoning != "" {
+			// Fall back to reasoning field (GLM-4.6, OpenCode/Zen style)
+			effectiveContent = openaiMsg.Reasoning
+		}
+	}
+
 	// Convert to universal format
 	message := types.ChatMessage{
-		Role:    openaiMsg.Role,
-		Content: openaiMsg.Content,
+		Role:             openaiMsg.Role,
+		Content:          effectiveContent,
+		Reasoning:        openaiMsg.Reasoning,
+		ReasoningContent: openaiMsg.ReasoningContent,
 	}
 
 	// Convert tool calls if present

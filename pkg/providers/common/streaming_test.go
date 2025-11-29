@@ -267,6 +267,41 @@ func TestStandardStreamParser_ParseLine(t *testing.T) {
 			data:        `{}`,
 			expectError: false,
 		},
+		{
+			name:          "reasoning field fallback (GLM-4.6 style)",
+			data:          `{"choices": [{"delta": {"content": "", "reasoning": "This is reasoning content"}}]}`,
+			expectError:   false,
+			expectDone:    false,
+			expectContent: "This is reasoning content",
+		},
+		{
+			name:          "reasoning_content field fallback (vLLM/Synthetic style)",
+			data:          `{"choices": [{"delta": {"content": null, "reasoning_content": "This is reasoning_content"}}]}`,
+			expectError:   false,
+			expectDone:    false,
+			expectContent: "This is reasoning_content",
+		},
+		{
+			name:          "reasoning_content takes precedence over reasoning when content empty",
+			data:          `{"choices": [{"delta": {"content": "", "reasoning": "reasoning", "reasoning_content": "reasoning_content"}}]}`,
+			expectError:   false,
+			expectDone:    false,
+			expectContent: "reasoning_content",
+		},
+		{
+			name:          "content takes precedence when present",
+			data:          `{"choices": [{"delta": {"content": "actual content", "reasoning": "reasoning"}}]}`,
+			expectError:   false,
+			expectDone:    false,
+			expectContent: "actual content",
+		},
+		{
+			name:          "newline-only content triggers fallback",
+			data:          `{"choices": [{"delta": {"content": "\n", "reasoning": "fallback reasoning"}}]}`,
+			expectError:   false,
+			expectDone:    false,
+			expectContent: "fallback reasoning",
+		},
 	}
 
 	for _, tt := range tests {
