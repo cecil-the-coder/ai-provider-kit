@@ -205,85 +205,53 @@ func setupTestServer() *Server {
 	return NewServer(config, providers)
 }
 
+// routeTestCase defines a test case for route testing
+type routeTestCase struct {
+	name           string
+	method         string
+	path           string
+	expectedStatus int
+	notExpected    bool // if true, assert status != expectedStatus instead of ==
+}
+
+// runRouteTests runs a set of route test cases against the server
+func runRouteTests(t *testing.T, server *Server, tests []routeTestCase) {
+	t.Helper()
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(tc.method, tc.path, nil)
+			w := httptest.NewRecorder()
+			server.mux.ServeHTTP(w, req)
+			if tc.notExpected {
+				assert.NotEqual(t, tc.expectedStatus, w.Code)
+			} else {
+				assert.Equal(t, tc.expectedStatus, w.Code)
+			}
+		})
+	}
+}
+
 // TestServer_setupRoutes tests that routes are properly registered
 func TestServer_setupRoutes(t *testing.T) {
 	server := setupTestServer()
-
-	// Test health endpoints
-	t.Run("HealthEndpoint", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodGet, "/health", nil)
-		w := httptest.NewRecorder()
-		server.mux.ServeHTTP(w, req)
-		assert.Equal(t, http.StatusOK, w.Code)
-	})
-
-	t.Run("StatusEndpoint", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodGet, "/status", nil)
-		w := httptest.NewRecorder()
-		server.mux.ServeHTTP(w, req)
-		assert.Equal(t, http.StatusOK, w.Code)
-	})
-
-	t.Run("VersionEndpoint", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodGet, "/version", nil)
-		w := httptest.NewRecorder()
-		server.mux.ServeHTTP(w, req)
-		assert.Equal(t, http.StatusOK, w.Code)
-	})
-
-	t.Run("ListProvidersEndpoint", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodGet, "/api/providers", nil)
-		w := httptest.NewRecorder()
-		server.mux.ServeHTTP(w, req)
-		assert.Equal(t, http.StatusOK, w.Code)
-	})
-
-	t.Run("GenerateEndpoint", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodPost, "/api/generate", nil)
-		w := httptest.NewRecorder()
-		server.mux.ServeHTTP(w, req)
-		// Should respond (even if with error for missing body)
-		assert.NotEqual(t, http.StatusNotFound, w.Code)
+	runRouteTests(t, server, []routeTestCase{
+		{"HealthEndpoint", http.MethodGet, "/health", http.StatusOK, false},
+		{"StatusEndpoint", http.MethodGet, "/status", http.StatusOK, false},
+		{"VersionEndpoint", http.MethodGet, "/version", http.StatusOK, false},
+		{"ListProvidersEndpoint", http.MethodGet, "/api/providers", http.StatusOK, false},
+		{"GenerateEndpoint", http.MethodPost, "/api/generate", http.StatusNotFound, true},
 	})
 }
 
 // TestServer_routeProviderRequests tests provider-specific routing
 func TestServer_routeProviderRequests(t *testing.T) {
 	server := setupTestServer()
-
-	t.Run("ProviderHealthCheckRoute", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodPost, "/api/providers/health", nil)
-		w := httptest.NewRecorder()
-		server.mux.ServeHTTP(w, req)
-		assert.NotEqual(t, http.StatusNotFound, w.Code)
-	})
-
-	t.Run("ProviderTestRoute", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodPost, "/api/providers/test-provider/test", nil)
-		w := httptest.NewRecorder()
-		server.mux.ServeHTTP(w, req)
-		assert.NotEqual(t, http.StatusNotFound, w.Code)
-	})
-
-	t.Run("ProviderGetRoute", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodGet, "/api/providers/test-provider", nil)
-		w := httptest.NewRecorder()
-		server.mux.ServeHTTP(w, req)
-		assert.NotEqual(t, http.StatusNotFound, w.Code)
-	})
-
-	t.Run("ProviderUpdateRoute", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodPut, "/api/providers/test-provider", nil)
-		w := httptest.NewRecorder()
-		server.mux.ServeHTTP(w, req)
-		assert.NotEqual(t, http.StatusNotFound, w.Code)
-	})
-
-	t.Run("ProviderInvalidMethodRoute", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodDelete, "/api/providers/test-provider", nil)
-		w := httptest.NewRecorder()
-		server.mux.ServeHTTP(w, req)
-		assert.Equal(t, http.StatusMethodNotAllowed, w.Code)
+	runRouteTests(t, server, []routeTestCase{
+		{"ProviderHealthCheckRoute", http.MethodPost, "/api/providers/health", http.StatusNotFound, true},
+		{"ProviderTestRoute", http.MethodPost, "/api/providers/test-provider/test", http.StatusNotFound, true},
+		{"ProviderGetRoute", http.MethodGet, "/api/providers/test-provider", http.StatusNotFound, true},
+		{"ProviderUpdateRoute", http.MethodPut, "/api/providers/test-provider", http.StatusNotFound, true},
+		{"ProviderInvalidMethodRoute", http.MethodDelete, "/api/providers/test-provider", http.StatusMethodNotAllowed, false},
 	})
 }
 
