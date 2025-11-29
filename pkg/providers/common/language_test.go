@@ -73,3 +73,50 @@ func TestDetectLanguage(t *testing.T) {
 		})
 	}
 }
+
+func TestDetectByFilename(t *testing.T) {
+	tests := []struct {
+		filename string
+		expected string
+	}{
+		{"path/to/Dockerfile", "dockerfile"},
+		{"somedir/Makefile", "makefile"},
+		{"README", "markdown"},
+		{"README.md", "markdown"},
+		{"other.txt", ""},
+	}
+	
+	for _, tt := range tests {
+		t.Run(tt.filename, func(t *testing.T) {
+			result := DetectLanguage(tt.filename)
+			if tt.expected == "" && result == "text" {
+				return // Empty expected means default "text"
+			}
+			if result != tt.expected && tt.expected != "" {
+				t.Errorf("got %q, expected %q", result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestDetectByExtension(t *testing.T) {
+	tests := []struct {
+		filename string
+		expected string
+	}{
+		{"file.YAML", "yaml"},
+		{"FILE.YML", "yaml"},
+		{"script.SH", "bash"},
+		{"test.GO", "go"},
+		{"app.PY", "python"},
+	}
+	
+	for _, tt := range tests {
+		t.Run(tt.filename, func(t *testing.T) {
+			result := DetectLanguage(tt.filename)
+			if result != tt.expected {
+				t.Errorf("got %q, expected %q", result, tt.expected)
+			}
+		})
+	}
+}

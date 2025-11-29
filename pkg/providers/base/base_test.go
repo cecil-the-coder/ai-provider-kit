@@ -453,6 +453,142 @@ func TestBaseProvider_GetMetrics(t *testing.T) {
 	assert.Empty(t, metrics.LastError)
 }
 
+// TestBaseProvider_IncrementRequestCount tests the IncrementRequestCount method
+func TestBaseProvider_IncrementRequestCount(t *testing.T) {
+	provider := NewBaseProvider("test", types.ProviderConfig{}, nil, nil)
+
+	// Initially, request count should be 0
+	metrics := provider.GetMetrics()
+	assert.Equal(t, int64(0), metrics.RequestCount)
+	assert.True(t, metrics.LastRequestTime.IsZero())
+
+	// Increment request count
+	provider.IncrementRequestCount()
+
+	// Verify count incremented and timestamp updated
+	metrics = provider.GetMetrics()
+	assert.Equal(t, int64(1), metrics.RequestCount)
+	assert.False(t, metrics.LastRequestTime.IsZero())
+
+	// Increment again
+	provider.IncrementRequestCount()
+
+	metrics = provider.GetMetrics()
+	assert.Equal(t, int64(2), metrics.RequestCount)
+}
+
+// TestBaseProvider_RecordSuccess tests the RecordSuccess method
+func TestBaseProvider_RecordSuccess(t *testing.T) {
+	provider := NewBaseProvider("test", types.ProviderConfig{}, nil, nil)
+
+	// Record first success
+	latency1 := 100 * time.Millisecond
+	tokens1 := int64(50)
+	provider.RecordSuccess(latency1, tokens1)
+
+	metrics := provider.GetMetrics()
+	assert.Equal(t, int64(1), metrics.SuccessCount)
+	assert.Equal(t, tokens1, metrics.TokensUsed)
+	assert.Equal(t, latency1, metrics.TotalLatency)
+	assert.Equal(t, latency1, metrics.AverageLatency)
+	assert.False(t, metrics.LastSuccessTime.IsZero())
+
+	// Record second success
+	latency2 := 200 * time.Millisecond
+	tokens2 := int64(75)
+	provider.RecordSuccess(latency2, tokens2)
+
+	metrics = provider.GetMetrics()
+	assert.Equal(t, int64(2), metrics.SuccessCount)
+	assert.Equal(t, tokens1+tokens2, metrics.TokensUsed)
+	assert.Equal(t, latency1+latency2, metrics.TotalLatency)
+	assert.Equal(t, (latency1+latency2)/2, metrics.AverageLatency)
+}
+
+// TestBaseProvider_RecordError tests the RecordError method
+func TestBaseProvider_RecordError(t *testing.T) {
+	provider := NewBaseProvider("test", types.ProviderConfig{}, nil, nil)
+
+	// Initially, error count should be 0
+	metrics := provider.GetMetrics()
+	assert.Equal(t, int64(0), metrics.ErrorCount)
+	assert.True(t, metrics.LastErrorTime.IsZero())
+	assert.Empty(t, metrics.LastError)
+
+	// Record error with message
+	err := fmt.Errorf("test error message")
+	provider.RecordError(err)
+
+	metrics = provider.GetMetrics()
+	assert.Equal(t, int64(1), metrics.ErrorCount)
+	assert.False(t, metrics.LastErrorTime.IsZero())
+	assert.Equal(t, "test error message", metrics.LastError)
+
+	// Record another error
+	err2 := fmt.Errorf("second error")
+	provider.RecordError(err2)
+
+	metrics = provider.GetMetrics()
+	assert.Equal(t, int64(2), metrics.ErrorCount)
+	assert.Equal(t, "second error", metrics.LastError)
+
+	// Record nil error
+	provider.RecordError(nil)
+
+	metrics = provider.GetMetrics()
+	assert.Equal(t, int64(3), metrics.ErrorCount)
+	// LastError should still be "second error" since nil doesn't update it
+	assert.Equal(t, "second error", metrics.LastError)
+}
+
+// TestBaseProvider_UpdateHealthStatus tests the UpdateHealthStatus method
+func TestBaseProvider_UpdateHealthStatus(t *testing.T) {
+	provider := NewBaseProvider("test", types.ProviderConfig{}, nil, nil)
+
+	// Initially, health status should be zero values
+	metrics := provider.GetMetrics()
+	assert.False(t, metrics.HealthStatus.Healthy)
+	assert.Empty(t, metrics.HealthStatus.Message)
+	assert.True(t, metrics.HealthStatus.LastChecked.IsZero())
+
+	// Update to healthy status
+	provider.UpdateHealthStatus(true, "All systems operational")
+
+	metrics = provider.GetMetrics()
+	assert.True(t, metrics.HealthStatus.Healthy)
+	assert.Equal(t, "All systems operational", metrics.HealthStatus.Message)
+	assert.False(t, metrics.HealthStatus.LastChecked.IsZero())
+
+	// Update to unhealthy status
+	provider.UpdateHealthStatus(false, "Service unavailable")
+
+	metrics = provider.GetMetrics()
+	assert.False(t, metrics.HealthStatus.Healthy)
+	assert.Equal(t, "Service unavailable", metrics.HealthStatus.Message)
+	assert.False(t, metrics.HealthStatus.LastChecked.IsZero())
+}
+
+// TestBaseProvider_UpdateHealthStatusResponseTime tests the UpdateHealthStatusResponseTime method
+func TestBaseProvider_UpdateHealthStatusResponseTime(t *testing.T) {
+	provider := NewBaseProvider("test", types.ProviderConfig{}, nil, nil)
+
+	// Initially, response time should be 0
+	metrics := provider.GetMetrics()
+	assert.Equal(t, float64(0), metrics.HealthStatus.ResponseTime)
+
+	// Update response time
+	provider.UpdateHealthStatusResponseTime(123.45)
+
+	metrics = provider.GetMetrics()
+	assert.Equal(t, 123.45, metrics.HealthStatus.ResponseTime)
+
+	// Update to different response time
+	provider.UpdateHealthStatusResponseTime(456.78)
+
+	metrics = provider.GetMetrics()
+	assert.Equal(t, 456.78, metrics.HealthStatus.ResponseTime)
+}
+
 // TestBaseProvider_LogRequest tests the LogRequest method
 func TestBaseProvider_LogRequest(t *testing.T) {
 	t.Run("WithLogger", func(t *testing.T) {
@@ -674,6 +810,38 @@ func TestBaseProvider_ConcurrentAccess(t *testing.T) {
 	finalConfig := provider.GetConfig()
 	assert.Equal(t, types.ProviderTypeOpenAI, finalConfig.Type)
 	assert.NotEmpty(t, finalConfig.APIKey)
+}
+
+// TestBaseProvider_ConcurrentMetrics tests concurrent access to metrics methods
+func TestBaseProvider_ConcurrentMetrics(t *testing.T) {
+	provider := NewBaseProvider("test", types.ProviderConfig{}, nil, nil)
+
+	var wg sync.WaitGroup
+	numGoroutines := 20
+
+	// Test concurrent metric updates
+	for i := 0; i < numGoroutines; i++ {
+		wg.Add(1)
+		go func(index int) {
+			defer wg.Done()
+			provider.IncrementRequestCount()
+			provider.RecordSuccess(time.Duration(index)*time.Millisecond, int64(index))
+			provider.RecordError(fmt.Errorf("error %d", index))
+			provider.UpdateHealthStatus(index%2 == 0, fmt.Sprintf("status %d", index))
+			provider.UpdateHealthStatusResponseTime(float64(index))
+		}(i)
+	}
+
+	wg.Wait()
+
+	// Verify final metrics
+	metrics := provider.GetMetrics()
+	assert.Equal(t, int64(numGoroutines), metrics.RequestCount)
+	assert.Equal(t, int64(numGoroutines), metrics.SuccessCount)
+	assert.Equal(t, int64(numGoroutines), metrics.ErrorCount)
+	assert.Greater(t, metrics.TokensUsed, int64(0))
+	assert.Greater(t, metrics.TotalLatency, time.Duration(0))
+	assert.Greater(t, metrics.AverageLatency, time.Duration(0))
 }
 
 // TestBaseProvider_ErrorHandling tests error handling scenarios
