@@ -310,7 +310,7 @@ func TestReportFailure(t *testing.T) {
 		}
 
 		health := km.keyHealth["key1"]
-		backoff := health.backoffUntil.Sub(time.Now())
+		backoff := time.Until(health.backoffUntil)
 
 		// Should be capped at 60 seconds
 		if backoff > 61*time.Second {

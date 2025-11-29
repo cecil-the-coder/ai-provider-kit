@@ -10,6 +10,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// contextKey is a custom type for context keys to avoid collisions
+type contextKey string
+
 // TestCoreRequestBuilderComprehensive tests all builder methods
 func TestCoreRequestBuilderComprehensive(t *testing.T) {
 	t.Run("WithStop", func(t *testing.T) {
@@ -66,7 +69,8 @@ func TestCoreRequestBuilderComprehensive(t *testing.T) {
 	})
 
 	t.Run("WithContext", func(t *testing.T) {
-		ctx := context.WithValue(context.Background(), "test", "value")
+		const testKey contextKey = "test"
+		ctx := context.WithValue(context.Background(), testKey, "value")
 
 		request, err := NewCoreRequestBuilder().
 			WithMessages([]ChatMessage{{Role: "user", Content: "Hello"}}).
@@ -75,7 +79,7 @@ func TestCoreRequestBuilderComprehensive(t *testing.T) {
 
 		require.NoError(t, err)
 		assert.NotNil(t, request.Context)
-		assert.Equal(t, "value", request.Context.Value("test"))
+		assert.Equal(t, "value", request.Context.Value(testKey))
 	})
 
 	t.Run("WithTimeout", func(t *testing.T) {

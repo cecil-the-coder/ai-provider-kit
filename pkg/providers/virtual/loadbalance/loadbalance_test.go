@@ -409,10 +409,10 @@ func TestRoundRobinStrategy_ConcurrentAccess(t *testing.T) {
 	opts := types.GenerateOptions{Prompt: "test"}
 
 	var wg sync.WaitGroup
-	numGoroutines := 100
+	numGoroutines := uint64(100)
 	errChan := make(chan error, numGoroutines)
 
-	for i := 0; i < numGoroutines; i++ {
+	for i := uint64(0); i < numGoroutines; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -433,7 +433,7 @@ func TestRoundRobinStrategy_ConcurrentAccess(t *testing.T) {
 	}
 
 	// Counter should be exactly numGoroutines
-	if lb.counter != uint64(numGoroutines) {
+	if lb.counter != numGoroutines {
 		t.Errorf("expected counter to be %d, got %d", numGoroutines, lb.counter)
 	}
 }

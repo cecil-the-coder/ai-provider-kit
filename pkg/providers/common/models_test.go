@@ -324,12 +324,12 @@ func TestModelRegistry_SearchModels(t *testing.T) {
 }
 
 func TestModelRegistry_GetCacheInfo(t *testing.T) {
-	registry := NewModelRegistry(time.Hour)
-
 	// Note: GetCacheInfo has a bug where it doesn't initialize ProviderModels map
 	// This test is skipped to avoid triggering that bug
 	// The function would panic on line 259: info.ProviderModels[string(providerType)] = len(models)
 	t.Skip("GetCacheInfo has a bug - ProviderModels map is not initialized in CacheInfo struct")
+
+	registry := NewModelRegistry(time.Hour)
 
 	registry.CacheModels(types.ProviderTypeOpenAI, []types.Model{
 		{ID: "gpt-4"},

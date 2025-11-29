@@ -21,7 +21,7 @@ func TestReadFileContent(t *testing.T) {
 			setup: func() string {
 				path := filepath.Join(tmpDir, "test.txt")
 				content := "Hello, World!"
-				if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+				if err := os.WriteFile(path, []byte(content), 0600); err != nil {
 					t.Fatal(err)
 				}
 				return path
@@ -47,7 +47,7 @@ func TestReadFileContent(t *testing.T) {
 			name: "read empty file",
 			setup: func() string {
 				path := filepath.Join(tmpDir, "empty.txt")
-				if err := os.WriteFile(path, []byte(""), 0644); err != nil {
+				if err := os.WriteFile(path, []byte(""), 0600); err != nil {
 					t.Fatal(err)
 				}
 				return path
@@ -60,7 +60,7 @@ func TestReadFileContent(t *testing.T) {
 			setup: func() string {
 				path := filepath.Join(tmpDir, "special.txt")
 				content := "特殊字符\nемoji 🚀\ttabs"
-				if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+				if err := os.WriteFile(path, []byte(content), 0600); err != nil {
 					t.Fatal(err)
 				}
 				return path
@@ -168,7 +168,7 @@ func TestReadConfigFile(t *testing.T) {
 			setup: func() string {
 				path := filepath.Join(tmpDir, "config.json")
 				content := []byte(`{"key": "value"}`)
-				if err := os.WriteFile(path, content, 0644); err != nil {
+				if err := os.WriteFile(path, content, 0600); err != nil {
 					t.Fatal(err)
 				}
 				return path
@@ -195,7 +195,7 @@ func TestReadConfigFile(t *testing.T) {
 			setup: func() string {
 				path := filepath.Join(tmpDir, "config.yaml")
 				content := []byte("key: value\n")
-				if err := os.WriteFile(path, content, 0644); err != nil {
+				if err := os.WriteFile(path, content, 0600); err != nil {
 					t.Fatal(err)
 				}
 				return path
@@ -207,7 +207,7 @@ func TestReadConfigFile(t *testing.T) {
 			name: "read empty config",
 			setup: func() string {
 				path := filepath.Join(tmpDir, "empty.json")
-				if err := os.WriteFile(path, []byte{}, 0644); err != nil {
+				if err := os.WriteFile(path, []byte{}, 0600); err != nil {
 					t.Fatal(err)
 				}
 				return path

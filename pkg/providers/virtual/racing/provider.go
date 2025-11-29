@@ -213,12 +213,18 @@ func (r *RacingProvider) pickBestCandidate(candidates []*raceResult) (types.Chat
 		}, nil
 	}
 
-	r.performance.RecordWin(candidates[0].provider.Name(), candidates[0].latency)
-	return &racingStream{
-		inner:    candidates[0].stream,
-		provider: candidates[0].provider.Name(),
-		latency:  candidates[0].latency,
-	}, nil
+	// Fallback: if no best was found but we have candidates, use the first one
+	// This should not happen in practice, but we check bounds for safety
+	if len(candidates) > 0 {
+		r.performance.RecordWin(candidates[0].provider.Name(), candidates[0].latency)
+		return &racingStream{
+			inner:    candidates[0].stream,
+			provider: candidates[0].provider.Name(),
+			latency:  candidates[0].latency,
+		}, nil
+	}
+
+	return nil, fmt.Errorf("no valid candidate found")
 }
 
 func (r *RacingProvider) GetPerformanceStats() map[string]*ProviderStats {

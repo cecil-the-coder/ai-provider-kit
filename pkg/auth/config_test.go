@@ -11,7 +11,8 @@ func TestDefaultConfig(t *testing.T) {
 	config := DefaultConfig()
 
 	if config == nil {
-		t.Error("Expected non-nil config")
+		t.Fatal("Expected non-nil config")
+		return
 	}
 
 	// Test token storage config
