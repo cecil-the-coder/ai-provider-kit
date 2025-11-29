@@ -11,11 +11,12 @@ import (
 
 // RacingProvider races multiple providers and returns the first successful response
 type RacingProvider struct {
-	name        string
-	providers   []types.Provider
-	config      *Config
-	performance *PerformanceTracker
-	mu          sync.RWMutex
+	name             string
+	providers        []types.Provider
+	config           *Config
+	performance      *PerformanceTracker
+	metricsCollector types.MetricsCollector
+	mu               sync.RWMutex
 }
 
 type Config struct {
@@ -63,10 +64,22 @@ func (r *RacingProvider) Description() string      { return "Races multiple prov
 func (r *RacingProvider) GenerateChatCompletion(ctx context.Context, opts types.GenerateOptions) (types.ChatCompletionStream, error) {
 	r.mu.RLock()
 	providers := r.providers
+	collector := r.metricsCollector
 	r.mu.RUnlock()
 
 	if len(providers) == 0 {
 		return nil, fmt.Errorf("no providers configured for racing")
+	}
+
+	// Record race request
+	if collector != nil {
+		collector.RecordEvent(ctx, types.MetricEvent{
+			Type:         types.MetricEventRequest,
+			ProviderName: r.name,
+			ProviderType: r.Type(),
+			ModelID:      opts.Model,
+			Timestamp:    time.Now(),
+		})
 	}
 
 	timeout := time.Duration(r.config.TimeoutMS) * time.Millisecond
@@ -80,7 +93,10 @@ func (r *RacingProvider) GenerateChatCompletion(ctx context.Context, opts types.
 	results := make(chan *raceResult, len(providers))
 	var wg sync.WaitGroup
 
+	// Collect provider names for race participants
+	raceParticipants := make([]string, len(providers))
 	for i, provider := range providers {
+		raceParticipants[i] = provider.Name()
 		wg.Add(1)
 		go func(idx int, p types.Provider) {
 			defer wg.Done()
@@ -109,59 +125,125 @@ func (r *RacingProvider) GenerateChatCompletion(ctx context.Context, opts types.
 		close(results)
 	}()
 
-	return r.selectWinner(ctx, results, raceCancel)
+	return r.selectWinner(ctx, results, raceCancel, raceParticipants, opts.Model)
 }
 
-func (r *RacingProvider) selectWinner(ctx context.Context, results chan *raceResult, cancelRace context.CancelFunc) (types.ChatCompletionStream, error) {
+func (r *RacingProvider) selectWinner(ctx context.Context, results chan *raceResult, cancelRace context.CancelFunc, raceParticipants []string, modelID string) (types.ChatCompletionStream, error) {
 	defer cancelRace() // Always cancel racing context when winner is selected or error occurs
 
 	switch r.config.Strategy {
 	case StrategyWeighted:
-		return r.weightedStrategy(ctx, results)
+		return r.weightedStrategy(ctx, results, raceParticipants, modelID)
 	case StrategyQuality:
-		return r.qualityStrategy(ctx, results)
+		return r.qualityStrategy(ctx, results, raceParticipants, modelID)
 	default:
-		return r.firstWinsStrategy(ctx, results)
+		return r.firstWinsStrategy(ctx, results, raceParticipants, modelID)
 	}
 }
 
-func (r *RacingProvider) firstWinsStrategy(_ context.Context, results chan *raceResult) (types.ChatCompletionStream, error) {
+func (r *RacingProvider) firstWinsStrategy(ctx context.Context, results chan *raceResult, raceParticipants []string, modelID string) (types.ChatCompletionStream, error) {
+	r.mu.RLock()
+	collector := r.metricsCollector
+	r.mu.RUnlock()
+
+	raceLatencies := make(map[string]time.Duration)
 	var lastErr error
+	var winner *raceResult
+
 	for result := range results {
-		if result.err == nil && result.stream != nil {
+		raceLatencies[result.provider.Name()] = result.latency
+
+		if result.err == nil && result.stream != nil && winner == nil {
+			winner = result
 			r.performance.RecordWin(result.provider.Name(), result.latency)
-			// Return immediately on first success - the defer cancelRace() in selectWinner
-			// will cancel the racing context, stopping other in-flight requests
-			return &racingStream{
-				inner:    result.stream,
-				provider: result.provider.Name(),
-				latency:  result.latency,
-			}, nil
-		}
-		if result.err != nil {
+			// Continue collecting results to get complete latencies
+		} else if result.err != nil {
 			r.performance.RecordLoss(result.provider.Name(), result.latency)
 			lastErr = result.err
 		}
 	}
+
+	if winner != nil {
+		// Emit race complete event
+		if collector != nil {
+			collector.RecordEvent(ctx, types.MetricEvent{
+				Type:             types.MetricEventRaceComplete,
+				ProviderName:     r.name,
+				ProviderType:     r.Type(),
+				ModelID:          modelID,
+				Timestamp:        time.Now(),
+				RaceParticipants: raceParticipants,
+				RaceLatencies:    raceLatencies,
+				RaceWinner:       winner.provider.Name(),
+				Latency:          winner.latency,
+			})
+
+			// Emit provider switch event (winner selected)
+			collector.RecordEvent(ctx, types.MetricEvent{
+				Type:         types.MetricEventProviderSwitch,
+				ProviderName: r.name,
+				ProviderType: r.Type(),
+				ModelID:      modelID,
+				Timestamp:    time.Now(),
+				ToProvider:   winner.provider.Name(),
+				SwitchReason: "race_winner",
+				Latency:      winner.latency,
+			})
+
+			// Record success
+			collector.RecordEvent(ctx, types.MetricEvent{
+				Type:         types.MetricEventSuccess,
+				ProviderName: r.name,
+				ProviderType: r.Type(),
+				ModelID:      modelID,
+				Timestamp:    time.Now(),
+				Latency:      winner.latency,
+			})
+		}
+
+		return &racingStream{
+			inner:    winner.stream,
+			provider: winner.provider.Name(),
+			latency:  winner.latency,
+		}, nil
+	}
+
+	// All providers failed
+	if collector != nil {
+		collector.RecordEvent(ctx, types.MetricEvent{
+			Type:             types.MetricEventError,
+			ProviderName:     r.name,
+			ProviderType:     r.Type(),
+			ModelID:          modelID,
+			Timestamp:        time.Now(),
+			ErrorMessage:     "all providers failed",
+			ErrorType:        "race_all_failed",
+			RaceParticipants: raceParticipants,
+			RaceLatencies:    raceLatencies,
+		})
+	}
+
 	if lastErr != nil {
 		return nil, fmt.Errorf("all providers failed, last error: %w", lastErr)
 	}
 	return nil, fmt.Errorf("all providers failed")
 }
 
-func (r *RacingProvider) weightedStrategy(ctx context.Context, results chan *raceResult) (types.ChatCompletionStream, error) {
+func (r *RacingProvider) weightedStrategy(ctx context.Context, results chan *raceResult, raceParticipants []string, modelID string) (types.ChatCompletionStream, error) {
 	gracePeriod := time.Duration(r.config.GracePeriodMS) * time.Millisecond
 	timer := time.NewTimer(gracePeriod)
 	defer timer.Stop()
 
 	var candidates []*raceResult
+	raceLatencies := make(map[string]time.Duration)
 
 	for {
 		select {
 		case result, ok := <-results:
 			if !ok {
-				return r.pickBestCandidate(candidates)
+				return r.pickBestCandidate(ctx, candidates, raceParticipants, raceLatencies, modelID)
 			}
+			raceLatencies[result.provider.Name()] = result.latency
 			if result.err == nil && result.stream != nil {
 				candidates = append(candidates, result)
 				if len(candidates) == 1 {
@@ -170,23 +252,41 @@ func (r *RacingProvider) weightedStrategy(ctx context.Context, results chan *rac
 			}
 		case <-timer.C:
 			if len(candidates) > 0 {
-				return r.pickBestCandidate(candidates)
+				return r.pickBestCandidate(ctx, candidates, raceParticipants, raceLatencies, modelID)
 			}
 		case <-ctx.Done():
 			if len(candidates) > 0 {
-				return r.pickBestCandidate(candidates)
+				return r.pickBestCandidate(ctx, candidates, raceParticipants, raceLatencies, modelID)
 			}
 			return nil, ctx.Err()
 		}
 	}
 }
 
-func (r *RacingProvider) qualityStrategy(ctx context.Context, results chan *raceResult) (types.ChatCompletionStream, error) {
-	return r.weightedStrategy(ctx, results)
+func (r *RacingProvider) qualityStrategy(ctx context.Context, results chan *raceResult, raceParticipants []string, modelID string) (types.ChatCompletionStream, error) {
+	return r.weightedStrategy(ctx, results, raceParticipants, modelID)
 }
 
-func (r *RacingProvider) pickBestCandidate(candidates []*raceResult) (types.ChatCompletionStream, error) {
+func (r *RacingProvider) pickBestCandidate(ctx context.Context, candidates []*raceResult, raceParticipants []string, raceLatencies map[string]time.Duration, modelID string) (types.ChatCompletionStream, error) {
+	r.mu.RLock()
+	collector := r.metricsCollector
+	r.mu.RUnlock()
+
 	if len(candidates) == 0 {
+		// All providers failed
+		if collector != nil {
+			collector.RecordEvent(ctx, types.MetricEvent{
+				Type:             types.MetricEventError,
+				ProviderName:     r.name,
+				ProviderType:     r.Type(),
+				ModelID:          modelID,
+				Timestamp:        time.Now(),
+				ErrorMessage:     "no successful candidates",
+				ErrorType:        "race_no_candidates",
+				RaceParticipants: raceParticipants,
+				RaceLatencies:    raceLatencies,
+			})
+		}
 		return nil, fmt.Errorf("no successful candidates")
 	}
 
@@ -206,6 +306,44 @@ func (r *RacingProvider) pickBestCandidate(candidates []*raceResult) (types.Chat
 
 	if best != nil {
 		r.performance.RecordWin(best.provider.Name(), best.latency)
+
+		// Emit race complete event
+		if collector != nil {
+			collector.RecordEvent(ctx, types.MetricEvent{
+				Type:             types.MetricEventRaceComplete,
+				ProviderName:     r.name,
+				ProviderType:     r.Type(),
+				ModelID:          modelID,
+				Timestamp:        time.Now(),
+				RaceParticipants: raceParticipants,
+				RaceLatencies:    raceLatencies,
+				RaceWinner:       best.provider.Name(),
+				Latency:          best.latency,
+			})
+
+			// Emit provider switch event (winner selected)
+			collector.RecordEvent(ctx, types.MetricEvent{
+				Type:         types.MetricEventProviderSwitch,
+				ProviderName: r.name,
+				ProviderType: r.Type(),
+				ModelID:      modelID,
+				Timestamp:    time.Now(),
+				ToProvider:   best.provider.Name(),
+				SwitchReason: "race_winner_weighted",
+				Latency:      best.latency,
+			})
+
+			// Record success
+			collector.RecordEvent(ctx, types.MetricEvent{
+				Type:         types.MetricEventSuccess,
+				ProviderName: r.name,
+				ProviderType: r.Type(),
+				ModelID:      modelID,
+				Timestamp:    time.Now(),
+				Latency:      best.latency,
+			})
+		}
+
 		return &racingStream{
 			inner:    best.stream,
 			provider: best.provider.Name(),
@@ -217,6 +355,42 @@ func (r *RacingProvider) pickBestCandidate(candidates []*raceResult) (types.Chat
 	// This should not happen in practice, but we check bounds for safety
 	if len(candidates) > 0 {
 		r.performance.RecordWin(candidates[0].provider.Name(), candidates[0].latency)
+
+		// Emit events for fallback case
+		if collector != nil {
+			collector.RecordEvent(ctx, types.MetricEvent{
+				Type:             types.MetricEventRaceComplete,
+				ProviderName:     r.name,
+				ProviderType:     r.Type(),
+				ModelID:          modelID,
+				Timestamp:        time.Now(),
+				RaceParticipants: raceParticipants,
+				RaceLatencies:    raceLatencies,
+				RaceWinner:       candidates[0].provider.Name(),
+				Latency:          candidates[0].latency,
+			})
+
+			collector.RecordEvent(ctx, types.MetricEvent{
+				Type:         types.MetricEventProviderSwitch,
+				ProviderName: r.name,
+				ProviderType: r.Type(),
+				ModelID:      modelID,
+				Timestamp:    time.Now(),
+				ToProvider:   candidates[0].provider.Name(),
+				SwitchReason: "race_winner_fallback",
+				Latency:      candidates[0].latency,
+			})
+
+			collector.RecordEvent(ctx, types.MetricEvent{
+				Type:         types.MetricEventSuccess,
+				ProviderName: r.name,
+				ProviderType: r.Type(),
+				ModelID:      modelID,
+				Timestamp:    time.Now(),
+				Latency:      candidates[0].latency,
+			})
+		}
+
 		return &racingStream{
 			inner:    candidates[0].stream,
 			provider: candidates[0].provider.Name(),

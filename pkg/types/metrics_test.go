@@ -573,7 +573,7 @@ func (mm *ModelMetrics) GetSuccessRate() float64 {
 // TestErrorMetrics tests the ErrorMetrics struct
 func TestErrorMetrics(t *testing.T) {
 	t.Run("ZeroValue", func(t *testing.T) {
-		var metrics ErrorMetrics
+		var metrics LegacyErrorMetrics
 		assert.Equal(t, int64(0), metrics.TotalErrors)
 		assert.Empty(t, metrics.ErrorTypes)
 		assert.Empty(t, metrics.LastError)
@@ -583,7 +583,7 @@ func TestErrorMetrics(t *testing.T) {
 
 	t.Run("FullMetrics", func(t *testing.T) {
 		now := time.Now()
-		metrics := ErrorMetrics{
+		metrics := LegacyErrorMetrics{
 			TotalErrors: 50,
 			ErrorTypes: map[string]int64{
 				"timeout":      20,
@@ -607,7 +607,7 @@ func TestErrorMetrics(t *testing.T) {
 	})
 
 	t.Run("JSONSerialization", func(t *testing.T) {
-		metrics := ErrorMetrics{
+		metrics := LegacyErrorMetrics{
 			TotalErrors: 25,
 			ErrorTypes: map[string]int64{
 				"timeout":         10,
@@ -622,7 +622,7 @@ func TestErrorMetrics(t *testing.T) {
 		data, err := json.Marshal(metrics)
 		require.NoError(t, err)
 
-		var result ErrorMetrics
+		var result LegacyErrorMetrics
 		err = json.Unmarshal(data, &result)
 		require.NoError(t, err)
 		assert.Equal(t, metrics.TotalErrors, result.TotalErrors)
@@ -633,7 +633,7 @@ func TestErrorMetrics(t *testing.T) {
 	})
 
 	t.Run("RecordError", func(t *testing.T) {
-		metrics := ErrorMetrics{}
+		metrics := LegacyErrorMetrics{}
 
 		// Record first error
 		metrics.RecordError("timeout", "Request timed out")
@@ -660,7 +660,7 @@ func TestErrorMetrics(t *testing.T) {
 	})
 
 	t.Run("ResetConsecutiveFails", func(t *testing.T) {
-		metrics := ErrorMetrics{
+		metrics := LegacyErrorMetrics{
 			TotalErrors:      10,
 			ConsecutiveFails: 5,
 		}
@@ -671,7 +671,7 @@ func TestErrorMetrics(t *testing.T) {
 	})
 
 	t.Run("GetMostCommonError", func(t *testing.T) {
-		metrics := ErrorMetrics{
+		metrics := LegacyErrorMetrics{
 			ErrorTypes: map[string]int64{
 				"timeout":      10,
 				"rate_limit":   5,
@@ -690,7 +690,7 @@ func TestErrorMetrics(t *testing.T) {
 	})
 
 	t.Run("GetErrorRate", func(t *testing.T) {
-		metrics := ErrorMetrics{
+		metrics := LegacyErrorMetrics{
 			TotalErrors:      25,
 			ConsecutiveFails: 3,
 		}
@@ -705,7 +705,7 @@ func TestErrorMetrics(t *testing.T) {
 }
 
 // RecordError records an error in the metrics
-func (em *ErrorMetrics) RecordError(errorType, errorMessage string) {
+func (em *LegacyErrorMetrics) RecordError(errorType, errorMessage string) {
 	em.TotalErrors++
 	em.ConsecutiveFails++
 	em.LastError = errorMessage
@@ -718,12 +718,12 @@ func (em *ErrorMetrics) RecordError(errorType, errorMessage string) {
 }
 
 // ResetConsecutiveFails resets the consecutive failure counter
-func (em *ErrorMetrics) ResetConsecutiveFails() {
+func (em *LegacyErrorMetrics) ResetConsecutiveFails() {
 	em.ConsecutiveFails = 0
 }
 
 // GetMostCommonError returns the most common error type
-func (em *ErrorMetrics) GetMostCommonError() string {
+func (em *LegacyErrorMetrics) GetMostCommonError() string {
 	if len(em.ErrorTypes) == 0 {
 		return ""
 	}
@@ -742,7 +742,7 @@ func (em *ErrorMetrics) GetMostCommonError() string {
 }
 
 // GetErrorRate returns the error rate as a percentage (0.0 to 1.0)
-func (em *ErrorMetrics) GetErrorRate(totalRequests int64) float64 {
+func (em *LegacyErrorMetrics) GetErrorRate(totalRequests int64) float64 {
 	if totalRequests == 0 {
 		return 0.0
 	}
@@ -752,7 +752,7 @@ func (em *ErrorMetrics) GetErrorRate(totalRequests int64) float64 {
 // TestTokenMetrics tests the TokenMetrics struct
 func TestTokenMetrics(t *testing.T) {
 	t.Run("ZeroValue", func(t *testing.T) {
-		var metrics TokenMetrics
+		var metrics LegacyTokenMetrics
 		assert.Equal(t, int64(0), metrics.InputTokens)
 		assert.Equal(t, int64(0), metrics.OutputTokens)
 		assert.Equal(t, int64(0), metrics.TotalTokens)
@@ -763,7 +763,7 @@ func TestTokenMetrics(t *testing.T) {
 
 	t.Run("FullMetrics", func(t *testing.T) {
 		now := time.Now()
-		metrics := TokenMetrics{
+		metrics := LegacyTokenMetrics{
 			InputTokens:   100000,
 			OutputTokens:  50000,
 			TotalTokens:   150000,
@@ -781,7 +781,7 @@ func TestTokenMetrics(t *testing.T) {
 	})
 
 	t.Run("JSONSerialization", func(t *testing.T) {
-		metrics := TokenMetrics{
+		metrics := LegacyTokenMetrics{
 			InputTokens:   50000,
 			OutputTokens:  25000,
 			TotalTokens:   75000,
@@ -793,7 +793,7 @@ func TestTokenMetrics(t *testing.T) {
 		data, err := json.Marshal(metrics)
 		require.NoError(t, err)
 
-		var result TokenMetrics
+		var result LegacyTokenMetrics
 		err = json.Unmarshal(data, &result)
 		require.NoError(t, err)
 		assert.Equal(t, metrics.InputTokens, result.InputTokens)
@@ -805,7 +805,7 @@ func TestTokenMetrics(t *testing.T) {
 	})
 
 	t.Run("AddTokens", func(t *testing.T) {
-		metrics := TokenMetrics{
+		metrics := LegacyTokenMetrics{
 			InputTokens:   1000,
 			OutputTokens:  500,
 			TotalTokens:   1500,
@@ -823,7 +823,7 @@ func TestTokenMetrics(t *testing.T) {
 	})
 
 	t.Run("CalculateCost", func(t *testing.T) {
-		metrics := TokenMetrics{}
+		metrics := LegacyTokenMetrics{}
 
 		// Calculate cost with standard pricing
 		metrics.CalculateCost(1000, 500, 0.001, 0.002) // $0.001 per 1K input, $0.002 per 1K output
@@ -837,7 +837,7 @@ func TestTokenMetrics(t *testing.T) {
 	})
 
 	t.Run("GetCostPerToken", func(t *testing.T) {
-		metrics := TokenMetrics{
+		metrics := LegacyTokenMetrics{
 			TotalTokens:   100000,
 			EstimatedCost: 10.0,
 			Currency:      "USD",
@@ -853,7 +853,7 @@ func TestTokenMetrics(t *testing.T) {
 	})
 
 	t.Run("GetInputOutputRatio", func(t *testing.T) {
-		metrics := TokenMetrics{
+		metrics := LegacyTokenMetrics{
 			InputTokens:  80000,
 			OutputTokens: 20000,
 		}
@@ -868,7 +868,7 @@ func TestTokenMetrics(t *testing.T) {
 	})
 
 	t.Run("Reset", func(t *testing.T) {
-		metrics := TokenMetrics{
+		metrics := LegacyTokenMetrics{
 			InputTokens:   50000,
 			OutputTokens:  25000,
 			TotalTokens:   75000,
@@ -888,7 +888,7 @@ func TestTokenMetrics(t *testing.T) {
 }
 
 // AddTokens adds token usage and cost to the metrics
-func (tm *TokenMetrics) AddTokens(inputTokens, outputTokens int64, cost float64) {
+func (tm *LegacyTokenMetrics) AddTokens(inputTokens, outputTokens int64, cost float64) {
 	tm.InputTokens += inputTokens
 	tm.OutputTokens += outputTokens
 	tm.TotalTokens += inputTokens + outputTokens
@@ -900,7 +900,7 @@ func (tm *TokenMetrics) AddTokens(inputTokens, outputTokens int64, cost float64)
 }
 
 // CalculateCost calculates the estimated cost based on token usage and pricing
-func (tm *TokenMetrics) CalculateCost(inputTokens, outputTokens int64, inputPrice, outputPrice float64) {
+func (tm *LegacyTokenMetrics) CalculateCost(inputTokens, outputTokens int64, inputPrice, outputPrice float64) {
 	// Prices are per 1000 tokens
 	inputCost := inputPrice * float64(inputTokens) / 1000.0
 	outputCost := outputPrice * float64(outputTokens) / 1000.0
@@ -914,7 +914,7 @@ func (tm *TokenMetrics) CalculateCost(inputTokens, outputTokens int64, inputPric
 }
 
 // GetCostPerToken returns the average cost per token
-func (tm *TokenMetrics) GetCostPerToken() float64 {
+func (tm *LegacyTokenMetrics) GetCostPerToken() float64 {
 	if tm.TotalTokens == 0 {
 		return 0.0
 	}
@@ -922,7 +922,7 @@ func (tm *TokenMetrics) GetCostPerToken() float64 {
 }
 
 // GetInputOutputRatio returns the ratio of input to output tokens
-func (tm *TokenMetrics) GetInputOutputRatio() float64 {
+func (tm *LegacyTokenMetrics) GetInputOutputRatio() float64 {
 	if tm.OutputTokens == 0 {
 		return 0.0
 	}
@@ -930,7 +930,7 @@ func (tm *TokenMetrics) GetInputOutputRatio() float64 {
 }
 
 // Reset resets all token metrics
-func (tm *TokenMetrics) Reset() {
+func (tm *LegacyTokenMetrics) Reset() {
 	tm.InputTokens = 0
 	tm.OutputTokens = 0
 	tm.TotalTokens = 0
@@ -985,8 +985,8 @@ func TestMetricsIntegration(t *testing.T) {
 	})
 
 	t.Run("TokenAndErrorMetrics", func(t *testing.T) {
-		tokenMetrics := &TokenMetrics{}
-		errorMetrics := &ErrorMetrics{}
+		tokenMetrics := &LegacyTokenMetrics{}
+		errorMetrics := &LegacyErrorMetrics{}
 
 		// Simulate a failed request
 		inputTokens := int64(100)
@@ -1040,9 +1040,9 @@ func BenchmarkModelMetricsRecordRequest(b *testing.B) {
 	}
 }
 
-// BenchmarkTokenMetricsAddTokens benchmarks adding tokens to TokenMetrics
+// BenchmarkTokenMetricsAddTokens benchmarks adding tokens to LegacyTokenMetrics
 func BenchmarkTokenMetricsAddTokens(b *testing.B) {
-	metrics := &TokenMetrics{}
+	metrics := &LegacyTokenMetrics{}
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {

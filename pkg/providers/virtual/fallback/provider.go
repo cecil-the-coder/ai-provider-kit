@@ -3,15 +3,19 @@ package fallback
 import (
 	"context"
 	"fmt"
+	"sync"
+	"time"
 
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 )
 
 // FallbackProvider tries providers in order until one succeeds
 type FallbackProvider struct {
-	name      string
-	providers []types.Provider
-	config    *Config
+	name             string
+	providers        []types.Provider
+	config           *Config
+	metricsCollector types.MetricsCollector
+	mu               sync.RWMutex
 }
 
 type Config struct {
@@ -35,16 +39,64 @@ func (f *FallbackProvider) Type() types.ProviderType { return "fallback" }
 func (f *FallbackProvider) Description() string      { return "Tries providers in order until one succeeds" }
 
 func (f *FallbackProvider) GenerateChatCompletion(ctx context.Context, opts types.GenerateOptions) (types.ChatCompletionStream, error) {
-	var lastErr error
+	f.mu.RLock()
+	collector := f.metricsCollector
+	providers := f.providers
+	f.mu.RUnlock()
 
-	for i, provider := range f.providers {
+	// Record request
+	if collector != nil {
+		collector.RecordEvent(ctx, types.MetricEvent{
+			Type:         types.MetricEventRequest,
+			ProviderName: f.name,
+			ProviderType: f.Type(),
+			ModelID:      opts.Model,
+			Timestamp:    time.Now(),
+		})
+	}
+
+	var lastErr error
+	var previousProvider string
+
+	for i, provider := range providers {
 		chatProvider, ok := provider.(types.ChatProvider)
 		if !ok {
 			continue
 		}
 
+		start := time.Now()
 		stream, err := chatProvider.GenerateChatCompletion(ctx, opts)
+		latency := time.Since(start)
+
 		if err == nil {
+			// Success - emit provider switch event if not the first provider
+			if collector != nil {
+				if i > 0 {
+					collector.RecordEvent(ctx, types.MetricEvent{
+						Type:          types.MetricEventProviderSwitch,
+						ProviderName:  f.name,
+						ProviderType:  f.Type(),
+						ModelID:       opts.Model,
+						Timestamp:     time.Now(),
+						FromProvider:  previousProvider,
+						ToProvider:    provider.Name(),
+						SwitchReason:  "fallback_success",
+						AttemptNumber: i + 1,
+						Latency:       latency,
+					})
+				}
+
+				// Record success
+				collector.RecordEvent(ctx, types.MetricEvent{
+					Type:         types.MetricEventSuccess,
+					ProviderName: f.name,
+					ProviderType: f.Type(),
+					ModelID:      opts.Model,
+					Timestamp:    time.Now(),
+					Latency:      latency,
+				})
+			}
+
 			return &fallbackStream{
 				inner:         stream,
 				providerName:  provider.Name(),
@@ -52,7 +104,44 @@ func (f *FallbackProvider) GenerateChatCompletion(ctx context.Context, opts type
 			}, nil
 		}
 
+		// Record fallback attempt failure
+		if collector != nil && i > 0 {
+			collector.RecordEvent(ctx, types.MetricEvent{
+				Type:          types.MetricEventProviderSwitch,
+				ProviderName:  f.name,
+				ProviderType:  f.Type(),
+				ModelID:       opts.Model,
+				Timestamp:     time.Now(),
+				FromProvider:  previousProvider,
+				ToProvider:    provider.Name(),
+				SwitchReason:  "fallback_attempt",
+				AttemptNumber: i + 1,
+				ErrorMessage:  err.Error(),
+				Latency:       latency,
+			})
+		}
+
+		previousProvider = provider.Name()
 		lastErr = err
+	}
+
+	// All providers failed
+	if collector != nil {
+		errorMsg := "no providers available"
+		if lastErr != nil {
+			errorMsg = fmt.Sprintf("all providers failed, last error: %v", lastErr)
+		}
+
+		collector.RecordEvent(ctx, types.MetricEvent{
+			Type:          types.MetricEventError,
+			ProviderName:  f.name,
+			ProviderType:  f.Type(),
+			ModelID:       opts.Model,
+			Timestamp:     time.Now(),
+			ErrorMessage:  errorMsg,
+			ErrorType:     "fallback_all_failed",
+			AttemptNumber: len(providers),
+		})
 	}
 
 	if lastErr != nil {

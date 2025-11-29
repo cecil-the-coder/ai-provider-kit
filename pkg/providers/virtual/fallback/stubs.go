@@ -3,7 +3,7 @@ package fallback
 import (
 	"context"
 	"fmt"
-	"sync"
+	"time"
 
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 )
@@ -97,20 +97,43 @@ func (f *FallbackProvider) HealthCheck(ctx context.Context) error {
 	return nil
 }
 
-var (
-	fallbackMetricsMu sync.RWMutex
-	fallbackMetrics   = make(map[string]types.ProviderMetrics)
-)
+func (f *FallbackProvider) SetMetricsCollector(collector types.MetricsCollector) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.metricsCollector = collector
+}
 
 func (f *FallbackProvider) GetMetrics() types.ProviderMetrics {
-	fallbackMetricsMu.RLock()
-	defer fallbackMetricsMu.RUnlock()
-	if metrics, ok := fallbackMetrics[f.name]; ok {
-		return metrics
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+
+	// Aggregate metrics from child providers
+	var metrics types.ProviderMetrics
+	for _, provider := range f.providers {
+		childMetrics := provider.GetMetrics()
+		metrics.RequestCount += childMetrics.RequestCount
+		metrics.SuccessCount += childMetrics.SuccessCount
+		metrics.ErrorCount += childMetrics.ErrorCount
+		metrics.TokensUsed += childMetrics.TokensUsed
+		metrics.TotalLatency += childMetrics.TotalLatency
+
+		// Track latest times
+		if childMetrics.LastRequestTime.After(metrics.LastRequestTime) {
+			metrics.LastRequestTime = childMetrics.LastRequestTime
+		}
+		if childMetrics.LastSuccessTime.After(metrics.LastSuccessTime) {
+			metrics.LastSuccessTime = childMetrics.LastSuccessTime
+		}
+		if childMetrics.LastErrorTime.After(metrics.LastErrorTime) {
+			metrics.LastErrorTime = childMetrics.LastErrorTime
+			metrics.LastError = childMetrics.LastError
+		}
 	}
-	return types.ProviderMetrics{
-		RequestCount: 0,
-		SuccessCount: 0,
-		ErrorCount:   0,
+
+	// Calculate average latency
+	if metrics.SuccessCount > 0 {
+		metrics.AverageLatency = metrics.TotalLatency / time.Duration(metrics.SuccessCount)
 	}
+
+	return metrics
 }

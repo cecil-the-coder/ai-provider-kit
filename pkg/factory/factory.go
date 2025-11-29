@@ -13,8 +13,9 @@ import (
 
 // DefaultProviderFactory is the default factory implementation
 type DefaultProviderFactory struct {
-	providers map[types.ProviderType]func(types.ProviderConfig) types.Provider
-	mutex     sync.RWMutex
+	providers        map[types.ProviderType]func(types.ProviderConfig) types.Provider
+	mutex            sync.RWMutex
+	metricsCollector types.MetricsCollector
 }
 
 // NewProviderFactory creates a new provider factory
@@ -23,6 +24,14 @@ func NewProviderFactory() *DefaultProviderFactory {
 		providers: make(map[types.ProviderType]func(types.ProviderConfig) types.Provider),
 		mutex:     sync.RWMutex{},
 	}
+}
+
+// SetMetricsCollector sets the metrics collector for the factory
+// When set, all providers created by this factory will have the collector configured
+func (f *DefaultProviderFactory) SetMetricsCollector(collector types.MetricsCollector) {
+	f.mutex.Lock()
+	defer f.mutex.Unlock()
+	f.metricsCollector = collector
 }
 
 // RegisterProvider registers a new provider type
@@ -36,14 +45,24 @@ func (f *DefaultProviderFactory) RegisterProvider(providerType types.ProviderTyp
 // CreateProvider creates a provider instance
 func (f *DefaultProviderFactory) CreateProvider(providerType types.ProviderType, config types.ProviderConfig) (types.Provider, error) {
 	f.mutex.RLock()
-	defer f.mutex.RUnlock()
-
 	factoryFunc, exists := f.providers[providerType]
+	collector := f.metricsCollector
+	f.mutex.RUnlock()
+
 	if !exists {
 		return nil, fmt.Errorf("provider type %s not registered", providerType)
 	}
 
-	return factoryFunc(config), nil
+	provider := factoryFunc(config)
+
+	// If a metrics collector is configured and the provider supports it, set it
+	if collector != nil {
+		if metricProvider, ok := provider.(interface{ SetMetricsCollector(types.MetricsCollector) }); ok {
+			metricProvider.SetMetricsCollector(collector)
+		}
+	}
+
+	return provider, nil
 }
 
 // GetSupportedProviders returns all supported provider types

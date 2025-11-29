@@ -16,12 +16,13 @@ import (
 
 // BaseProvider provides common functionality for all providers
 type BaseProvider struct {
-	name    string
-	config  types.ProviderConfig
-	client  *http.Client
-	logger  *log.Logger
-	mutex   sync.RWMutex
-	metrics types.ProviderMetrics
+	name             string
+	config           types.ProviderConfig
+	client           *http.Client
+	logger           *log.Logger
+	mutex            sync.RWMutex
+	metrics          types.ProviderMetrics
+	metricsCollector types.MetricsCollector
 }
 
 // NewBaseProvider creates a new base provider
@@ -82,6 +83,13 @@ func (p *BaseProvider) GetConfig() types.ProviderConfig {
 	p.mutex.RLock()
 	defer p.mutex.RUnlock()
 	return p.config
+}
+
+// SetMetricsCollector sets the metrics collector for this provider
+func (p *BaseProvider) SetMetricsCollector(collector types.MetricsCollector) {
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
+	p.metricsCollector = collector
 }
 
 func (p *BaseProvider) GetModels(ctx context.Context) ([]types.Model, error) {
@@ -173,11 +181,34 @@ func (p *BaseProvider) IncrementRequestCount() {
 	p.metrics.LastRequestTime = time.Now()
 }
 
+// RecordRequest records the start of a request and emits to MetricsCollector if set
+func (p *BaseProvider) RecordRequest(ctx context.Context, modelID string) {
+	p.mutex.Lock()
+	p.metrics.RequestCount++
+	p.metrics.LastRequestTime = time.Now()
+	collector := p.metricsCollector
+	p.mutex.Unlock()
+
+	if collector != nil {
+		event := types.MetricEvent{
+			Type:         types.MetricEventRequest,
+			ProviderName: p.name,
+			ProviderType: p.config.Type,
+			ModelID:      modelID,
+			Timestamp:    time.Now(),
+		}
+		collector.RecordEvent(ctx, event)
+	}
+}
+
 // RecordSuccess records a successful API call
 func (p *BaseProvider) RecordSuccess(latency time.Duration, tokensUsed int64) {
-	p.mutex.Lock()
-	defer p.mutex.Unlock()
+	p.RecordSuccessWithModel(context.Background(), latency, tokensUsed, "")
+}
 
+// RecordSuccessWithModel records a successful API call with model information
+func (p *BaseProvider) RecordSuccessWithModel(ctx context.Context, latency time.Duration, tokensUsed int64, modelID string) {
+	p.mutex.Lock()
 	p.metrics.SuccessCount++
 	p.metrics.TotalLatency += latency
 	p.metrics.TokensUsed += tokensUsed
@@ -187,17 +218,55 @@ func (p *BaseProvider) RecordSuccess(latency time.Duration, tokensUsed int64) {
 	if p.metrics.SuccessCount > 0 {
 		p.metrics.AverageLatency = p.metrics.TotalLatency / time.Duration(p.metrics.SuccessCount)
 	}
+
+	collector := p.metricsCollector
+	p.mutex.Unlock()
+
+	if collector != nil {
+		event := types.MetricEvent{
+			Type:         types.MetricEventSuccess,
+			ProviderName: p.name,
+			ProviderType: p.config.Type,
+			ModelID:      modelID,
+			Timestamp:    time.Now(),
+			Latency:      latency,
+			TokensUsed:   tokensUsed,
+		}
+		collector.RecordEvent(ctx, event)
+	}
 }
 
 // RecordError records a failed API call
 func (p *BaseProvider) RecordError(err error) {
-	p.mutex.Lock()
-	defer p.mutex.Unlock()
+	p.RecordErrorWithModel(context.Background(), err, "", "")
+}
 
+// RecordErrorWithModel records a failed API call with model and error type information
+func (p *BaseProvider) RecordErrorWithModel(ctx context.Context, err error, modelID string, errorType string) {
+	p.mutex.Lock()
 	p.metrics.ErrorCount++
 	p.metrics.LastErrorTime = time.Now()
+
+	errorMsg := ""
 	if err != nil {
-		p.metrics.LastError = err.Error()
+		errorMsg = err.Error()
+		p.metrics.LastError = errorMsg
+	}
+
+	collector := p.metricsCollector
+	p.mutex.Unlock()
+
+	if collector != nil {
+		event := types.MetricEvent{
+			Type:         types.MetricEventError,
+			ProviderName: p.name,
+			ProviderType: p.config.Type,
+			ModelID:      modelID,
+			Timestamp:    time.Now(),
+			ErrorMessage: errorMsg,
+			ErrorType:    errorType,
+		}
+		collector.RecordEvent(ctx, event)
 	}
 }
 

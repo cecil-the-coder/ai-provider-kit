@@ -3,6 +3,7 @@ package racing
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 )
@@ -109,10 +110,43 @@ func (r *RacingProvider) HealthCheck(ctx context.Context) error {
 	return nil
 }
 
+func (r *RacingProvider) SetMetricsCollector(collector types.MetricsCollector) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.metricsCollector = collector
+}
+
 func (r *RacingProvider) GetMetrics() types.ProviderMetrics {
-	return types.ProviderMetrics{
-		RequestCount: 0,
-		SuccessCount: 0,
-		ErrorCount:   0,
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	// Aggregate metrics from child providers
+	var metrics types.ProviderMetrics
+	for _, provider := range r.providers {
+		childMetrics := provider.GetMetrics()
+		metrics.RequestCount += childMetrics.RequestCount
+		metrics.SuccessCount += childMetrics.SuccessCount
+		metrics.ErrorCount += childMetrics.ErrorCount
+		metrics.TokensUsed += childMetrics.TokensUsed
+		metrics.TotalLatency += childMetrics.TotalLatency
+
+		// Track latest times
+		if childMetrics.LastRequestTime.After(metrics.LastRequestTime) {
+			metrics.LastRequestTime = childMetrics.LastRequestTime
+		}
+		if childMetrics.LastSuccessTime.After(metrics.LastSuccessTime) {
+			metrics.LastSuccessTime = childMetrics.LastSuccessTime
+		}
+		if childMetrics.LastErrorTime.After(metrics.LastErrorTime) {
+			metrics.LastErrorTime = childMetrics.LastErrorTime
+			metrics.LastError = childMetrics.LastError
+		}
 	}
+
+	// Calculate average latency
+	if metrics.SuccessCount > 0 {
+		metrics.AverageLatency = metrics.TotalLatency / time.Duration(metrics.SuccessCount)
+	}
+
+	return metrics
 }

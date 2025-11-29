@@ -3,6 +3,7 @@ package loadbalance
 import (
 	"context"
 	"fmt"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -11,10 +12,12 @@ import (
 
 // LoadBalanceProvider distributes requests across providers
 type LoadBalanceProvider struct {
-	name      string
-	providers []types.Provider
-	config    *Config
-	counter   uint64
+	name             string
+	providers        []types.Provider
+	config           *Config
+	counter          uint64
+	metricsCollector types.MetricsCollector
+	mu               sync.RWMutex
 }
 
 type Config struct {
@@ -46,18 +49,102 @@ func (lb *LoadBalanceProvider) Type() types.ProviderType { return "loadbalance" 
 func (lb *LoadBalanceProvider) Description() string      { return "Distributes requests across providers" }
 
 func (lb *LoadBalanceProvider) GenerateChatCompletion(ctx context.Context, opts types.GenerateOptions) (types.ChatCompletionStream, error) {
-	if len(lb.providers) == 0 {
+	lb.mu.RLock()
+	providers := lb.providers
+	collector := lb.metricsCollector
+	lb.mu.RUnlock()
+
+	if len(providers) == 0 {
 		return nil, fmt.Errorf("no providers configured")
+	}
+
+	// Record request
+	if collector != nil {
+		collector.RecordEvent(ctx, types.MetricEvent{
+			Type:         types.MetricEventRequest,
+			ProviderName: lb.name,
+			ProviderType: lb.Type(),
+			ModelID:      opts.Model,
+			Timestamp:    time.Now(),
+		})
 	}
 
 	provider := lb.selectProvider()
 
 	chatProvider, ok := provider.(types.ChatProvider)
 	if !ok {
+		if collector != nil {
+			collector.RecordEvent(ctx, types.MetricEvent{
+				Type:         types.MetricEventError,
+				ProviderName: lb.name,
+				ProviderType: lb.Type(),
+				ModelID:      opts.Model,
+				Timestamp:    time.Now(),
+				ErrorMessage: "selected provider does not support chat",
+				ErrorType:    "provider_incompatible",
+			})
+		}
 		return nil, fmt.Errorf("selected provider does not support chat")
 	}
 
-	return chatProvider.GenerateChatCompletion(ctx, opts)
+	start := time.Now()
+	stream, err := chatProvider.GenerateChatCompletion(ctx, opts)
+	latency := time.Since(start)
+
+	if err != nil {
+		if collector != nil {
+			collector.RecordEvent(ctx, types.MetricEvent{
+				Type:         types.MetricEventError,
+				ProviderName: lb.name,
+				ProviderType: lb.Type(),
+				ModelID:      opts.Model,
+				Timestamp:    time.Now(),
+				ErrorMessage: err.Error(),
+				ErrorType:    "provider_error",
+				Latency:      latency,
+			})
+		}
+		return nil, err
+	}
+
+	// Record success
+	if collector != nil {
+		collector.RecordEvent(ctx, types.MetricEvent{
+			Type:         types.MetricEventSuccess,
+			ProviderName: lb.name,
+			ProviderType: lb.Type(),
+			ModelID:      opts.Model,
+			Timestamp:    time.Now(),
+			Latency:      latency,
+			Metadata: map[string]interface{}{
+				"selected_provider": provider.Name(),
+				"strategy":          string(lb.config.Strategy),
+			},
+		})
+	}
+
+	return &loadBalanceStream{
+		inner:        stream,
+		providerName: provider.Name(),
+	}, nil
+}
+
+type loadBalanceStream struct {
+	inner        types.ChatCompletionStream
+	providerName string
+}
+
+func (s *loadBalanceStream) Next() (types.ChatCompletionChunk, error) {
+	chunk, err := s.inner.Next()
+	if chunk.Metadata == nil {
+		chunk.Metadata = make(map[string]interface{})
+	}
+	chunk.Metadata["loadbalance_provider"] = s.providerName
+	return chunk, err
+}
+
+func (s *loadBalanceStream) Close() error {
+	return s.inner.Close()
 }
 
 func (lb *LoadBalanceProvider) selectProvider() types.Provider {

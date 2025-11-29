@@ -747,7 +747,8 @@ func TestPickBestCandidate_EmptyCandidates(t *testing.T) {
 		Strategy: StrategyWeighted,
 	})
 
-	_, err := rp.pickBestCandidate([]*raceResult{})
+	ctx := context.Background()
+	_, err := rp.pickBestCandidate(ctx, []*raceResult{}, []string{}, make(map[string]time.Duration), "test-model")
 
 	if err == nil {
 		t.Fatal("expected error for empty candidates")
@@ -771,7 +772,9 @@ func TestPickBestCandidate_SingleCandidate(t *testing.T) {
 		},
 	}
 
-	stream, err := rp.pickBestCandidate(candidates)
+	ctx := context.Background()
+	raceLatencies := map[string]time.Duration{"only-provider": 100 * time.Millisecond}
+	stream, err := rp.pickBestCandidate(ctx, candidates, []string{"only-provider"}, raceLatencies, "test-model")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
