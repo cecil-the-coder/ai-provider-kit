@@ -7,7 +7,20 @@ import (
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 )
 
-// GenerateRequest is a local type until backendtypes is ready
+// GenerateRequest is a local type until backendtypes is ready.
+//
+// Metadata can contain "extension_config" key with per-extension settings:
+//
+//	{
+//	  "extension_config": {
+//	    "caching": {"enabled": false},
+//	    "logging": {"enabled": true, "level": "debug"},
+//	    "metrics": {"interval": 60}
+//	  }
+//	}
+//
+// Extensions can use GetExtensionConfig() or IsExtensionEnabled() to check their configuration.
+// By default, extensions are enabled unless explicitly disabled via {"enabled": false}.
 type GenerateRequest struct {
 	Provider    string                 `json:"provider,omitempty"`
 	Model       string                 `json:"model,omitempty"`
@@ -32,12 +45,28 @@ type ExtensionConfig struct {
 	Config  map[string]interface{} `yaml:"config"`
 }
 
+// Priority constants define the execution order for extensions.
+// Lower priority values execute first.
+// Priority ranges:
+//   - 0-199: Critical/Security extensions (e.g., authentication, rate limiting)
+//   - 200-399: Caching and data layer extensions
+//   - 400-599: Transform and business logic extensions
+//   - 600-799: Monitoring and metrics extensions
+//   - 800-999: Logging and auditing extensions
+const (
+	PrioritySecurity  = 100 // Security-critical extensions (auth, rate limiting)
+	PriorityCache     = 200 // Caching extensions
+	PriorityTransform = 500 // Transform and business logic (default)
+	PriorityLogging   = 900 // Logging and auditing extensions
+)
+
 // Extension defines the interface for backend extensions
 type Extension interface {
 	Name() string
 	Version() string
 	Description() string
 	Dependencies() []string
+	Priority() int
 
 	Initialize(config map[string]interface{}) error
 	Shutdown(ctx context.Context) error
@@ -70,6 +99,7 @@ type ExtensionRegistry interface {
 type BaseExtension struct{}
 
 func (b *BaseExtension) Dependencies() []string                                         { return nil }
+func (b *BaseExtension) Priority() int                                                  { return PriorityTransform }
 func (b *BaseExtension) RegisterRoutes(r RouteRegistrar) error                          { return nil }
 func (b *BaseExtension) BeforeGenerate(ctx context.Context, req *GenerateRequest) error { return nil }
 func (b *BaseExtension) AfterGenerate(ctx context.Context, req *GenerateRequest, resp *GenerateResponse) error {

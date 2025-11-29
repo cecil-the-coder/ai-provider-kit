@@ -3,7 +3,10 @@ package extensions
 import (
 	"context"
 	"fmt"
+	"sort"
 	"sync"
+
+	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 )
 
 type registry struct {
@@ -48,6 +51,13 @@ func (r *registry) List() []Extension {
 	for _, name := range r.order {
 		result = append(result, r.extensions[name])
 	}
+
+	// Sort by priority (lower runs first), using stable sort to preserve
+	// registration order for extensions with the same priority
+	sort.SliceStable(result, func(i, j int) bool {
+		return result[i].Priority() < result[j].Priority()
+	})
+
 	return result
 }
 
@@ -102,7 +112,15 @@ func (r *registry) topologicalSort() ([]string, error) {
 			return nil
 		}
 
-		for _, dep := range ext.Dependencies() {
+		// Use capability-based dependency checking
+		var deps []string
+		if declarer, ok := ext.(DependencyDeclarer); ok {
+			deps = declarer.Dependencies()
+		} else {
+			deps = ext.Dependencies()
+		}
+
+		for _, dep := range deps {
 			if err := visit(dep); err != nil {
 				return err
 			}
@@ -119,4 +137,95 @@ func (r *registry) topologicalSort() ([]string, error) {
 	}
 
 	return result, nil
+}
+
+// CallBeforeGenerate invokes BeforeGenerate hooks on all registered extensions that implement it.
+// Extensions are called in priority order (lowest priority first).
+// If any extension returns an error, iteration stops and the error is returned.
+func (r *registry) CallBeforeGenerate(ctx context.Context, req *GenerateRequest) error {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	exts := r.List()
+	for _, ext := range exts {
+		if hook, ok := ext.(BeforeGenerateHook); ok {
+			if err := hook.BeforeGenerate(ctx, req); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// CallAfterGenerate invokes AfterGenerate hooks on all registered extensions that implement it.
+// Extensions are called in priority order (lowest priority first).
+// If any extension returns an error, iteration stops and the error is returned.
+func (r *registry) CallAfterGenerate(ctx context.Context, req *GenerateRequest, resp *GenerateResponse) error {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	exts := r.List()
+	for _, ext := range exts {
+		if hook, ok := ext.(AfterGenerateHook); ok {
+			if err := hook.AfterGenerate(ctx, req, resp); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// CallOnProviderError invokes OnProviderError hooks on all registered extensions that implement it.
+// Extensions are called in priority order (lowest priority first).
+// If any extension returns an error, iteration stops and the error is returned.
+func (r *registry) CallOnProviderError(ctx context.Context, provider types.Provider, err error) error {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	exts := r.List()
+	for _, ext := range exts {
+		if handler, ok := ext.(ProviderErrorHandler); ok {
+			if hookErr := handler.OnProviderError(ctx, provider, err); hookErr != nil {
+				return hookErr
+			}
+		}
+	}
+	return nil
+}
+
+// CallOnProviderSelected invokes OnProviderSelected hooks on all registered extensions that implement it.
+// Extensions are called in priority order (lowest priority first).
+// If any extension returns an error, iteration stops and the error is returned.
+func (r *registry) CallOnProviderSelected(ctx context.Context, provider types.Provider) error {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	exts := r.List()
+	for _, ext := range exts {
+		if hook, ok := ext.(ProviderSelectionHook); ok {
+			if err := hook.OnProviderSelected(ctx, provider); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// CallRegisterRoutes invokes RegisterRoutes on all registered extensions that implement it.
+// Extensions are called in registration order.
+// If any extension returns an error, iteration stops and the error is returned.
+func (r *registry) CallRegisterRoutes(registrar RouteRegistrar) error {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	// Use registration order, not priority order, for route registration
+	for _, name := range r.order {
+		ext := r.extensions[name]
+		if provider, ok := ext.(RouteProvider); ok {
+			if err := provider.RegisterRoutes(registrar); err != nil {
+				return fmt.Errorf("failed to register routes for extension %s: %w", name, err)
+			}
+		}
+	}
+	return nil
 }

@@ -20,6 +20,7 @@ type mockExtension struct {
 	version      string
 	description  string
 	deps         []string
+	priority     int
 	initialized  bool
 	shutdown     bool
 	initError    error
@@ -37,6 +38,13 @@ func (m *mockExtension) Dependencies() []string {
 		return m.deps
 	}
 	return m.BaseExtension.Dependencies()
+}
+
+func (m *mockExtension) Priority() int {
+	if m.priority != 0 {
+		return m.priority
+	}
+	return m.BaseExtension.Priority()
 }
 
 func (m *mockExtension) Initialize(config map[string]interface{}) error {
@@ -747,5 +755,140 @@ func TestRouteRegistrar(t *testing.T) {
 
 		err := ext.RegisterRoutes(registrar)
 		assert.NoError(t, err)
+	})
+}
+
+// TestBaseExtension_Priority tests default priority
+func TestBaseExtension_Priority(t *testing.T) {
+	t.Run("base extension returns default priority", func(t *testing.T) {
+		base := &BaseExtension{}
+		assert.Equal(t, PriorityTransform, base.Priority())
+		assert.Equal(t, 500, base.Priority())
+	})
+}
+
+// TestRegistry_PriorityOrdering tests priority-based execution ordering
+func TestRegistry_PriorityOrdering(t *testing.T) {
+	t.Run("extensions are ordered by priority (lower first)", func(t *testing.T) {
+		reg := NewRegistry()
+
+		// Register extensions in random order with different priorities
+		ext1 := &mockExtension{name: "logging", priority: PriorityLogging}     // 900
+		ext2 := &mockExtension{name: "security", priority: PrioritySecurity}   // 100
+		ext3 := &mockExtension{name: "cache", priority: PriorityCache}         // 200
+		ext4 := &mockExtension{name: "transform", priority: PriorityTransform} // 500
+
+		_ = reg.Register(ext1)
+		_ = reg.Register(ext2)
+		_ = reg.Register(ext3)
+		_ = reg.Register(ext4)
+
+		list := reg.List()
+		assert.Len(t, list, 4)
+
+		// Verify order: security (100), cache (200), transform (500), logging (900)
+		assert.Equal(t, "security", list[0].Name())
+		assert.Equal(t, "cache", list[1].Name())
+		assert.Equal(t, "transform", list[2].Name())
+		assert.Equal(t, "logging", list[3].Name())
+	})
+
+	t.Run("same priority preserves registration order (stable sort)", func(t *testing.T) {
+		reg := NewRegistry()
+
+		// Register multiple extensions with the same priority
+		ext1 := &mockExtension{name: "ext1", priority: PriorityTransform}
+		ext2 := &mockExtension{name: "ext2", priority: PriorityTransform}
+		ext3 := &mockExtension{name: "ext3", priority: PriorityTransform}
+
+		_ = reg.Register(ext1)
+		_ = reg.Register(ext2)
+		_ = reg.Register(ext3)
+
+		list := reg.List()
+		assert.Len(t, list, 3)
+
+		// Should preserve registration order
+		assert.Equal(t, "ext1", list[0].Name())
+		assert.Equal(t, "ext2", list[1].Name())
+		assert.Equal(t, "ext3", list[2].Name())
+	})
+
+	t.Run("mixed priorities with stable sort for same priority", func(t *testing.T) {
+		reg := NewRegistry()
+
+		// Mix of different priorities and same priorities
+		ext1 := &mockExtension{name: "log1", priority: PriorityLogging}         // 900
+		ext2 := &mockExtension{name: "sec1", priority: PrioritySecurity}        // 100
+		ext3 := &mockExtension{name: "log2", priority: PriorityLogging}         // 900
+		ext4 := &mockExtension{name: "sec2", priority: PrioritySecurity}        // 100
+		ext5 := &mockExtension{name: "cache1", priority: PriorityCache}         // 200
+		ext6 := &mockExtension{name: "transform1", priority: PriorityTransform} // 500
+
+		_ = reg.Register(ext1)
+		_ = reg.Register(ext2)
+		_ = reg.Register(ext3)
+		_ = reg.Register(ext4)
+		_ = reg.Register(ext5)
+		_ = reg.Register(ext6)
+
+		list := reg.List()
+		assert.Len(t, list, 6)
+
+		// Verify priority order with stable sort
+		assert.Equal(t, "sec1", list[0].Name())       // Security, registered first
+		assert.Equal(t, "sec2", list[1].Name())       // Security, registered second
+		assert.Equal(t, "cache1", list[2].Name())     // Cache
+		assert.Equal(t, "transform1", list[3].Name()) // Transform
+		assert.Equal(t, "log1", list[4].Name())       // Logging, registered first
+		assert.Equal(t, "log2", list[5].Name())       // Logging, registered second
+	})
+
+	t.Run("extensions without explicit priority use default", func(t *testing.T) {
+		reg := NewRegistry()
+
+		// Extensions using BaseExtension default priority (500)
+		ext1 := &mockExtension{name: "default1"}                             // Uses BaseExtension.Priority() = 500
+		ext2 := &mockExtension{name: "security", priority: PrioritySecurity} // 100
+		ext3 := &mockExtension{name: "default2"}                             // Uses BaseExtension.Priority() = 500
+
+		_ = reg.Register(ext1)
+		_ = reg.Register(ext2)
+		_ = reg.Register(ext3)
+
+		list := reg.List()
+		assert.Len(t, list, 3)
+
+		// Security first (100), then defaults in registration order (500, 500)
+		assert.Equal(t, "security", list[0].Name())
+		assert.Equal(t, "default1", list[1].Name())
+		assert.Equal(t, "default2", list[2].Name())
+	})
+
+	t.Run("custom priority values work correctly", func(t *testing.T) {
+		reg := NewRegistry()
+
+		// Use custom priority values
+		ext1 := &mockExtension{name: "ext1", priority: 50}  // Very high priority
+		ext2 := &mockExtension{name: "ext2", priority: 300} // Medium priority
+		ext3 := &mockExtension{name: "ext3", priority: 999} // Very low priority
+
+		_ = reg.Register(ext1)
+		_ = reg.Register(ext2)
+		_ = reg.Register(ext3)
+
+		list := reg.List()
+		assert.Len(t, list, 3)
+
+		assert.Equal(t, "ext1", list[0].Name())
+		assert.Equal(t, "ext2", list[1].Name())
+		assert.Equal(t, "ext3", list[2].Name())
+	})
+
+	t.Run("priority constants have correct values", func(t *testing.T) {
+		assert.Equal(t, 100, PrioritySecurity)
+		assert.Equal(t, 200, PriorityCache)
+		assert.Equal(t, 500, PriorityTransform)
+		assert.Equal(t, 900, PriorityLogging)
 	})
 }
