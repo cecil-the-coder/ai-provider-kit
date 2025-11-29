@@ -320,7 +320,7 @@ func TestModelCache_GetModels_ConcurrentFetch(t *testing.T) {
 	fetchCount := 0
 	var mu sync.Mutex
 
-	fetchFunc := func() ([]types.Model, error) {
+	fetchFunc := func() ([]types.Model, error) { //nolint:unparam // error is intentionally always nil in this test
 		mu.Lock()
 		fetchCount++
 		mu.Unlock()
@@ -336,7 +336,13 @@ func TestModelCache_GetModels_ConcurrentFetch(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			_, _ = cache.GetModels(fetchFunc, nil)
+			models, err := cache.GetModels(fetchFunc, nil)
+			if err != nil {
+				t.Errorf("unexpected error: %v", err)
+			}
+			if len(models) == 0 {
+				t.Error("expected models, got none")
+			}
 		}()
 	}
 

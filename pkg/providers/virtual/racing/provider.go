@@ -125,7 +125,7 @@ func (r *RacingProvider) selectWinner(ctx context.Context, results chan *raceRes
 	}
 }
 
-func (r *RacingProvider) firstWinsStrategy(ctx context.Context, results chan *raceResult) (types.ChatCompletionStream, error) {
+func (r *RacingProvider) firstWinsStrategy(_ context.Context, results chan *raceResult) (types.ChatCompletionStream, error) {
 	var lastErr error
 	for result := range results {
 		if result.err == nil && result.stream != nil {

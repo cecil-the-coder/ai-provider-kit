@@ -877,6 +877,7 @@ func TestLoadBalanceProvider_ContextCancellation(t *testing.T) {
 	if err != nil {
 		// If the provider checked context, it would fail here
 		// Our mock doesn't, so we just verify no panic occurred
+		t.Logf("Provider returned error with cancelled context: %v", err)
 	}
 }
 

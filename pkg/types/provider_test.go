@@ -199,12 +199,12 @@ func TestHealthStatus(t *testing.T) {
 }
 
 // UpdateStatus is a helper method to update health status
-func (hs *HealthStatus) UpdateStatus(healthy bool, statusCode int, responseTime float64, message string) {
-	hs.Healthy = healthy
-	hs.StatusCode = statusCode
-	hs.ResponseTime = responseTime
-	hs.Message = message
-	hs.LastChecked = time.Now()
+func (h *HealthStatus) UpdateStatus(healthy bool, statusCode int, responseTime float64, message string) {
+	h.Healthy = healthy
+	h.StatusCode = statusCode
+	h.ResponseTime = responseTime
+	h.Message = message
+	h.LastChecked = time.Now()
 }
 
 // TestOAuthConfig tests the OAuthConfig struct

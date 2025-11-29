@@ -428,7 +428,7 @@ func TestGetCombinedRateLimits(t *testing.T) {
 	// Create a mock server
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"is_free_tier": false,
 			"usage":        0.0,
 		})
@@ -629,7 +629,7 @@ func TestChatCompletionWithMockServer(t *testing.T) {
 		// Skip rate limit check requests
 		if r.URL.Path == "/v1/key" {
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(map[string]interface{}{
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
 				"is_free_tier": false,
 			})
 			return

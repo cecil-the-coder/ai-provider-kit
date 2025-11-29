@@ -14,10 +14,10 @@ func TestNewAuthManager(t *testing.T) {
 		storage := NewMemoryTokenStorage(nil)
 		manager := NewAuthManager(storage, nil)
 		if manager == nil {
-			t.Error("Expected non-nil manager")
+			t.Fatal("Expected non-nil manager")
 		}
 		if manager.config == nil {
-			t.Error("Expected default config to be set")
+			t.Fatal("Expected default config to be set")
 		}
 	})
 
@@ -27,7 +27,7 @@ func TestNewAuthManager(t *testing.T) {
 		config.TokenStorage.File.Backup.Enabled = false // Disable ticker for tests
 		manager := NewAuthManager(storage, config)
 		if manager == nil {
-			t.Error("Expected non-nil manager")
+			t.Fatal("Expected non-nil manager")
 		}
 		if manager.config != config {
 			t.Error("Expected config to be set")

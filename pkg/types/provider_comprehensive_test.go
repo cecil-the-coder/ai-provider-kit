@@ -418,17 +418,17 @@ func TestHealthStatusHelpers(t *testing.T) {
 }
 
 // IsHealthy checks if the status is healthy
-func (h *HealthStatus) IsHealthy() bool {
+func (h HealthStatus) IsHealthy() bool {
 	return h.Healthy
 }
 
 // IsResponseTimeFast checks if response time is under 100ms
-func (h *HealthStatus) IsResponseTimeFast() bool {
+func (h HealthStatus) IsResponseTimeFast() bool {
 	return h.ResponseTime < 100.0
 }
 
 // IsStale checks if the health check is older than 5 minutes
-func (h *HealthStatus) IsStale() bool {
+func (h HealthStatus) IsStale() bool {
 	return time.Since(h.LastChecked) > 5*time.Minute
 }
 

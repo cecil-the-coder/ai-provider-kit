@@ -209,7 +209,7 @@ func (m *mockAuthManager) Logout(ctx context.Context, provider string) error {
 
 func (m *mockAuthManager) RefreshAllTokens(ctx context.Context) error { return nil }
 func (m *mockAuthManager) GetAuthenticatedProviders() []string {
-	var providers []string
+	providers := make([]string, 0, len(m.authenticators))
 	for name := range m.authenticators {
 		providers = append(providers, name)
 	}

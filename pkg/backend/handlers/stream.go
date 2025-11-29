@@ -112,7 +112,7 @@ func (h *StreamHandler) parseAndValidateRequest(r *http.Request) (*backendtypes.
 }
 
 // setupSSE sets up SSE headers and returns the flusher
-func (h *StreamHandler) setupSSE(w http.ResponseWriter, r *http.Request) (http.Flusher, *handlerError) {
+func (h *StreamHandler) setupSSE(w http.ResponseWriter, _ *http.Request) (http.Flusher, *handlerError) {
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")

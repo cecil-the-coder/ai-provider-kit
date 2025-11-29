@@ -394,10 +394,10 @@ func GetAllModels(ctx context.Context, providers []ModelProvider) ([]struct {
 	Provider string
 	Models   []Model
 }, error) {
-	var result []struct {
+	result := make([]struct {
 		Provider string
 		Models   []Model
-	}
+	}, 0, len(providers))
 
 	for _, provider := range providers {
 		var providerName string

@@ -225,13 +225,9 @@ func (c *HTTPClient) cloneRequest(orig *http.Request) *http.Request {
 
 // shouldRetryError determines if an error should trigger a retry
 func (c *HTTPClient) shouldRetryError(_ error, attempts int) bool {
-	if attempts >= c.config.MaxRetries {
-		return false
-	}
-
 	// Check for retryable error types
 	// This could be extended with more sophisticated error detection
-	return true
+	return attempts < c.config.MaxRetries
 }
 
 // shouldRetryStatus determines if a status code should trigger a retry
