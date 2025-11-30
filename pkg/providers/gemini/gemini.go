@@ -1581,8 +1581,8 @@ func (p *GeminiProvider) GetAuthURL(redirectURI string, state string) string {
 	// #nosec G101 - This is a public Google OAuth client ID, not a secret credential
 	clientID := "936875672307-4r5272sc9k0c2e2d6dr3uj63btk3revo.apps.googleusercontent.com"
 
-	// TODO: In the future, allow custom client IDs to be configured
-	// For now, we use the default client ID for all configurations
+	// Note: This uses the default client ID for Gemini/Google Cloud OAuth.
+	// Custom client ID configuration can be added in future versions.
 
 	// Build the OAuth URL with required parameters
 	authURL := fmt.Sprintf("%s?client_id=%s&redirect_uri=%s&response_type=code&scope=%s&state=%s",
