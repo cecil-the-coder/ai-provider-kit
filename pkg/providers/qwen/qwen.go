@@ -213,21 +213,19 @@ func (p *QwenProvider) GenerateChatCompletion(
 		return stream, nil
 	}
 
-	// Non-streaming path
-	var responseMessage types.ChatMessage
-	var usage *types.Usage
-	var err error
-
-	switch {
-	case p.authHelper.OAuthManager != nil:
-		// Use OAuth with automatic failover and refresh
-		responseMessage, usage, _, err = p.executeWithOAuthMessage(ctx, options)
-	case p.authHelper.KeyManager != nil:
-		// Use API key authentication
-		responseMessage, usage, _, err = p.executeWithAPIKeyMessage(ctx, options)
-	default:
-		err = fmt.Errorf("no authentication method configured")
-	}
+	// Non-streaming path - use ExecuteWithAuthMessage
+	responseMessage, usage, err := p.authHelper.ExecuteWithAuthMessage(ctx, options,
+		// OAuth operation
+		func(ctx context.Context, cred *types.OAuthCredentialSet) (types.ChatMessage, *types.Usage, error) {
+			msg, u, _, err := p.executeWithOAuthMessage(ctx, options)
+			return msg, u, err
+		},
+		// API key operation
+		func(ctx context.Context, apiKey string) (types.ChatMessage, *types.Usage, error) {
+			msg, u, _, err := p.executeWithAPIKeyMessage(ctx, options)
+			return msg, u, err
+		},
+	)
 
 	if err != nil {
 		p.RecordError(err)
@@ -376,17 +374,6 @@ func (p *QwenProvider) executeWithOAuthMessage(ctx context.Context, options type
 func (p *QwenProvider) executeWithAPIKeyMessage(ctx context.Context, options types.GenerateOptions) (types.ChatMessage, *types.Usage, string, error) {
 	providerConfig := p.GetConfig()
 
-	// Determine API key to use
-	var authToken string
-	switch {
-	case p.authHelper.KeyManager != nil && len(p.authHelper.KeyManager.GetKeys()) > 0:
-		authToken = p.authHelper.KeyManager.GetKeys()[0]
-	case providerConfig.APIKey != "":
-		authToken = providerConfig.APIKey
-	default:
-		return types.ChatMessage{}, nil, "", fmt.Errorf("no API key configured for qwen")
-	}
-
 	// Get model and base URL
 	model := p.GetDefaultModel()
 	baseURL := providerConfig.BaseURL
@@ -397,13 +384,24 @@ func (p *QwenProvider) executeWithAPIKeyMessage(ctx context.Context, options typ
 	// Build request using the new helper
 	request := p.buildQwenRequest(options)
 
-	// Make API call with message support
-	message, usage, err := p.makeAPICallWithMessage(ctx, baseURL+"/chat/completions", request, authToken)
+	// Use KeyManager for automatic failover
+	var responseMessage types.ChatMessage
+	_, usage, err := p.authHelper.KeyManager.ExecuteWithFailover(ctx,
+		func(ctx context.Context, apiKey string) (string, *types.Usage, error) {
+			// Make API call with this API key
+			msg, u, err := p.makeAPICallWithMessage(ctx, baseURL+"/chat/completions", request, apiKey)
+			if err != nil {
+				return "", nil, err
+			}
+			responseMessage = msg
+			return msg.Content, u, nil
+		})
+
 	if err != nil {
 		return types.ChatMessage{}, nil, "", fmt.Errorf("qwen API call failed: %w", err)
 	}
 
-	return message, usage, model, nil
+	return responseMessage, usage, model, nil
 }
 
 // makeAPICallWithMessage makes an API call to Qwen and returns a ChatMessage with tool call support

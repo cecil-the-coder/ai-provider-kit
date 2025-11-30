@@ -93,6 +93,7 @@ func (h *AuthHelper) GetAuthMethod() string {
 
 // ExecuteWithAuth executes an operation using available authentication methods
 // Automatically chooses OAuth over API key, with failover support
+// Returns string content only - use ExecuteWithAuthMessage for full message support
 func (h *AuthHelper) ExecuteWithAuth(
 	ctx context.Context,
 	options types.GenerateOptions,
@@ -145,6 +146,60 @@ func (h *AuthHelper) ExecuteWithAuth(
 	return "", nil, fmt.Errorf("no authentication configured for %s", h.ProviderName)
 }
 
+// ExecuteWithAuthMessage executes an operation using available authentication methods
+// Returns full ChatMessage to preserve tool calls. Use this for chat completions.
+func (h *AuthHelper) ExecuteWithAuthMessage(
+	ctx context.Context,
+	options types.GenerateOptions,
+	oauthOperation func(context.Context, *types.OAuthCredentialSet) (types.ChatMessage, *types.Usage, error),
+	apiKeyOperation func(context.Context, string) (types.ChatMessage, *types.Usage, error),
+) (types.ChatMessage, *types.Usage, error) {
+	log.Printf("🟡 [AuthHelper] ExecuteWithAuthMessage ENTRY - provider=%s, Stream=%v", h.ProviderName, options.Stream)
+	log.Printf("🟡 [AuthHelper] OAuthManager=%p, KeyManager=%p", h.OAuthManager, h.KeyManager)
+
+	// Check for context-injected OAuth token first
+	if contextToken := GetOAuthToken(ctx); contextToken != "" {
+		log.Printf("[AuthHelper] Using context-injected OAuth token")
+		// Create a temporary credential set with the injected token
+		cred := &types.OAuthCredentialSet{
+			AccessToken: contextToken,
+		}
+		return oauthOperation(ctx, cred)
+	}
+
+	// Check if streaming is requested
+	if options.Stream {
+		log.Printf("🟡 [AuthHelper] Delegating to executeStreamWithAuthMessage")
+		return h.executeStreamWithAuthMessage(ctx, options, oauthOperation, apiKeyOperation)
+	}
+
+	log.Printf("🟡 [AuthHelper] Non-streaming path")
+	// Non-streaming path
+	if h.OAuthManager != nil {
+		log.Printf("🟡 [AuthHelper] Trying OAuth failover...")
+		result, usage, err := h.OAuthManager.ExecuteWithFailoverMessage(ctx, oauthOperation)
+		if err == nil {
+			log.Printf("🟢 [AuthHelper] OAuth SUCCESS")
+			return result, usage, nil
+		}
+		log.Printf("🔴 [AuthHelper] OAuth FAILED: %v", err)
+	} else {
+		log.Printf("⚠️  [AuthHelper] OAuthManager is NIL")
+	}
+
+	if h.KeyManager != nil {
+		log.Printf("🟡 [AuthHelper] Trying API key failover...")
+		result, usage, err := h.KeyManager.ExecuteWithFailoverMessage(ctx, apiKeyOperation)
+		log.Printf("🟡 [AuthHelper] API key result - err=%v", err)
+		return result, usage, err
+	} else {
+		log.Printf("⚠️  [AuthHelper] KeyManager is NIL")
+	}
+
+	log.Printf("🔴 [AuthHelper] NO AUTH CONFIGURED ERROR")
+	return types.ChatMessage{}, nil, fmt.Errorf("no authentication configured for %s", h.ProviderName)
+}
+
 // executeStreamWithAuth handles streaming operations with authentication
 func (h *AuthHelper) executeStreamWithAuth(
 	ctx context.Context,
@@ -189,6 +244,52 @@ func (h *AuthHelper) executeStreamWithAuth(
 	}
 
 	return "", nil, fmt.Errorf("no valid authentication available for streaming")
+}
+
+// executeStreamWithAuthMessage handles streaming operations with authentication (message variant)
+func (h *AuthHelper) executeStreamWithAuthMessage(
+	ctx context.Context,
+	_ types.GenerateOptions,
+	oauthOperation func(context.Context, *types.OAuthCredentialSet) (types.ChatMessage, *types.Usage, error),
+	apiKeyOperation func(context.Context, string) (types.ChatMessage, *types.Usage, error),
+) (types.ChatMessage, *types.Usage, error) {
+	// Check for context-injected OAuth token first
+	if contextToken := GetOAuthToken(ctx); contextToken != "" {
+		log.Printf("[AuthHelper] Using context-injected OAuth token for streaming")
+		cred := &types.OAuthCredentialSet{
+			AccessToken: contextToken,
+		}
+		_, _, err := oauthOperation(ctx, cred)
+		if err == nil {
+			return types.ChatMessage{Content: "streaming_with_context_oauth"}, &types.Usage{}, nil
+		}
+	}
+
+	// For streaming, we need to return a mock result since the actual streaming
+	// is handled by provider-specific streaming methods
+	if h.OAuthManager != nil {
+		// Try OAuth first
+		creds := h.OAuthManager.GetCredentials()
+		for _, cred := range creds {
+			_, _, err := oauthOperation(ctx, cred)
+			if err == nil {
+				return types.ChatMessage{Content: "streaming_with_oauth"}, &types.Usage{}, nil
+			}
+		}
+	}
+
+	if h.KeyManager != nil {
+		// Try API keys
+		keys := h.KeyManager.GetKeys()
+		for _, key := range keys {
+			_, _, err := apiKeyOperation(ctx, key)
+			if err == nil {
+				return types.ChatMessage{Content: "streaming_with_api_key"}, &types.Usage{}, nil
+			}
+		}
+	}
+
+	return types.ChatMessage{}, nil, fmt.Errorf("no valid authentication available for streaming")
 }
 
 // SetAuthHeaders sets appropriate authentication headers on HTTP requests

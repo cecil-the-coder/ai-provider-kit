@@ -198,6 +198,44 @@ func (m *KeyManager) ReportFailure(key string, err error) {
 	}
 }
 
+// ExecuteWithFailoverMessage attempts an operation with automatic failover (message variant)
+func (m *KeyManager) ExecuteWithFailoverMessage(ctx context.Context, operation func(context.Context, string) (types.ChatMessage, *types.Usage, error)) (types.ChatMessage, *types.Usage, error) {
+	if len(m.keys) == 0 {
+		return types.ChatMessage{}, nil, fmt.Errorf("no API keys configured for %s", m.providerName)
+	}
+
+	var lastErr error
+	attemptsLimit := min(len(m.keys), 3) // Try up to 3 keys or all keys, whichever is less
+
+	for attempt := 0; attempt < attemptsLimit; attempt++ {
+		// Get next available key
+		key, err := m.GetNextKey()
+		if err != nil {
+			// All keys exhausted or unavailable
+			if lastErr != nil {
+				return types.ChatMessage{}, nil, fmt.Errorf("%s: all API keys failed, last error: %w", m.providerName, lastErr)
+			}
+			return types.ChatMessage{}, nil, err
+		}
+
+		// Execute the operation
+		result, usage, err := operation(ctx, key)
+		if err != nil {
+			lastErr = err
+			m.ReportFailure(key, err)
+			continue
+		}
+
+		// Success!
+		m.ReportSuccess(key)
+		return result, usage, nil
+	}
+
+	// All attempts failed
+	return types.ChatMessage{}, nil, fmt.Errorf("%s: all %d failover attempts failed, last error: %w",
+		m.providerName, attemptsLimit, lastErr)
+}
+
 // GetKeys returns a copy of the keys slice
 func (m *KeyManager) GetKeys() []string {
 	if m == nil {

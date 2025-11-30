@@ -188,23 +188,23 @@ func (p *GeminiProvider) GenerateChatCompletion(
 		return stream, nil
 	}
 
-	// Non-streaming path - use auth helper ExecuteWithAuth
-	var content string
+	// Non-streaming path - use ExecuteWithAuthMessage
+	var responseMessage types.ChatMessage
 	var usage *types.Usage
 	var err error
 
-	// Define OAuth operation
-	oauthOperation := func(ctx context.Context, cred *types.OAuthCredentialSet) (string, *types.Usage, error) {
-		return p.makeAPICallWithToken(ctx, options, "", cred.AccessToken)
+	// Define OAuth operation (returns ChatMessage)
+	oauthOperation := func(ctx context.Context, cred *types.OAuthCredentialSet) (types.ChatMessage, *types.Usage, error) {
+		return p.makeAPICallWithTokenMessage(ctx, options, "", cred.AccessToken)
 	}
 
-	// Define API key operation
-	apiKeyOperation := func(ctx context.Context, apiKey string) (string, *types.Usage, error) {
-		return p.makeAPICallWithAPIKey(ctx, options, "", apiKey)
+	// Define API key operation (returns ChatMessage)
+	apiKeyOperation := func(ctx context.Context, apiKey string) (types.ChatMessage, *types.Usage, error) {
+		return p.makeAPICallWithAPIKeyMessage(ctx, options, "", apiKey)
 	}
 
-	// Use shared auth helper to execute with automatic failover
-	content, usage, err = p.authHelper.ExecuteWithAuth(ctx, options, oauthOperation, apiKeyOperation)
+	// Use shared auth helper to execute with automatic failover (preserves tool calls)
+	responseMessage, usage, err = p.authHelper.ExecuteWithAuthMessage(ctx, options, oauthOperation, apiKeyOperation)
 
 	if err != nil {
 		p.RecordError(err)
@@ -219,15 +219,29 @@ func (p *GeminiProvider) GenerateChatCompletion(
 	}
 	p.RecordSuccess(latency, tokensUsed)
 
-	// Return stream with response
+	// Return stream with full message support (including tool calls)
 	var usageValue types.Usage
 	if usage != nil {
 		usageValue = *usage
 	}
+
+	chunk := types.ChatCompletionChunk{
+		Content: responseMessage.Content,
+		Done:    true,
+		Usage:   usageValue,
+	}
+
+	// Include tool calls if present
+	if len(responseMessage.ToolCalls) > 0 {
+		chunk.Choices = []types.ChatChoice{
+			{
+				Message: responseMessage,
+			},
+		}
+	}
+
 	return &MockStream{
-		chunks: []types.ChatCompletionChunk{
-			{Content: content, Done: true, Usage: usageValue},
-		},
+		chunks: []types.ChatCompletionChunk{chunk},
 	}, nil
 }
 
@@ -246,11 +260,11 @@ func (p *GeminiProvider) getProjectID() string {
 	return ""
 }
 
-// makeAPICallWithToken makes an API call with a specific OAuth access token (for multi-OAuth)
-func (p *GeminiProvider) makeAPICallWithToken(ctx context.Context, options types.GenerateOptions, model string, accessToken string) (string, *types.Usage, error) {
+// makeAPICallWithTokenMessage makes an API call with OAuth token (returns ChatMessage)
+func (p *GeminiProvider) makeAPICallWithTokenMessage(ctx context.Context, options types.GenerateOptions, model string, accessToken string) (types.ChatMessage, *types.Usage, error) {
 	// Apply rate limiting
 	if err := p.applyRateLimiting(ctx); err != nil {
-		return "", nil, err
+		return types.ChatMessage{}, nil, err
 	}
 
 	// Determine model to use
@@ -259,18 +273,18 @@ func (p *GeminiProvider) makeAPICallWithToken(ctx context.Context, options types
 	// Execute OAuth API call
 	responseBody, err := p.executeOAuthAPIRequest(ctx, model, accessToken, options)
 	if err != nil {
-		return "", nil, err
+		return types.ChatMessage{}, nil, err
 	}
 
-	// Parse OAuth API response
-	return p.parseOAuthGeminiResponse(responseBody, model)
+	// Parse OAuth API response to ChatMessage
+	return p.parseOAuthGeminiResponseMessage(responseBody, model)
 }
 
-// makeAPICallWithAPIKey makes an API call with a specific API key (for standard Gemini API)
-func (p *GeminiProvider) makeAPICallWithAPIKey(ctx context.Context, options types.GenerateOptions, model string, apiKey string) (string, *types.Usage, error) {
+// makeAPICallWithAPIKeyMessage makes an API call with API key (returns ChatMessage)
+func (p *GeminiProvider) makeAPICallWithAPIKeyMessage(ctx context.Context, options types.GenerateOptions, model string, apiKey string) (types.ChatMessage, *types.Usage, error) {
 	// Apply rate limiting
 	if err := p.applyRateLimiting(ctx); err != nil {
-		return "", nil, err
+		return types.ChatMessage{}, nil, err
 	}
 
 	// Determine model to use
@@ -282,11 +296,11 @@ func (p *GeminiProvider) makeAPICallWithAPIKey(ctx context.Context, options type
 	// Execute API call
 	responseBody, err := p.executeStandardAPIRequest(ctx, model, apiKey, requestBody)
 	if err != nil {
-		return "", nil, err
+		return types.ChatMessage{}, nil, err
 	}
 
-	// Parse standard Gemini API response
-	return p.parseStandardGeminiResponse(responseBody, model)
+	// Parse standard Gemini API response to ChatMessage
+	return p.parseStandardGeminiResponseMessage(responseBody, model)
 }
 
 // prepareRequestForOAuth prepares request for OAuth-based CloudCode API
@@ -1231,29 +1245,30 @@ func (p *GeminiProvider) executeOAuthAPIRequest(ctx context.Context, model strin
 	return responseBody, nil
 }
 
-// parseOAuthGeminiResponse parses an OAuth-based CloudCode API response
-func (p *GeminiProvider) parseOAuthGeminiResponse(responseBody []byte, _ string) (string, *types.Usage, error) {
+// parseOAuthGeminiResponseMessage parses OAuth response and returns ChatMessage
+func (p *GeminiProvider) parseOAuthGeminiResponseMessage(responseBody []byte, _ string) (types.ChatMessage, *types.Usage, error) {
 	// Parse response (CloudCode API returns wrapped response)
 	var wrapperResp CloudCodeResponseWrapper
 	if err := json.Unmarshal(responseBody, &wrapperResp); err != nil {
-		return "", nil, fmt.Errorf("failed to parse CloudCode response: %w", err)
+		return types.ChatMessage{}, nil, fmt.Errorf("failed to parse CloudCode response: %w", err)
 	}
 	apiResp := wrapperResp.Response
 
 	// Extract content
 	if len(apiResp.Candidates) == 0 {
-		return "", nil, fmt.Errorf("no candidates in Gemini response")
+		return types.ChatMessage{}, nil, fmt.Errorf("no candidates in Gemini response")
 	}
 
 	candidate := apiResp.Candidates[0]
 	if candidate.FinishReason == "SAFETY" {
-		return "", nil, fmt.Errorf("content was filtered due to safety concerns")
+		return types.ChatMessage{}, nil, fmt.Errorf("content was filtered due to safety concerns")
 	}
 
 	if len(candidate.Content.Parts) == 0 {
-		return "", nil, fmt.Errorf("no parts in candidate content")
+		return types.ChatMessage{}, nil, fmt.Errorf("no parts in candidate content")
 	}
 
+	// Extract text content and tool calls
 	var fullText strings.Builder
 	for _, part := range candidate.Content.Parts {
 		if part.Text != "" {
@@ -1261,9 +1276,10 @@ func (p *GeminiProvider) parseOAuthGeminiResponse(responseBody []byte, _ string)
 		}
 	}
 
-	result := fullText.String()
-	if result == "" {
-		return "", nil, fmt.Errorf("empty response from Gemini API")
+	message := types.ChatMessage{
+		Role:      candidate.Content.Role,
+		Content:   fullText.String(),
+		ToolCalls: convertGeminiFunctionCallsToUniversal(candidate.Content.Parts),
 	}
 
 	// Extract usage information
@@ -1276,5 +1292,54 @@ func (p *GeminiProvider) parseOAuthGeminiResponse(responseBody []byte, _ string)
 		}
 	}
 
-	return result, usage, nil
+	return message, usage, nil
+}
+
+// parseStandardGeminiResponseMessage parses standard Gemini response and returns ChatMessage
+func (p *GeminiProvider) parseStandardGeminiResponseMessage(responseBody []byte, _ string) (types.ChatMessage, *types.Usage, error) {
+	// Parse response (standard Gemini API returns direct response)
+	var apiResp GenerateContentResponse
+	if err := json.Unmarshal(responseBody, &apiResp); err != nil {
+		return types.ChatMessage{}, nil, fmt.Errorf("failed to parse Gemini response: %w", err)
+	}
+
+	// Extract content
+	if len(apiResp.Candidates) == 0 {
+		return types.ChatMessage{}, nil, fmt.Errorf("no candidates in Gemini response")
+	}
+
+	candidate := apiResp.Candidates[0]
+	if candidate.FinishReason == "SAFETY" {
+		return types.ChatMessage{}, nil, fmt.Errorf("content was filtered due to safety concerns")
+	}
+
+	if len(candidate.Content.Parts) == 0 {
+		return types.ChatMessage{}, nil, fmt.Errorf("no parts in candidate content")
+	}
+
+	// Extract text content and tool calls
+	var fullText strings.Builder
+	for _, part := range candidate.Content.Parts {
+		if part.Text != "" {
+			fullText.WriteString(part.Text)
+		}
+	}
+
+	message := types.ChatMessage{
+		Role:      candidate.Content.Role,
+		Content:   fullText.String(),
+		ToolCalls: convertGeminiFunctionCallsToUniversal(candidate.Content.Parts),
+	}
+
+	// Extract usage information
+	var usage *types.Usage
+	if apiResp.UsageMetadata != nil {
+		usage = &types.Usage{
+			PromptTokens:     apiResp.UsageMetadata.PromptTokenCount,
+			CompletionTokens: apiResp.UsageMetadata.CandidatesTokenCount,
+			TotalTokens:      apiResp.UsageMetadata.TotalTokenCount,
+		}
+	}
+
+	return message, usage, nil
 }

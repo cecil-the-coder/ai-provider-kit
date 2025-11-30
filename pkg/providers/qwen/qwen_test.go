@@ -272,8 +272,8 @@ func TestQwenProvider_GenerateChatCompletion_NoAuth(t *testing.T) {
 		t.Error("Expected error when not authenticated")
 	}
 
-	if err.Error() != "no authentication method configured" {
-		t.Errorf("Expected 'no authentication method configured', got '%s'", err.Error())
+	if err.Error() != "no authentication configured for qwen" {
+		t.Errorf("Expected 'no authentication configured for qwen', got '%s'", err.Error())
 	}
 }
 

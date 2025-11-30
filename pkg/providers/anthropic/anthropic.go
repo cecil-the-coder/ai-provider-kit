@@ -414,49 +414,39 @@ func (p *AnthropicProvider) GenerateChatCompletion(
 	}
 
 	log.Printf("🟣 [Anthropic] Taking NON-STREAMING path")
-	// Non-streaming path - use auth helper
+	// Non-streaming path - use auth helper with message support
 	requestData := p.prepareRequest(options, model)
 	log.Printf("🟣 [Anthropic] Request prepared")
 
-	// Define OAuth operation
-	oauthOperation := func(ctx context.Context, cred *types.OAuthCredentialSet) (string, *types.Usage, error) {
+	// Define OAuth operation (returns ChatMessage)
+	oauthOperation := func(ctx context.Context, cred *types.OAuthCredentialSet) (types.ChatMessage, *types.Usage, error) {
 		log.Printf("🟣 [Anthropic] OAuth operation called with cred.ID=%s", cred.ID)
-		return p.makeAPICallWithOAuth(ctx, requestData, cred.AccessToken)
-	}
-
-	// Define API key operation
-	apiKeyOperation := func(ctx context.Context, apiKey string) (string, *types.Usage, error) {
-		log.Printf("🟣 [Anthropic] API key operation called")
-		response, responseUsage, err := p.makeAPICallWithKey(ctx, requestData, apiKey)
+		response, responseUsage, err := p.makeAPICallWithOAuthMessage(ctx, requestData, cred.AccessToken)
 		if err != nil {
-			return "", nil, err
+			return types.ChatMessage{}, nil, err
 		}
-
-		if len(response.Content) == 0 {
-			return "", nil, fmt.Errorf("no content in API response")
-		}
-
-		// Extract text content from first text block
-		var content string
-		for _, block := range response.Content {
-			if block.Type == "text" {
-				content = block.Text
-				break
-			}
-		}
-
-		return content, responseUsage, nil
+		return response, responseUsage, nil
 	}
 
-	log.Printf("🟣 [Anthropic] About to call authHelper.ExecuteWithAuth")
-	// Use auth helper to execute with automatic failover
-	responseText, usage, err := p.authHelper.ExecuteWithAuth(ctx, options, oauthOperation, apiKeyOperation)
+	// Define API key operation (returns ChatMessage)
+	apiKeyOperation := func(ctx context.Context, apiKey string) (types.ChatMessage, *types.Usage, error) {
+		log.Printf("🟣 [Anthropic] API key operation called")
+		response, responseUsage, err := p.makeAPICallWithKeyMessage(ctx, requestData, apiKey)
+		if err != nil {
+			return types.ChatMessage{}, nil, err
+		}
+		return response, responseUsage, nil
+	}
+
+	log.Printf("🟣 [Anthropic] About to call authHelper.ExecuteWithAuthMessage")
+	// Use auth helper to execute with automatic failover (preserves tool calls)
+	responseMessage, usage, err := p.authHelper.ExecuteWithAuthMessage(ctx, options, oauthOperation, apiKeyOperation)
 	if err != nil {
-		log.Printf("🔴 [Anthropic] ExecuteWithAuth returned ERROR: %v", err)
+		log.Printf("🔴 [Anthropic] ExecuteWithAuthMessage returned ERROR: %v", err)
 		p.RecordError(err)
 		return nil, err
 	}
-	log.Printf("🟢 [Anthropic] ExecuteWithAuth returned SUCCESS")
+	log.Printf("🟢 [Anthropic] ExecuteWithAuthMessage returned SUCCESS")
 
 	// Record success
 	latency := time.Since(startTime)
@@ -467,16 +457,28 @@ func (p *AnthropicProvider) GenerateChatCompletion(
 	p.RecordSuccess(latency, tokensUsed)
 	p.lastUsage = usage
 
-	// Note: For now we return simple text responses.
-	// Tool call support would require changing the entire flow to return
-	// the full response instead of just text.
+	// Return full message with tool call support
 	var usageValue types.Usage
 	if usage != nil {
 		usageValue = *usage
 	}
-	return common.NewMockStream([]types.ChatCompletionChunk{
-		{Content: responseText, Done: true, Usage: usageValue},
-	}), nil
+
+	chunk := types.ChatCompletionChunk{
+		Content: responseMessage.Content,
+		Done:    true,
+		Usage:   usageValue,
+	}
+
+	// Include tool calls if present
+	if len(responseMessage.ToolCalls) > 0 {
+		chunk.Choices = []types.ChatChoice{
+			{
+				Message: responseMessage,
+			},
+		}
+	}
+
+	return common.NewMockStream([]types.ChatCompletionChunk{chunk}), nil
 }
 
 // executeStreamWithAuth handles streaming requests with authentication
@@ -720,8 +722,17 @@ func (p *AnthropicProvider) makeAPICallWithKey(ctx context.Context, requestData 
 	return &response, usage, nil
 }
 
-// makeAPICallWithOAuth makes API call with OAuth authentication
+// makeAPICallWithOAuth makes API call with OAuth authentication (legacy - returns string)
 func (p *AnthropicProvider) makeAPICallWithOAuth(ctx context.Context, requestData AnthropicRequest, accessToken string) (string, *types.Usage, error) {
+	message, usage, err := p.makeAPICallWithOAuthMessage(ctx, requestData, accessToken)
+	if err != nil {
+		return "", nil, err
+	}
+	return message.Content, usage, nil
+}
+
+// makeAPICallWithOAuthMessage makes API call with OAuth authentication (returns ChatMessage)
+func (p *AnthropicProvider) makeAPICallWithOAuthMessage(ctx context.Context, requestData AnthropicRequest, accessToken string) (types.ChatMessage, *types.Usage, error) {
 	// CRITICAL: Add Claude Code system prompt as FIRST element
 	claudeCodePrompt := map[string]string{
 		"type": "text",
@@ -746,13 +757,13 @@ func (p *AnthropicProvider) makeAPICallWithOAuth(ctx context.Context, requestDat
 	// Create HTTP request
 	req, err := http.NewRequestWithContext(ctx, "POST", url, nil)
 	if err != nil {
-		return "", nil, fmt.Errorf("failed to create request: %w", err)
+		return types.ChatMessage{}, nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
 	// Prepare JSON body using request handler
 	jsonBody, err := p.requestHandler.PrepareJSONBody(requestData)
 	if err != nil {
-		return "", nil, err
+		return types.ChatMessage{}, nil, err
 	}
 	req.Body = io.NopCloser(jsonBody)
 
@@ -770,7 +781,7 @@ func (p *AnthropicProvider) makeAPICallWithOAuth(ctx context.Context, requestDat
 
 	resp, err := p.client.Do(req)
 	if err != nil {
-		return "", nil, fmt.Errorf("request failed: %w", err)
+		return types.ChatMessage{}, nil, fmt.Errorf("request failed: %w", err)
 	}
 	defer func() {
 		//nolint:staticcheck // Empty branch is intentional - we ignore close errors
@@ -787,29 +798,36 @@ func (p *AnthropicProvider) makeAPICallWithOAuth(ctx context.Context, requestDat
 		body, _ := io.ReadAll(resp.Body)
 		var errorResponse AnthropicErrorResponse
 		if parseErr := json.Unmarshal(body, &errorResponse); parseErr == nil {
-			return "", nil, fmt.Errorf("anthropic API error: %d - %s", resp.StatusCode, errorResponse.Error.Message)
+			return types.ChatMessage{}, nil, fmt.Errorf("anthropic API error: %d - %s", resp.StatusCode, errorResponse.Error.Message)
 		}
-		return "", nil, fmt.Errorf("anthropic API error: %d - %s", resp.StatusCode, string(body))
+		return types.ChatMessage{}, nil, fmt.Errorf("anthropic API error: %d - %s", resp.StatusCode, string(body))
 	}
 
 	// Parse successful response using response parser
 	var response AnthropicResponse
 	if err := p.responseParser.ParseJSON(resp, &response); err != nil {
-		return "", nil, fmt.Errorf("failed to parse API response: %w", err)
+		return types.ChatMessage{}, nil, fmt.Errorf("failed to parse API response: %w", err)
 	}
 
 	if len(response.Content) == 0 {
-		return "", nil, fmt.Errorf("no content in API response")
+		return types.ChatMessage{}, nil, fmt.Errorf("no content in API response")
 	}
 
-	// Extract text content from first text block
-	var content string
+	// Convert response to ChatMessage with tool call support
+	message := types.ChatMessage{
+		Role: response.Role,
+	}
+
+	// Extract text content
 	for _, block := range response.Content {
 		if block.Type == "text" {
-			content = block.Text
+			message.Content = block.Text
 			break
 		}
 	}
+
+	// Extract tool calls
+	message.ToolCalls = convertAnthropicContentToToolCalls(response.Content)
 
 	usage := &types.Usage{
 		PromptTokens:     response.Usage.InputTokens,
@@ -817,7 +835,33 @@ func (p *AnthropicProvider) makeAPICallWithOAuth(ctx context.Context, requestDat
 		TotalTokens:      response.Usage.InputTokens + response.Usage.OutputTokens,
 	}
 
-	return content, usage, nil
+	return message, usage, nil
+}
+
+// makeAPICallWithKeyMessage makes API call with API key authentication (returns ChatMessage)
+func (p *AnthropicProvider) makeAPICallWithKeyMessage(ctx context.Context, requestData AnthropicRequest, apiKey string) (types.ChatMessage, *types.Usage, error) {
+	response, usage, err := p.makeAPICallWithKey(ctx, requestData, apiKey)
+	if err != nil {
+		return types.ChatMessage{}, nil, err
+	}
+
+	// Convert response to ChatMessage with tool call support
+	message := types.ChatMessage{
+		Role: response.Role,
+	}
+
+	// Extract text content
+	for _, block := range response.Content {
+		if block.Type == "text" {
+			message.Content = block.Text
+			break
+		}
+	}
+
+	// Extract tool calls
+	message.ToolCalls = convertAnthropicContentToToolCalls(response.Content)
+
+	return message, usage, nil
 }
 
 // convertToAnthropicTools converts universal tools to Anthropic format
