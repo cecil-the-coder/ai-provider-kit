@@ -1623,10 +1623,8 @@ func TestVirtualModels_ModelValidation(t *testing.T) {
 				if tt.errContains != "" && !containsString(err.Error(), tt.errContains) {
 					t.Errorf("expected error to contain '%s', got: %v", tt.errContains, err)
 				}
-			} else {
-				if err != nil {
-					t.Errorf("unexpected validation error: %v", err)
-				}
+			} else if err != nil {
+				t.Errorf("unexpected validation error: %v", err)
 			}
 		})
 	}
@@ -2174,10 +2172,8 @@ func TestVirtualModel_ConfigurationValidation(t *testing.T) {
 				if tt.errContains != "" && !containsString(err.Error(), tt.errContains) {
 					t.Errorf("expected error to contain '%s', got: %v", tt.errContains, err)
 				}
-			} else {
-				if err != nil {
-					t.Errorf("unexpected validation error: %v", err)
-				}
+			} else if err != nil {
+				t.Errorf("unexpected validation error: %v", err)
 			}
 		})
 	}

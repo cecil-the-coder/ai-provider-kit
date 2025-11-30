@@ -18,7 +18,9 @@ import (
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/base"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common/auth"
+	commonconfig "github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common/config"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common/streaming"
+	"github.com/cecil-the-coder/ai-provider-kit/pkg/ratelimit"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 	"github.com/google/uuid"
 	"golang.org/x/time/rate"
@@ -45,28 +47,34 @@ type QwenProvider struct {
 
 // NewQwenProvider creates a new Qwen provider
 func NewQwenProvider(config types.ProviderConfig) *QwenProvider {
-	// Initialize common provider components using the factory pattern
-	components, err := base.InitializeProviderComponents(base.ProviderInitConfig{
-		ProviderType:             types.ProviderTypeQwen,
-		ProviderName:             "qwen",
-		Config:                   config,
-		HTTPTimeout:              10 * time.Second,
-		EnableClientRateLimiting: true,
-		ClientRateLimitRPM:       60, // Qwen free tier: 60 requests/minute
-		ClientRateLimitBurst:     60,
-	})
-	if err != nil {
-		// This should rarely happen, but log and return nil if it does
-		log.Printf("Failed to initialize Qwen provider: %v", err)
-		return nil
+	// Use the shared config helper
+	configHelper := commonconfig.NewConfigHelper("Qwen", types.ProviderTypeQwen)
+
+	// Merge with defaults and extract configuration
+	mergedConfig := configHelper.MergeWithDefaults(config)
+
+	client := &http.Client{
+		Timeout: configHelper.ExtractTimeout(mergedConfig),
 	}
 
+	// Create auth helper
+	authHelper := auth.NewAuthHelper("qwen", mergedConfig, client)
+
+	// Setup API keys using shared helper
+	authHelper.SetupAPIKeys()
+
+	// Create rate limit helper
+	rateLimitHelper := common.NewRateLimitHelper(ratelimit.NewQwenParser(false))
+
+	// Qwen needs client-side rate limiting (60 RPM for free tier)
+	clientSideLimiter := rate.NewLimiter(rate.Every(time.Minute/60), 60)
+
 	p := &QwenProvider{
-		BaseProvider:      components.BaseProvider,
-		httpClient:        components.HTTPClient,
-		authHelper:        components.AuthHelper,
-		rateLimitHelper:   components.RateLimitHelper,
-		clientSideLimiter: components.ClientSideLimiter,
+		BaseProvider:      base.NewBaseProvider("qwen", mergedConfig, client, log.Default()),
+		httpClient:        client,
+		authHelper:        authHelper,
+		rateLimitHelper:   rateLimitHelper,
+		clientSideLimiter: clientSideLimiter,
 	}
 
 	// Setup OAuth with provider-specific refresh function

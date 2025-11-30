@@ -105,7 +105,7 @@ func TestVirtualModels_Config(t *testing.T) {
 				DisplayName: "Default Model",
 				Description: "Default virtual model",
 				Strategy:    StrategyWeighted, // Override default strategy
-				TimeoutMS:   3000,            // Override default timeout
+				TimeoutMS:   3000,             // Override default timeout
 				Providers: []ProviderReference{
 					{Name: "provider1", Model: "model1"},
 				},
@@ -136,17 +136,17 @@ func TestVirtualModels_Config(t *testing.T) {
 	}
 
 	// Test GetVirtualModel with defaults
-	customVmConfig := config.GetVirtualModel("custom")
-	if customVmConfig == nil {
+	customVMConfig := config.GetVirtualModel("custom")
+	if customVMConfig == nil {
 		t.Fatal("Expected virtual model config for 'custom', got nil")
 	}
 
-	if customVmConfig.Strategy != StrategyFirstWins {
-		t.Errorf("Expected default strategy 'first_wins', got '%s'", customVmConfig.Strategy)
+	if customVMConfig.Strategy != StrategyFirstWins {
+		t.Errorf("Expected default strategy 'first_wins', got '%s'", customVMConfig.Strategy)
 	}
 
-	if customVmConfig.TimeoutMS != 5000 {
-		t.Errorf("Expected default timeout 5000, got %d", customVmConfig.TimeoutMS)
+	if customVMConfig.TimeoutMS != 5000 {
+		t.Errorf("Expected default timeout 5000, got %d", customVMConfig.TimeoutMS)
 	}
 
 	// Test GetEffectiveTimeout

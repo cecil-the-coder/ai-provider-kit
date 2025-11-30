@@ -3,6 +3,7 @@
 package anthropic
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -1251,6 +1252,219 @@ func (p *AnthropicProvider) SupportsResponsesAPI() bool {
 
 func (p *AnthropicProvider) GetToolFormat() types.ToolFormat {
 	return types.ToolFormatAnthropic
+}
+
+// TestConnectivity performs a lightweight connectivity test using the /v1/models endpoint
+func (p *AnthropicProvider) TestConnectivity(ctx context.Context) error {
+	// For OAuth tokens starting with sk-ant-oat (Anthropic's OAuth prefix),
+	// the models endpoint doesn't work, so we need to test differently
+	if p.authHelper.OAuthManager != nil && len(p.authHelper.OAuthManager.GetCredentials()) > 0 {
+		creds := p.authHelper.OAuthManager.GetCredentials()
+		if len(creds) > 0 && strings.HasPrefix(creds[0].AccessToken, "sk-ant-oat") {
+			// For Anthropic OAuth, test with a minimal messages API call
+			return p.testConnectivityWithMessagesAPI(ctx, creds[0].AccessToken, "oauth")
+		}
+	}
+
+	// For API keys or non-Anthropic OAuth tokens, use the models endpoint
+	// Check if we have any authentication credentials
+	hasAPIKeys := p.authHelper.KeyManager != nil && len(p.authHelper.KeyManager.GetKeys()) > 0
+	hasOAuth := p.authHelper.OAuthManager != nil && len(p.authHelper.OAuthManager.GetCredentials()) > 0
+
+	if !hasAPIKeys && !hasOAuth {
+		return types.NewAuthError(types.ProviderTypeAnthropic, "no API keys or OAuth credentials configured").
+			WithOperation("test_connectivity")
+	}
+
+	// Try API keys first
+	if hasAPIKeys {
+		keys := p.authHelper.KeyManager.GetKeys()
+		if err := p.testConnectivityWithModelsEndpoint(ctx, keys[0], "api_key"); err == nil {
+			return nil
+		}
+	}
+
+	// Try OAuth credentials
+	if hasOAuth {
+		creds := p.authHelper.OAuthManager.GetCredentials()
+		return p.testConnectivityWithModelsEndpoint(ctx, creds[0].AccessToken, "oauth")
+	}
+
+	return types.NewAuthError(types.ProviderTypeAnthropic, "no valid authentication credentials available").
+		WithOperation("test_connectivity")
+}
+
+// testConnectivityWithModelsEndpoint tests connectivity using the /v1/models endpoint
+func (p *AnthropicProvider) testConnectivityWithModelsEndpoint(ctx context.Context, credential, authType string) error {
+	config := p.GetConfig()
+	baseURL := config.BaseURL
+	if baseURL == "" {
+		baseURL = "https://api.anthropic.com"
+	}
+	url := baseURL + "/v1/models?limit=1" // Limit to 1 model for lightweight test
+
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return types.NewNetworkError(types.ProviderTypeAnthropic, "failed to create connectivity test request").
+			WithOperation("test_connectivity").
+			WithOriginalErr(err)
+	}
+
+	// Set authentication headers
+	p.authHelper.SetAuthHeaders(req, credential, authType)
+	p.authHelper.SetProviderSpecificHeaders(req)
+
+	// Make the request with a shorter timeout for connectivity testing
+	client := &http.Client{
+		Timeout: 10 * time.Second,
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return types.NewNetworkError(types.ProviderTypeAnthropic, "connectivity test failed").
+			WithOperation("test_connectivity").
+			WithOriginalErr(err)
+	}
+	defer func() {
+		//nolint:staticcheck // Empty branch is intentional - we ignore close errors
+		if err := resp.Body.Close(); err != nil {
+			// Log the error if a logger is available, or ignore it
+		}
+	}()
+
+	// Check response status
+	if resp.StatusCode == http.StatusUnauthorized {
+		return types.NewAuthError(types.ProviderTypeAnthropic, "invalid authentication credentials").
+			WithOperation("test_connectivity").
+			WithStatusCode(resp.StatusCode)
+	}
+
+	if resp.StatusCode == http.StatusForbidden {
+		return types.NewAuthError(types.ProviderTypeAnthropic, "credentials do not have access to models endpoint").
+			WithOperation("test_connectivity").
+			WithStatusCode(resp.StatusCode)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return types.NewServerError(types.ProviderTypeAnthropic, resp.StatusCode,
+			fmt.Sprintf("connectivity test failed: %s", string(body))).
+			WithOperation("test_connectivity")
+	}
+
+	// Try to parse a small portion of the response to ensure it's valid JSON
+	decoder := json.NewDecoder(io.LimitReader(resp.Body, 1024))
+	var testResponse struct {
+		Data []interface{} `json:"data"`
+	}
+	if err := decoder.Decode(&testResponse); err != nil {
+		return types.NewInvalidRequestError(types.ProviderTypeAnthropic, "invalid response from models endpoint").
+			WithOperation("test_connectivity").
+			WithOriginalErr(err)
+	}
+
+	return nil
+}
+
+// testConnectivityWithMessagesAPI tests connectivity using a minimal messages API call
+func (p *AnthropicProvider) testConnectivityWithMessagesAPI(ctx context.Context, accessToken, authType string) error {
+	config := p.GetConfig()
+	baseURL := config.BaseURL
+	if baseURL == "" {
+		baseURL = "https://api.anthropic.com"
+	}
+	url := baseURL + "/v1/messages"
+
+	// Create a minimal request for connectivity testing
+	minimalRequest := map[string]interface{}{
+		"model":      "claude-3-haiku-20240307", // Use smallest model
+		"max_tokens": 1, // Minimal token usage
+		"messages": []map[string]string{
+			{
+				"role":    "user",
+				"content": "Hi", // Minimal content
+			},
+		},
+	}
+
+	jsonBody, err := json.Marshal(minimalRequest)
+	if err != nil {
+		return types.NewInvalidRequestError(types.ProviderTypeAnthropic, "failed to marshal test request").
+			WithOperation("test_connectivity").
+			WithOriginalErr(err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(jsonBody))
+	if err != nil {
+		return types.NewNetworkError(types.ProviderTypeAnthropic, "failed to create connectivity test request").
+			WithOperation("test_connectivity").
+			WithOriginalErr(err)
+	}
+
+	// Set authentication headers
+	p.authHelper.SetAuthHeaders(req, accessToken, authType)
+	p.authHelper.SetProviderSpecificHeaders(req)
+	req.Header.Set("Content-Type", "application/json")
+
+	// Make the request with a shorter timeout for connectivity testing
+	client := &http.Client{
+		Timeout: 15 * time.Second, // Slightly longer for message API
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return types.NewNetworkError(types.ProviderTypeAnthropic, "connectivity test failed").
+			WithOperation("test_connectivity").
+			WithOriginalErr(err)
+	}
+	defer func() {
+		//nolint:staticcheck // Empty branch is intentional - we ignore close errors
+		if err := resp.Body.Close(); err != nil {
+			// Log the error if a logger is available, or ignore it
+		}
+	}()
+
+	// Check response status
+	if resp.StatusCode == http.StatusUnauthorized {
+		return types.NewAuthError(types.ProviderTypeAnthropic, "invalid OAuth token").
+			WithOperation("test_connectivity").
+			WithStatusCode(resp.StatusCode)
+	}
+
+	if resp.StatusCode == http.StatusForbidden {
+		return types.NewAuthError(types.ProviderTypeAnthropic, "OAuth token does not have access to messages endpoint").
+			WithOperation("test_connectivity").
+			WithStatusCode(resp.StatusCode)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return types.NewServerError(types.ProviderTypeAnthropic, resp.StatusCode,
+			fmt.Sprintf("connectivity test failed: %s", string(body))).
+			WithOperation("test_connectivity")
+	}
+
+	// Try to parse a small portion of the response to ensure it's valid
+	decoder := json.NewDecoder(io.LimitReader(resp.Body, 1024))
+	var testResponse struct {
+		ID      string `json:"id"`
+		Type    string `json:"type"`
+		Role    string `json:"role"`
+		Content []interface{} `json:"content"`
+	}
+	if err := decoder.Decode(&testResponse); err != nil {
+		return types.NewInvalidRequestError(types.ProviderTypeAnthropic, "invalid response from messages endpoint").
+			WithOperation("test_connectivity").
+			WithOriginalErr(err)
+	}
+
+	// Verify we got a valid message response
+	if testResponse.Type != "message" || testResponse.Role != "assistant" {
+		return types.NewInvalidRequestError(types.ProviderTypeAnthropic, "unexpected response format from messages endpoint").
+			WithOperation("test_connectivity")
+	}
+
+	return nil
 }
 
 // makeStreamingAPICallWithKey makes a streaming API call with API key

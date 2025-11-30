@@ -21,7 +21,6 @@ type RacingProvider struct {
 	mu               sync.RWMutex
 }
 
-
 type Strategy string
 
 const (
@@ -257,10 +256,10 @@ func (r *RacingProvider) firstWinsStrategy(ctx context.Context, results chan *ra
 		}
 
 		return &racingStream{
-			inner:           winner.stream,
-			provider:        winner.provider.Name(),
-			latency:         winner.latency,
-			virtualModel:    virtualModelName,
+			inner:            winner.stream,
+			provider:         winner.provider.Name(),
+			latency:          winner.latency,
+			virtualModel:     virtualModelName,
 			virtualModelDesc: virtualModelDesc,
 		}, nil
 	}
@@ -373,10 +372,10 @@ func (r *RacingProvider) pickBestCandidate(ctx context.Context, candidates []*ra
 		}
 
 		return &racingStream{
-			inner:           best.stream,
-			provider:        best.provider.Name(),
-			latency:         best.latency,
-			virtualModel:    virtualModelName,
+			inner:            best.stream,
+			provider:         best.provider.Name(),
+			latency:          best.latency,
+			virtualModel:     virtualModelName,
 			virtualModelDesc: virtualModelDesc,
 		}, nil
 	}
@@ -395,10 +394,10 @@ func (r *RacingProvider) pickBestCandidate(ctx context.Context, candidates []*ra
 		}
 
 		return &racingStream{
-			inner:           candidates[0].stream,
-			provider:        candidates[0].provider.Name(),
-			latency:         candidates[0].latency,
-			virtualModel:    virtualModelName,
+			inner:            candidates[0].stream,
+			provider:         candidates[0].provider.Name(),
+			latency:          candidates[0].latency,
+			virtualModel:     virtualModelName,
 			virtualModelDesc: virtualModelDesc,
 		}, nil
 	}
@@ -563,10 +562,10 @@ func (r *RacingProvider) emitRaceWinnerEvents(ctx context.Context, collector typ
 }
 
 type racingStream struct {
-	inner         types.ChatCompletionStream
-	provider      string
-	latency       time.Duration
-	virtualModel  string
+	inner            types.ChatCompletionStream
+	provider         string
+	latency          time.Duration
+	virtualModel     string
 	virtualModelDesc string
 }
 

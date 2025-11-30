@@ -1424,3 +1424,204 @@ func TestOpenAIProvider_ReasoningFieldFallback(t *testing.T) {
 		})
 	}
 }
+
+// TestOpenAIProvider_TestConnectivity tests the TestConnectivity method
+func TestOpenAIProvider_TestConnectivity(t *testing.T) {
+	t.Run("SuccessfulConnectivity", func(t *testing.T) {
+		// Create a mock HTTP server that returns a valid models response
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Verify the request is for the models endpoint
+			assert.Equal(t, "/models", r.URL.Path)
+			assert.Equal(t, "GET", r.Method)
+
+			// Verify authorization header
+			authHeader := r.Header.Get("Authorization")
+			assert.Equal(t, "Bearer sk-test-key", authHeader)
+
+			// Return a valid models response
+			response := map[string]interface{}{
+				"object": "list",
+				"data": []interface{}{
+					map[string]interface{}{
+						"id":      "gpt-4",
+						"object":  "model",
+						"created": 1687882411,
+						"owned_by": "openai",
+					},
+				},
+			}
+
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(response)
+		}))
+		defer server.Close()
+
+		config := types.ProviderConfig{
+			Type:    types.ProviderTypeOpenAI,
+			APIKey:  "sk-test-key",
+			BaseURL: server.URL,
+		}
+		provider := NewOpenAIProvider(config)
+
+		err := provider.TestConnectivity(context.Background())
+		assert.NoError(t, err)
+	})
+
+	t.Run("NoAPIKeys", func(t *testing.T) {
+		config := types.ProviderConfig{
+			Type: types.ProviderTypeOpenAI,
+			// No API key configured
+		}
+		provider := NewOpenAIProvider(config)
+
+		err := provider.TestConnectivity(context.Background())
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "no API keys configured")
+	})
+
+	t.Run("InvalidAPIKey", func(t *testing.T) {
+		// Create a mock server that returns unauthorized
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusUnauthorized)
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+				"error": map[string]interface{}{
+					"message": "Invalid API key",
+					"type":    "invalid_request_error",
+					"code":    "invalid_api_key",
+				},
+			})
+		}))
+		defer server.Close()
+
+		config := types.ProviderConfig{
+			Type:    types.ProviderTypeOpenAI,
+			APIKey:  "sk-invalid-key",
+			BaseURL: server.URL,
+		}
+		provider := NewOpenAIProvider(config)
+
+		err := provider.TestConnectivity(context.Background())
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "invalid API key")
+	})
+
+	t.Run("ForbiddenAccess", func(t *testing.T) {
+		// Create a mock server that returns forbidden
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusForbidden)
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+				"error": map[string]interface{}{
+					"message": "API key does not have access to models endpoint",
+					"type":    "invalid_request_error",
+				},
+			})
+		}))
+		defer server.Close()
+
+		config := types.ProviderConfig{
+			Type:    types.ProviderTypeOpenAI,
+			APIKey:  "sk-forbidden-key",
+			BaseURL: server.URL,
+		}
+		provider := NewOpenAIProvider(config)
+
+		err := provider.TestConnectivity(context.Background())
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "does not have access to models endpoint")
+	})
+
+	t.Run("InvalidResponse", func(t *testing.T) {
+		// Create a mock server that returns invalid JSON
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte("invalid json response"))
+		}))
+		defer server.Close()
+
+		config := types.ProviderConfig{
+			Type:    types.ProviderTypeOpenAI,
+			APIKey:  "sk-test-key",
+			BaseURL: server.URL,
+		}
+		provider := NewOpenAIProvider(config)
+
+		err := provider.TestConnectivity(context.Background())
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "invalid response from models endpoint")
+	})
+
+	t.Run("UnexpectedResponseFormat", func(t *testing.T) {
+		// Create a mock server that returns unexpected response format
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			response := map[string]interface{}{
+				"object": "not-a-list", // Wrong object type
+				"data":   []interface{}{},
+			}
+
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(response)
+		}))
+		defer server.Close()
+
+		config := types.ProviderConfig{
+			Type:    types.ProviderTypeOpenAI,
+			APIKey:  "sk-test-key",
+			BaseURL: server.URL,
+		}
+		provider := NewOpenAIProvider(config)
+
+		err := provider.TestConnectivity(context.Background())
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "unexpected response format from models endpoint")
+	})
+
+	t.Run("NetworkError", func(t *testing.T) {
+		// Use an invalid URL to simulate network error
+		config := types.ProviderConfig{
+			Type:    types.ProviderTypeOpenAI,
+			APIKey:  "sk-test-key",
+			BaseURL: "http://invalid-url-that-does-not-exist.local",
+		}
+		provider := NewOpenAIProvider(config)
+
+		err := provider.TestConnectivity(context.Background())
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "connectivity test failed")
+	})
+
+	t.Run("ContextCancellation", func(t *testing.T) {
+		// Create a mock server that delays response
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			time.Sleep(5 * time.Second) // Longer than our context timeout
+			w.WriteHeader(http.StatusOK)
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+				"object": "list",
+				"data":   []interface{}{},
+			})
+		}))
+		defer server.Close()
+
+		config := types.ProviderConfig{
+			Type:    types.ProviderTypeOpenAI,
+			APIKey:  "sk-test-key",
+			BaseURL: server.URL,
+		}
+		provider := NewOpenAIProvider(config)
+
+		// Create a context with short timeout
+		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+		defer cancel()
+
+		err := provider.TestConnectivity(ctx)
+		assert.Error(t, err)
+		// The error should be related to context cancellation or timeout
+		errStr := err.Error()
+		assert.True(t, strings.Contains(errStr, "context") ||
+			strings.Contains(errStr, "timeout") ||
+			strings.Contains(errStr, "canceled") ||
+			strings.Contains(errStr, "deadline exceeded") ||
+			strings.Contains(errStr, "Client.Timeout exceeded") ||
+			strings.Contains(errStr, "network"),
+			"Expected context/timeout/network error, got: %s", errStr)
+	})
+}

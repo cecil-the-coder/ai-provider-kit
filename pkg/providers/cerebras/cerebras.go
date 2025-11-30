@@ -19,6 +19,7 @@ import (
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common/auth"
 	commonconfig "github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common/config"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common/models"
+	"github.com/cecil-the-coder/ai-provider-kit/pkg/ratelimit"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 )
 
@@ -34,26 +35,31 @@ type CerebrasProvider struct {
 
 // NewCerebrasProvider creates a new Cerebras provider
 func NewCerebrasProvider(config types.ProviderConfig) *CerebrasProvider {
-	// Initialize common provider components using the factory pattern
-	components, err := base.InitializeProviderComponents(base.ProviderInitConfig{
-		ProviderType: types.ProviderTypeCerebras,
-		ProviderName: "Cerebras",
-		Config:       config,
-		HTTPTimeout:  10 * time.Second,
-	})
-	if err != nil {
-		// This should rarely happen, but log and return nil if it does
-		log.Printf("Failed to initialize Cerebras provider: %v", err)
-		return nil
+	// Use the shared config helper
+	configHelper := commonconfig.NewConfigHelper("Cerebras", types.ProviderTypeCerebras)
+
+	// Merge with defaults and extract configuration
+	mergedConfig := configHelper.MergeWithDefaults(config)
+
+	client := &http.Client{
+		Timeout: configHelper.ExtractTimeout(mergedConfig),
 	}
 
+	// Create auth helper
+	authHelper := auth.NewAuthHelper("cerebras", mergedConfig, client)
+
+	// Setup API keys using shared helper
+	authHelper.SetupAPIKeys()
+
+	// Cerebras doesn't use OAuth, so no OAuth setup needed
+
 	return &CerebrasProvider{
-		BaseProvider:    components.BaseProvider,
-		config:          components.MergedConfig,
-		httpClient:      components.HTTPClient,
-		authHelper:      components.AuthHelper,
+		BaseProvider:    base.NewBaseProvider("cerebras", mergedConfig, client, log.Default()),
+		config:          mergedConfig,
+		httpClient:      client,
+		authHelper:      authHelper,
 		modelCache:      models.NewModelCache(commonconfig.GetModelCacheTTL(types.ProviderTypeCerebras)),
-		rateLimitHelper: components.RateLimitHelper,
+		rateLimitHelper: common.NewRateLimitHelper(&ratelimit.CerebrasParser{}),
 	}
 }
 
@@ -784,6 +790,98 @@ func (p *CerebrasProvider) HealthCheck(ctx context.Context) error {
 // GetMetrics returns provider metrics
 func (p *CerebrasProvider) GetMetrics() types.ProviderMetrics {
 	return p.BaseProvider.GetMetrics()
+}
+
+// TestConnectivity performs a lightweight connectivity test using the /v1/models endpoint
+func (p *CerebrasProvider) TestConnectivity(ctx context.Context) error {
+	// Check if we have API keys configured
+	if p.authHelper.KeyManager == nil || len(p.authHelper.KeyManager.GetKeys()) == 0 {
+		return types.NewAuthError(types.ProviderTypeCerebras, "no API keys configured").
+			WithOperation("test_connectivity")
+	}
+
+	// Use the first available API key for connectivity test
+	apiKey, err := p.authHelper.KeyManager.GetNextKey()
+	if err != nil {
+		return types.NewAuthError(types.ProviderTypeCerebras, "failed to get API key for connectivity test").
+			WithOperation("test_connectivity").
+			WithOriginalErr(err)
+	}
+
+	// Determine base URL
+	baseURL := p.config.BaseURL
+	if baseURL == "" {
+		baseURL = "https://api.cerebras.ai/v1"
+	}
+	url := baseURL + "/models"
+
+	// Create a request to the /v1/models endpoint
+	req, err := p.authHelper.CreateJSONRequest(ctx, "GET", url, nil, apiKey, "api_key")
+	if err != nil {
+		return types.NewNetworkError(types.ProviderTypeCerebras, "failed to create connectivity test request").
+			WithOperation("test_connectivity").
+			WithOriginalErr(err)
+	}
+
+	// Make the request with a shorter timeout for connectivity testing
+	client := &http.Client{
+		Timeout: 10 * time.Second,
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return types.NewNetworkError(types.ProviderTypeCerebras, "connectivity test failed").
+			WithOperation("test_connectivity").
+			WithOriginalErr(err)
+	}
+	defer func() {
+		//nolint:staticcheck // Empty branch is intentional - we ignore close errors
+		if err := resp.Body.Close(); err != nil {
+			// Log the error if a logger is available, or ignore it
+		}
+	}()
+
+	// Check response status
+	if resp.StatusCode == http.StatusUnauthorized {
+		return types.NewAuthError(types.ProviderTypeCerebras, "invalid API key").
+			WithOperation("test_connectivity").
+			WithStatusCode(resp.StatusCode)
+	}
+
+	if resp.StatusCode == http.StatusForbidden {
+		return types.NewAuthError(types.ProviderTypeCerebras, "API key does not have access to models endpoint").
+			WithOperation("test_connectivity").
+			WithStatusCode(resp.StatusCode)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		errCode := types.ClassifyHTTPError(resp.StatusCode)
+		return types.NewProviderError(types.ProviderTypeCerebras, errCode,
+			fmt.Sprintf("connectivity test failed: %s", string(body))).
+			WithOperation("test_connectivity").
+			WithStatusCode(resp.StatusCode)
+	}
+
+	// Try to parse a small portion of the response to ensure it's valid JSON
+	decoder := json.NewDecoder(io.LimitReader(resp.Body, 1024))
+	var testResponse struct {
+		Object string `json:"object"`
+		Data   []interface{} `json:"data"`
+	}
+	if err := decoder.Decode(&testResponse); err != nil {
+		return types.NewInvalidRequestError(types.ProviderTypeCerebras, "invalid response from models endpoint").
+			WithOperation("test_connectivity").
+			WithOriginalErr(err)
+	}
+
+	// Verify we got a valid models list response
+	if testResponse.Object != "list" {
+		return types.NewInvalidRequestError(types.ProviderTypeCerebras, "unexpected response format from models endpoint").
+			WithOperation("test_connectivity")
+	}
+
+	return nil
 }
 
 // makeStreamingAPICall makes a streaming API call

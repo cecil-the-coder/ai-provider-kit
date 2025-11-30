@@ -10,7 +10,6 @@ import (
 
 // Stub implementations for Provider interface methods not specific to racing
 
-
 func (r *RacingProvider) SupportsToolCalling() bool {
 	return false
 }
@@ -118,11 +117,11 @@ func getIntOrDefault(m map[string]interface{}, key string, defaultValue int) int
 
 func (r *RacingProvider) GetConfig() types.ProviderConfig {
 	providerConfig := map[string]interface{}{
-		"timeout_ms":           r.config.TimeoutMS,
-		"grace_period_ms":      r.config.GracePeriodMS,
-		"strategy":             string(r.config.Strategy),
+		"timeout_ms":            r.config.TimeoutMS,
+		"grace_period_ms":       r.config.GracePeriodMS,
+		"strategy":              string(r.config.Strategy),
 		"default_virtual_model": r.config.DefaultVirtualModel,
-		"virtual_models":       r.config.VirtualModels,
+		"virtual_models":        r.config.VirtualModels,
 	}
 
 	if len(r.config.ProviderNames) > 0 {
@@ -134,8 +133,8 @@ func (r *RacingProvider) GetConfig() types.ProviderConfig {
 	}
 
 	return types.ProviderConfig{
-		Type: "racing",
-		Name: r.name,
+		Type:           "racing",
+		Name:           r.name,
 		ProviderConfig: providerConfig,
 	}
 }

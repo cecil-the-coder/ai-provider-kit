@@ -504,6 +504,79 @@ func (p *OpenRouterProvider) GetToolFormat() types.ToolFormat {
 	return types.ToolFormatOpenAI
 }
 
+// TestConnectivity performs a lightweight connectivity test using the /v1/models endpoint
+func (p *OpenRouterProvider) TestConnectivity(ctx context.Context) error {
+	// Check if we have API keys configured
+	if p.authHelper.KeyManager == nil || len(p.authHelper.KeyManager.GetKeys()) == 0 {
+		return types.NewAuthError(types.ProviderTypeOpenRouter, "no API keys configured").
+			WithOperation("test_connectivity")
+	}
+
+	// Use the first available API key for connectivity test
+	apiKey := p.authHelper.KeyManager.GetKeys()[0]
+	if apiKey == "" {
+		return types.NewAuthError(types.ProviderTypeOpenRouter, "no valid API key available").
+			WithOperation("test_connectivity")
+	}
+
+	// Create a request to the /v1/models endpoint
+	url := p.baseURL + "/v1/models"
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create connectivity test request: %w", err)
+	}
+
+	// Set authentication headers
+	p.authHelper.SetAuthHeaders(req, apiKey, "api_key")
+	req.Header.Set("HTTP-Referer", p.siteURL)
+	req.Header.Set("X-Title", p.siteName)
+
+	// Make the request with a shorter timeout for connectivity testing
+	client := &http.Client{
+		Timeout: 10 * time.Second,
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("connectivity test failed: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }() //nolint:staticcheck // Empty branch is intentional - we ignore close errors
+
+	// Check response status
+	if resp.StatusCode == http.StatusUnauthorized {
+		return types.NewAuthError(types.ProviderTypeOpenRouter, "invalid API key").
+			WithOperation("test_connectivity").
+			WithStatusCode(resp.StatusCode)
+	}
+
+	if resp.StatusCode == http.StatusForbidden {
+		return types.NewAuthError(types.ProviderTypeOpenRouter, "API key does not have access to models endpoint").
+			WithOperation("test_connectivity").
+			WithStatusCode(resp.StatusCode)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("connectivity test failed: HTTP %d - %s", resp.StatusCode, string(body))
+	}
+
+	// Try to parse a small portion of the response to ensure it's valid JSON
+	decoder := json.NewDecoder(io.LimitReader(resp.Body, 1024))
+	var testResponse struct {
+		Data []interface{} `json:"data"`
+	}
+	if err := decoder.Decode(&testResponse); err != nil {
+		return fmt.Errorf("invalid response from models endpoint: %w", err)
+	}
+
+	// Verify we got a valid models list response
+	if len(testResponse.Data) == 0 {
+		return fmt.Errorf("no models returned from models endpoint")
+	}
+
+	return nil
+}
+
 func (p *OpenRouterProvider) HealthCheck(ctx context.Context) error {
 	if !p.IsAuthenticated() {
 		return fmt.Errorf("not authenticated")

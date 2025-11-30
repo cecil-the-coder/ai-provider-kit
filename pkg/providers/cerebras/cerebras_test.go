@@ -2,11 +2,13 @@ package cerebras
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
+	"github.com/stretchr/testify/assert"
 )
 
 // Mock server for testing
@@ -1036,4 +1038,84 @@ func TestCerebrasStream_WithToolCalls(t *testing.T) {
 	if len(result.Choices[0].Message.ToolCalls) != 1 {
 		t.Errorf("Expected 1 tool call, got %d", len(result.Choices[0].Message.ToolCalls))
 	}
+}
+
+// TestCerebrasProvider_TestConnectivity tests the TestConnectivity method
+func TestCerebrasProvider_TestConnectivity(t *testing.T) {
+	t.Run("SuccessfulConnectivity", func(t *testing.T) {
+		// Create a mock HTTP server that returns a valid models response
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Verify the request is for the models endpoint
+			assert.Equal(t, "/models", r.URL.Path)
+			assert.Equal(t, "GET", r.Method)
+
+			// Verify authorization header
+			authHeader := r.Header.Get("Authorization")
+			assert.Equal(t, "Bearer sk-test-key", authHeader)
+
+			// Return a valid models response
+			response := map[string]interface{}{
+				"object": "list",
+				"data": []interface{}{
+					map[string]interface{}{
+						"id":      "zai-glm-4.6",
+						"object":  "model",
+						"created": 1687882411,
+						"owned_by": "cerebras",
+					},
+				},
+			}
+
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(response)
+		}))
+		defer server.Close()
+
+		config := types.ProviderConfig{
+			Type:    types.ProviderTypeCerebras,
+			APIKey:  "sk-test-key",
+			BaseURL: server.URL,
+		}
+		provider := NewCerebrasProvider(config)
+
+		err := provider.TestConnectivity(context.Background())
+		assert.NoError(t, err)
+	})
+
+	t.Run("NoAPIKeys", func(t *testing.T) {
+		config := types.ProviderConfig{
+			Type: types.ProviderTypeCerebras,
+			// No API key configured
+		}
+		provider := NewCerebrasProvider(config)
+
+		err := provider.TestConnectivity(context.Background())
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "no API keys configured")
+	})
+
+	t.Run("InvalidAPIKey", func(t *testing.T) {
+		// Create a mock server that returns unauthorized
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusUnauthorized)
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+				"error": map[string]interface{}{
+					"message": "Invalid API key",
+					"type":    "invalid_request_error",
+				},
+			})
+		}))
+		defer server.Close()
+
+		config := types.ProviderConfig{
+			Type:    types.ProviderTypeCerebras,
+			APIKey:  "sk-invalid-key",
+			BaseURL: server.URL,
+		}
+		provider := NewCerebrasProvider(config)
+
+		err := provider.TestConnectivity(context.Background())
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "invalid API key")
+	})
 }

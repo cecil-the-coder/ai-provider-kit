@@ -2,7 +2,6 @@ package racing
 
 import (
 	"fmt"
-	"strings"
 )
 
 // Config represents configuration for the racing provider
@@ -69,21 +68,6 @@ func (c *Config) resolveVirtualModelConfig(modelID string) (*VirtualModelConfig,
 	return resolved, nil
 }
 
-// generateModelDescription generates a description for a virtual model
-func generateModelDescription(vmConfig *VirtualModelConfig, strategy Strategy) string {
-	providerNames := make([]string, 0, len(vmConfig.Providers))
-	for _, provider := range vmConfig.Providers {
-		providerNames = append(providerNames, provider.Name)
-	}
-
-	description := fmt.Sprintf("Virtual model racing %s", strings.Join(providerNames, ", "))
-
-	if strategy != "" {
-		description += fmt.Sprintf(" using %s strategy", strategy)
-	}
-
-	return description
-}
 
 // GetVirtualModel returns the virtual model configuration for the given model name
 func (c *Config) GetVirtualModel(modelName string) *VirtualModelConfig {

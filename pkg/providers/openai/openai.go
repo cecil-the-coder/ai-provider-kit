@@ -829,6 +829,84 @@ func (p *OpenAIProvider) GetToolFormat() types.ToolFormat {
 	return types.ToolFormatOpenAI
 }
 
+// TestConnectivity performs a lightweight connectivity test using the /v1/models endpoint
+func (p *OpenAIProvider) TestConnectivity(ctx context.Context) error {
+	// Check if we have API keys configured
+	if p.authHelper.KeyManager == nil || len(p.authHelper.KeyManager.GetKeys()) == 0 {
+		return types.NewAuthError(types.ProviderTypeOpenAI, "no API keys configured").
+			WithOperation("test_connectivity")
+	}
+
+	// Use the first available API key for connectivity test
+	keys := p.authHelper.KeyManager.GetKeys()
+	apiKey := keys[0]
+
+	// Create a request to the /v1/models endpoint
+	url := p.baseURL + "/models"
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return types.NewNetworkError(types.ProviderTypeOpenAI, "failed to create connectivity test request").
+			WithOperation("test_connectivity").
+			WithOriginalErr(err)
+	}
+
+	// Set authentication headers
+	p.authHelper.SetAuthHeaders(req, apiKey, "api_key")
+
+	// Make the request with a shorter timeout for connectivity testing
+	client := &http.Client{
+		Timeout: 10 * time.Second,
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return types.NewNetworkError(types.ProviderTypeOpenAI, "connectivity test failed").
+			WithOperation("test_connectivity").
+			WithOriginalErr(err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	// Check response status
+	if resp.StatusCode == http.StatusUnauthorized {
+		return types.NewAuthError(types.ProviderTypeOpenAI, "invalid API key").
+			WithOperation("test_connectivity").
+			WithStatusCode(resp.StatusCode)
+	}
+
+	if resp.StatusCode == http.StatusForbidden {
+		return types.NewAuthError(types.ProviderTypeOpenAI, "API key does not have access to models endpoint").
+			WithOperation("test_connectivity").
+			WithStatusCode(resp.StatusCode)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return types.NewServerError(types.ProviderTypeOpenAI, resp.StatusCode,
+			fmt.Sprintf("connectivity test failed: %s", string(body))).
+			WithOperation("test_connectivity")
+	}
+
+	// Try to parse a small portion of the response to ensure it's valid JSON
+	decoder := json.NewDecoder(io.LimitReader(resp.Body, 1024))
+	var testResponse struct {
+		Object string `json:"object"`
+		Data   []interface{} `json:"data"`
+	}
+	if err := decoder.Decode(&testResponse); err != nil {
+		return types.NewInvalidRequestError(types.ProviderTypeOpenAI, "invalid response from models endpoint").
+			WithOperation("test_connectivity").
+			WithOriginalErr(err)
+	}
+
+	// Verify we got a valid models list response
+	if testResponse.Object != "list" {
+		return types.NewInvalidRequestError(types.ProviderTypeOpenAI, "unexpected response format from models endpoint").
+			WithOperation("test_connectivity")
+	}
+
+	return nil
+}
+
 // convertToOpenAITools converts universal tools to OpenAI format
 func convertToOpenAITools(tools []types.Tool) []OpenAITool {
 	openaiTools := make([]OpenAITool, len(tools))

@@ -11,6 +11,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -1468,4 +1469,133 @@ func (p *GeminiProvider) parseStandardGeminiResponseMessage(responseBody []byte,
 	}
 
 	return message, usage, nil
+}
+// =============================================================================
+// OAuthProvider Interface Implementation
+// =============================================================================
+
+// OAuth constants for Google
+const (
+	// Google OAuth endpoints
+	googleTokenInfoURL = "https://www.googleapis.com/oauth2/v3/tokeninfo"
+	googleAuthURL     = "https://accounts.google.com/o/oauth2/v2/auth"
+	googleTokenURL    = "https://oauth2.googleapis.com/token"
+
+	// Google OAuth scopes for Gemini API
+	geminiOAuthScope = "https://www.googleapis.com/auth/cloud-platform"
+)
+
+// ValidateToken validates the current OAuth token and returns detailed token information
+func (p *GeminiProvider) ValidateToken(ctx context.Context) (*types.TokenInfo, error) {
+	// Get current OAuth credentials
+	if p.authHelper.OAuthManager == nil {
+		return nil, fmt.Errorf("no OAuth manager configured")
+	}
+
+	creds := p.authHelper.OAuthManager.GetCredentials()
+	if len(creds) == 0 {
+		return nil, fmt.Errorf("no OAuth credentials available")
+	}
+
+	// Use the first available credential for validation
+	// In practice, you might want to validate all credentials or select a specific one
+	cred := creds[0]
+
+	// Make request to Google's tokeninfo endpoint
+	reqURL := fmt.Sprintf("%s?access_token=%s", googleTokenInfoURL, cred.AccessToken)
+
+	req, err := http.NewRequestWithContext(ctx, "GET", reqURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create token validation request: %w", err)
+	}
+
+	resp, err := p.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to validate token: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("token validation failed with status %d: %s", resp.StatusCode, string(body))
+	}
+
+	// Parse tokeninfo response
+	var tokenInfoResponse struct {
+		Aud          string `json:"aud"`
+		Scope        string `json:"scope"`
+		ExpiresIn    int64  `json:"expires_in"`
+		Email        string `json:"email"`
+		EmailVerified bool  `json:"email_verified"`
+		Issuer       string `json:"iss"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&tokenInfoResponse); err != nil {
+		return nil, fmt.Errorf("failed to decode token info response: %w", err)
+	}
+
+	// Parse scopes
+	var scopes []string
+	if tokenInfoResponse.Scope != "" {
+		scopes = strings.Split(tokenInfoResponse.Scope, " ")
+	}
+
+	// Calculate expiration time
+	var expiresAt time.Time
+	if tokenInfoResponse.ExpiresIn > 0 {
+		expiresAt = time.Now().Add(time.Duration(tokenInfoResponse.ExpiresIn) * time.Second)
+	} else {
+		// Use stored expiration time if tokeninfo doesn't provide it
+		expiresAt = cred.ExpiresAt
+	}
+
+	// Build user info
+	userInfo := map[string]interface{}{
+		"email":         tokenInfoResponse.Email,
+		"email_verified": tokenInfoResponse.EmailVerified,
+		"audience":      tokenInfoResponse.Aud,
+		"issuer":        tokenInfoResponse.Issuer,
+	}
+
+	// Check if token is valid
+	valid := time.Now().Before(expiresAt) && len(scopes) > 0
+
+	return &types.TokenInfo{
+		Valid:    valid,
+		ExpiresAt: expiresAt,
+		Scope:    scopes,
+		UserInfo: userInfo,
+	}, nil
+}
+
+// RefreshToken refreshes the OAuth token using the stored refresh token
+func (p *GeminiProvider) RefreshToken(ctx context.Context) error {
+	// Use the existing OAuth refresh functionality
+	return p.RefreshAllOAuthTokens(ctx)
+}
+
+// GetAuthURL generates an OAuth authorization URL for re-authentication
+func (p *GeminiProvider) GetAuthURL(redirectURI string, state string) string {
+	// Default client ID for Gemini/Google Cloud - this should be configurable
+	clientID := "936875672307-4r5272sc9k0c2e2d6dr3uj63btk3revo.apps.googleusercontent.com"
+
+	// Check if there's a custom client ID in the configuration
+	if p.config.ProjectID != "" {
+		// You might want to allow custom client IDs in the config
+		// For now, we'll use the default
+	}
+
+	// Build the OAuth URL with required parameters
+	authURL := fmt.Sprintf("%s?client_id=%s&redirect_uri=%s&response_type=code&scope=%s&state=%s",
+		googleAuthURL,
+		url.QueryEscape(clientID),
+		url.QueryEscape(redirectURI),
+		url.QueryEscape(geminiOAuthScope),
+		url.QueryEscape(state),
+	)
+
+	// Add additional parameters for better UX
+	authURL += "&access_type=offline&prompt=consent"
+
+	return authURL
 }

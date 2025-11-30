@@ -108,9 +108,9 @@ virtual_models:
 
 func TestConfig_JSON_Serialization(t *testing.T) {
 	config := &Config{
-		TimeoutMS:          5000,
-		GracePeriodMS:      1000,
-		Strategy:           StrategyWeighted,
+		TimeoutMS:           5000,
+		GracePeriodMS:       1000,
+		Strategy:            StrategyWeighted,
 		DefaultVirtualModel: "multi",
 		VirtualModels: map[string]VirtualModelConfig{
 			"multi": {
@@ -172,9 +172,9 @@ func TestConfig_JSON_Serialization(t *testing.T) {
 func TestConfig_DefaultValues(t *testing.T) {
 	// Create a basic config with default values
 	config := &Config{
-		TimeoutMS:          5000,
-		GracePeriodMS:      1000,
-		Strategy:           StrategyFirstWins,
+		TimeoutMS:           5000,
+		GracePeriodMS:       1000,
+		Strategy:            StrategyFirstWins,
 		DefaultVirtualModel: "default",
 		VirtualModels: map[string]VirtualModelConfig{
 			"default": {
@@ -274,7 +274,7 @@ func TestConfig_GetVirtualModel(t *testing.T) {
 
 func TestConfig_GetEffectiveTimeout(t *testing.T) {
 	config := &Config{
-		TimeoutMS: 5000,
+		TimeoutMS:           5000,
 		DefaultVirtualModel: "default",
 		VirtualModels: map[string]VirtualModelConfig{
 			"default": {
@@ -309,7 +309,7 @@ func TestConfig_GetEffectiveTimeout(t *testing.T) {
 
 func TestConfig_GetEffectiveStrategy(t *testing.T) {
 	config := &Config{
-		Strategy: StrategyFirstWins,
+		Strategy:            StrategyFirstWins,
 		DefaultVirtualModel: "default",
 		VirtualModels: map[string]VirtualModelConfig{
 			"default": {
@@ -345,9 +345,9 @@ func TestConfig_GetEffectiveStrategy(t *testing.T) {
 func TestConfig_ConfigurationIntegration(t *testing.T) {
 	// Test that all the methods work together correctly
 	config := &Config{
-		TimeoutMS:          5000,
-		GracePeriodMS:      1000,
-		Strategy:           StrategyFirstWins,
+		TimeoutMS:           5000,
+		GracePeriodMS:       1000,
+		Strategy:            StrategyFirstWins,
 		DefaultVirtualModel: "default",
 		VirtualModels: map[string]VirtualModelConfig{
 			"default": {
