@@ -54,7 +54,7 @@ func (c *ConfigTestHelper) CreateTestConfig(providerType types.ProviderType) typ
 		baseConfig.BaseURL = "https://api.cerebras.ai/v1"
 		baseConfig.DefaultModel = "zai-glm-4.6"
 	case types.ProviderTypeQwen:
-		baseConfig.BaseURL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+		baseConfig.BaseURL = "https://portal.qwen.ai/v1"
 		baseConfig.DefaultModel = "qwen-turbo"
 	case types.ProviderTypeOpenRouter:
 		baseConfig.BaseURL = "https://openrouter.ai/api/v1"

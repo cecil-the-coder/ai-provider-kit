@@ -94,7 +94,7 @@ func (h *ConfigHelper) ExtractBaseURL(config types.ProviderConfig) string {
 	case types.ProviderTypeCerebras:
 		return "https://api.cerebras.ai/v1"
 	case types.ProviderTypeQwen:
-		return "https://dashscope.aliyuncs.com/compatible-mode/v1"
+		return "https://portal.qwen.ai/v1"
 	case types.ProviderTypeOpenRouter:
 		return "https://openrouter.ai/api/v1"
 	default:
