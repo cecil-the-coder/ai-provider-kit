@@ -160,7 +160,7 @@ func (f *ProviderFactory) testAuthentication(ctx context.Context, provider types
 	}
 
 	// For API key providers, validate configuration
-	return f.testAPIKeyAuthentication(ctx, provider, providerType)
+	return f.testAPIKeyAuthentication(provider, providerType)
 }
 
 // testOAuthAuthentication handles OAuth-specific authentication testing
@@ -174,16 +174,18 @@ func (f *ProviderFactory) testOAuthAuthentication(ctx context.Context, provider 
 		duration := time.Since(startTime)
 
 		// Determine error type based on error message
-		errorMsg := err.Error()
-		if strings.Contains(strings.ToLower(errorMsg), "expired") {
-			return types.NewTokenErrorResult(providerType, fmt.Sprintf("Token expired: %v", err), duration)
-		} else if strings.Contains(strings.ToLower(errorMsg), "invalid") || strings.Contains(strings.ToLower(errorMsg), "unauthorized") {
-			return types.NewAuthErrorResult(providerType, fmt.Sprintf("Invalid token: %v", err), duration)
-		} else if strings.Contains(strings.ToLower(errorMsg), "oauth") {
-			return types.NewOAuthErrorResult(providerType, fmt.Sprintf("OAuth error: %v", err), duration)
-		}
+		errorMsg := strings.ToLower(err.Error())
 
-		return types.NewAuthErrorResult(providerType, fmt.Sprintf("Token validation failed: %v", err), duration)
+		switch {
+		case strings.Contains(errorMsg, "expired"):
+			return types.NewTokenErrorResult(providerType, fmt.Sprintf("Token expired: %v", err), duration)
+		case strings.Contains(errorMsg, "invalid"), strings.Contains(errorMsg, "unauthorized"):
+			return types.NewAuthErrorResult(providerType, fmt.Sprintf("Invalid token: %v", err), duration)
+		case strings.Contains(errorMsg, "oauth"):
+			return types.NewOAuthErrorResult(providerType, fmt.Sprintf("OAuth error: %v", err), duration)
+		default:
+			return types.NewAuthErrorResult(providerType, fmt.Sprintf("Token validation failed: %v", err), duration)
+		}
 	}
 
 	// Check if token is expired
@@ -218,7 +220,7 @@ func (f *ProviderFactory) testOAuthAuthentication(ctx context.Context, provider 
 }
 
 // testAPIKeyAuthentication handles API key authentication validation
-func (f *ProviderFactory) testAPIKeyAuthentication(ctx context.Context, provider types.Provider, providerType types.ProviderType) *types.TestResult {
+func (f *ProviderFactory) testAPIKeyAuthentication(_ types.Provider, providerType types.ProviderType) *types.TestResult {
 	startTime := time.Now()
 
 	// For API key providers, we need to check if connectivity works
@@ -251,21 +253,26 @@ func (f *ProviderFactory) testConnectivity(ctx context.Context, provider types.P
 			errorMsg := err.Error()
 
 			// Determine error type based on error message
-			if strings.Contains(strings.ToLower(errorMsg), "timeout") || strings.Contains(strings.ToLower(errorMsg), "deadline") {
+			lowerErrorMsg := strings.ToLower(errorMsg)
+			statusCode := f.extractStatusCode(errorMsg)
+
+			switch {
+			case strings.Contains(lowerErrorMsg, "timeout"), strings.Contains(lowerErrorMsg, "deadline"):
 				return types.NewTimeoutErrorResult(providerType, fmt.Sprintf("Connectivity test timed out: %v", err), duration)
-			} else if strings.Contains(strings.ToLower(errorMsg), "rate limit") {
+			case strings.Contains(lowerErrorMsg, "rate limit"):
 				return types.NewRateLimitErrorResult(providerType, fmt.Sprintf("Rate limited during connectivity test: %v", err), 0, duration)
-			} else if strings.Contains(strings.ToLower(errorMsg), "unauthorized") || strings.Contains(strings.ToLower(errorMsg), "forbidden") {
+			case strings.Contains(lowerErrorMsg, "unauthorized"), strings.Contains(lowerErrorMsg, "forbidden"):
 				return types.NewAuthErrorResult(providerType, fmt.Sprintf("Authentication failed during connectivity test: %v", err), duration)
-			} else if statusCode := f.extractStatusCode(errorMsg); statusCode > 0 {
-				if statusCode >= 500 {
+			case statusCode > 0:
+				switch {
+				case statusCode >= 500:
 					return types.NewServerErrorResult(providerType, fmt.Sprintf("Server error during connectivity test: %v", err), statusCode, duration)
-				} else if statusCode >= 400 {
+				case statusCode >= 400:
 					return types.NewConnectivityErrorResult(providerType, fmt.Sprintf("Client error during connectivity test: %v", err), duration)
 				}
+			default:
+				return types.NewConnectivityErrorResult(providerType, fmt.Sprintf("Connectivity test failed: %v", err), duration)
 			}
-
-			return types.NewConnectivityErrorResult(providerType, fmt.Sprintf("Connectivity test failed: %v", err), duration)
 		}
 
 		duration := time.Since(startTime)

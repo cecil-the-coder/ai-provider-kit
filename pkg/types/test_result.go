@@ -10,16 +10,16 @@ import (
 type TestStatus string
 
 const (
-	TestStatusSuccess           TestStatus = "success"
-	TestStatusAuthFailed        TestStatus = "auth_failed"
+	TestStatusSuccess            TestStatus = "success"
+	TestStatusAuthFailed         TestStatus = "auth_failed"
 	TestStatusConnectivityFailed TestStatus = "connectivity_failed"
-	TestStatusOAuthFailed       TestStatus = "oauth_failed"
-	TestStatusTokenFailed       TestStatus = "token_failed"
-	TestStatusConfigFailed      TestStatus = "config_failed"
-	TestStatusTimeoutFailed     TestStatus = "timeout_failed"
-	TestStatusRateLimited       TestStatus = "rate_limited"
-	TestStatusServerError       TestStatus = "server_error"
-	TestStatusUnknownError      TestStatus = "unknown_error"
+	TestStatusOAuthFailed        TestStatus = "oauth_failed"
+	TestStatusTokenFailed        TestStatus = "token_failed"
+	TestStatusConfigFailed       TestStatus = "config_failed"
+	TestStatusTimeoutFailed      TestStatus = "timeout_failed"
+	TestStatusRateLimited        TestStatus = "rate_limited"
+	TestStatusServerError        TestStatus = "server_error"
+	TestStatusUnknownError       TestStatus = "unknown_error"
 )
 
 // TestPhase represents the current phase of provider testing
@@ -27,52 +27,52 @@ type TestPhase string
 
 const (
 	TestPhaseAuthentication TestPhase = "authentication"
-	TestPhaseConnectivity  TestPhase = "connectivity"
-	TestPhaseConfiguration TestPhase = "configuration"
-	TestPhaseModelFetch    TestPhase = "model_fetch"
-	TestPhaseCompleted     TestPhase = "completed"
-	TestPhaseFailed        TestPhase = "failed"
+	TestPhaseConnectivity   TestPhase = "connectivity"
+	TestPhaseConfiguration  TestPhase = "configuration"
+	TestPhaseModelFetch     TestPhase = "model_fetch"
+	TestPhaseCompleted      TestPhase = "completed"
+	TestPhaseFailed         TestPhase = "failed"
 )
 
 // TestErrorType represents the type of test error
 type TestErrorType string
 
 const (
-	TestErrorTypeAuth          TestErrorType = "auth_error"
-	TestErrorTypeConnectivity  TestErrorType = "connectivity_error"
-	TestErrorTypeToken         TestErrorType = "token_error"
-	TestErrorTypeOAuth         TestErrorType = "oauth_error"
-	TestErrorTypeConfig        TestErrorType = "config_error"
-	TestErrorTypeTimeout       TestErrorType = "timeout_error"
-	TestErrorTypeRateLimit     TestErrorType = "rate_limit_error"
-	TestErrorTypeServerError   TestErrorType = "server_error"
-	TestErrorTypeNetwork       TestErrorType = "network_error"
-	TestErrorTypeValidation    TestErrorType = "validation_error"
-	TestErrorTypeUnknown       TestErrorType = "unknown_error"
+	TestErrorTypeAuth         TestErrorType = "auth_error"
+	TestErrorTypeConnectivity TestErrorType = "connectivity_error"
+	TestErrorTypeToken        TestErrorType = "token_error"
+	TestErrorTypeOAuth        TestErrorType = "oauth_error"
+	TestErrorTypeConfig       TestErrorType = "config_error"
+	TestErrorTypeTimeout      TestErrorType = "timeout_error"
+	TestErrorTypeRateLimit    TestErrorType = "rate_limit_error"
+	TestErrorTypeServerError  TestErrorType = "server_error"
+	TestErrorTypeNetwork      TestErrorType = "network_error"
+	TestErrorTypeValidation   TestErrorType = "validation_error"
+	TestErrorTypeUnknown      TestErrorType = "unknown_error"
 )
 
 // TestResult represents the result of a provider test
 type TestResult struct {
-	Status      TestStatus            `json:"status"`
-	Error       string                `json:"error,omitempty"`
-	Details     map[string]string     `json:"details,omitempty"`
-	ModelsCount int                   `json:"models_count,omitempty"`
-	Phase       TestPhase             `json:"phase"`
-	Timestamp   time.Time             `json:"timestamp"`
-	Duration    time.Duration         `json:"duration"`
-	ProviderType ProviderType          `json:"provider_type"`
-	TestError   *TestError            `json:"test_error,omitempty"`
+	Status       TestStatus        `json:"status"`
+	Error        string            `json:"error,omitempty"`
+	Details      map[string]string `json:"details,omitempty"`
+	ModelsCount  int               `json:"models_count,omitempty"`
+	Phase        TestPhase         `json:"phase"`
+	Timestamp    time.Time         `json:"timestamp"`
+	Duration     time.Duration     `json:"duration"`
+	ProviderType ProviderType      `json:"provider_type"`
+	TestError    *TestError        `json:"test_error,omitempty"`
 }
 
 // TestError represents a detailed error from provider testing
 type TestError struct {
-	ErrorType   TestErrorType `json:"error_type"`
-	Message     string        `json:"message"`
-	Phase       TestPhase     `json:"phase"`
+	ErrorType    TestErrorType `json:"error_type"`
+	Message      string        `json:"message"`
+	Phase        TestPhase     `json:"phase"`
 	ProviderType ProviderType  `json:"provider_type"`
-	Retryable   bool          `json:"retryable"`
-	StatusCode  int           `json:"status_code,omitempty"`
-	OriginalErr string        `json:"original_err,omitempty"`
+	Retryable    bool          `json:"retryable"`
+	StatusCode   int           `json:"status_code,omitempty"`
+	OriginalErr  string        `json:"original_err,omitempty"`
 }
 
 // NewSuccessResult creates a new successful test result
@@ -276,7 +276,7 @@ func (tr *TestResult) ToJSONString() (string, error) {
 	return string(data), nil
 }
 
-// FromJSON creates a TestResult from JSON data
+// TestResultFromJSON creates a TestResult from JSON data
 func TestResultFromJSON(data []byte) (*TestResult, error) {
 	var result TestResult
 	err := json.Unmarshal(data, &result)

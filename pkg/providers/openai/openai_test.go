@@ -1443,9 +1443,9 @@ func TestOpenAIProvider_TestConnectivity(t *testing.T) {
 				"object": "list",
 				"data": []interface{}{
 					map[string]interface{}{
-						"id":      "gpt-4",
-						"object":  "model",
-						"created": 1687882411,
+						"id":       "gpt-4",
+						"object":   "model",
+						"created":  1687882411,
 						"owned_by": "openai",
 					},
 				},

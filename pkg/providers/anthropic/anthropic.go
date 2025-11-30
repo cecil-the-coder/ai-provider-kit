@@ -1378,7 +1378,7 @@ func (p *AnthropicProvider) testConnectivityWithMessagesAPI(ctx context.Context,
 	// Create a minimal request for connectivity testing
 	minimalRequest := map[string]interface{}{
 		"model":      "claude-3-haiku-20240307", // Use smallest model
-		"max_tokens": 1, // Minimal token usage
+		"max_tokens": 1,                         // Minimal token usage
 		"messages": []map[string]string{
 			{
 				"role":    "user",
@@ -1447,9 +1447,9 @@ func (p *AnthropicProvider) testConnectivityWithMessagesAPI(ctx context.Context,
 	// Try to parse a small portion of the response to ensure it's valid
 	decoder := json.NewDecoder(io.LimitReader(resp.Body, 1024))
 	var testResponse struct {
-		ID      string `json:"id"`
-		Type    string `json:"type"`
-		Role    string `json:"role"`
+		ID      string        `json:"id"`
+		Type    string        `json:"type"`
+		Role    string        `json:"role"`
 		Content []interface{} `json:"content"`
 	}
 	if err := decoder.Decode(&testResponse); err != nil {

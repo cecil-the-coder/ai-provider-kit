@@ -1058,9 +1058,9 @@ func TestCerebrasProvider_TestConnectivity(t *testing.T) {
 				"object": "list",
 				"data": []interface{}{
 					map[string]interface{}{
-						"id":      "zai-glm-4.6",
-						"object":  "model",
-						"created": 1687882411,
+						"id":       "zai-glm-4.6",
+						"object":   "model",
+						"created":  1687882411,
 						"owned_by": "cerebras",
 					},
 				},

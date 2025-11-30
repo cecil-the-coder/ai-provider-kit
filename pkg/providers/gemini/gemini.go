@@ -1470,6 +1470,7 @@ func (p *GeminiProvider) parseStandardGeminiResponseMessage(responseBody []byte,
 
 	return message, usage, nil
 }
+
 // =============================================================================
 // OAuthProvider Interface Implementation
 // =============================================================================
@@ -1477,9 +1478,9 @@ func (p *GeminiProvider) parseStandardGeminiResponseMessage(responseBody []byte,
 // OAuth constants for Google
 const (
 	// Google OAuth endpoints
+	// #nosec G101 - These are public Google OAuth endpoints, not credentials
 	googleTokenInfoURL = "https://www.googleapis.com/oauth2/v3/tokeninfo"
-	googleAuthURL     = "https://accounts.google.com/o/oauth2/v2/auth"
-	googleTokenURL    = "https://oauth2.googleapis.com/token"
+	googleAuthURL      = "https://accounts.google.com/o/oauth2/v2/auth"
 
 	// Google OAuth scopes for Gemini API
 	geminiOAuthScope = "https://www.googleapis.com/auth/cloud-platform"
@@ -1522,12 +1523,12 @@ func (p *GeminiProvider) ValidateToken(ctx context.Context) (*types.TokenInfo, e
 
 	// Parse tokeninfo response
 	var tokenInfoResponse struct {
-		Aud          string `json:"aud"`
-		Scope        string `json:"scope"`
-		ExpiresIn    int64  `json:"expires_in"`
-		Email        string `json:"email"`
-		EmailVerified bool  `json:"email_verified"`
-		Issuer       string `json:"iss"`
+		Aud           string `json:"aud"`
+		Scope         string `json:"scope"`
+		ExpiresIn     int64  `json:"expires_in"`
+		Email         string `json:"email"`
+		EmailVerified bool   `json:"email_verified"`
+		Issuer        string `json:"iss"`
 	}
 
 	if err := json.NewDecoder(resp.Body).Decode(&tokenInfoResponse); err != nil {
@@ -1551,20 +1552,20 @@ func (p *GeminiProvider) ValidateToken(ctx context.Context) (*types.TokenInfo, e
 
 	// Build user info
 	userInfo := map[string]interface{}{
-		"email":         tokenInfoResponse.Email,
+		"email":          tokenInfoResponse.Email,
 		"email_verified": tokenInfoResponse.EmailVerified,
-		"audience":      tokenInfoResponse.Aud,
-		"issuer":        tokenInfoResponse.Issuer,
+		"audience":       tokenInfoResponse.Aud,
+		"issuer":         tokenInfoResponse.Issuer,
 	}
 
 	// Check if token is valid
 	valid := time.Now().Before(expiresAt) && len(scopes) > 0
 
 	return &types.TokenInfo{
-		Valid:    valid,
+		Valid:     valid,
 		ExpiresAt: expiresAt,
-		Scope:    scopes,
-		UserInfo: userInfo,
+		Scope:     scopes,
+		UserInfo:  userInfo,
 	}, nil
 }
 
@@ -1577,13 +1578,11 @@ func (p *GeminiProvider) RefreshToken(ctx context.Context) error {
 // GetAuthURL generates an OAuth authorization URL for re-authentication
 func (p *GeminiProvider) GetAuthURL(redirectURI string, state string) string {
 	// Default client ID for Gemini/Google Cloud - this should be configurable
+	// #nosec G101 - This is a public Google OAuth client ID, not a secret credential
 	clientID := "936875672307-4r5272sc9k0c2e2d6dr3uj63btk3revo.apps.googleusercontent.com"
 
-	// Check if there's a custom client ID in the configuration
-	if p.config.ProjectID != "" {
-		// You might want to allow custom client IDs in the config
-		// For now, we'll use the default
-	}
+	// TODO: In the future, allow custom client IDs to be configured
+	// For now, we use the default client ID for all configurations
 
 	// Build the OAuth URL with required parameters
 	authURL := fmt.Sprintf("%s?client_id=%s&redirect_uri=%s&response_type=code&scope=%s&state=%s",

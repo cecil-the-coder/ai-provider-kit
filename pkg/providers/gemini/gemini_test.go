@@ -1352,7 +1352,7 @@ func TestGeminiProvider_ValidateToken(t *testing.T) {
 			"iss": "https://accounts.google.com"
 		}`
 		w.WriteHeader(http.StatusOK)
-		fmt.Fprint(w, response)
+		_, _ = fmt.Fprint(w, response)
 	}))
 	defer server.Close()
 
@@ -1433,8 +1433,8 @@ func TestGeminiProvider_ValidateToken_NoOAuthConfigured(t *testing.T) {
 func TestGeminiProvider_ValidateToken_NoCredentials(t *testing.T) {
 	// Create provider with empty OAuth credentials
 	config := types.ProviderConfig{
-		Type:            types.ProviderTypeGemini,
-		Name:            "test-gemini",
+		Type:             types.ProviderTypeGemini,
+		Name:             "test-gemini",
 		OAuthCredentials: []*types.OAuthCredentialSet{}, // Empty slice
 	}
 

@@ -1416,11 +1416,11 @@ func TestVirtualModels_GetModels_EmptyConfig(t *testing.T) {
 
 func TestVirtualModels_GetModels_WithValidation(t *testing.T) {
 	tests := []struct {
-		name           string
-		config         *Config
-		expectedModels int
+		name            string
+		config          *Config
+		expectedModels  int
 		expectedDefault string
-		shouldErr      bool
+		shouldErr       bool
 	}{
 		{
 			name: "single virtual model",
@@ -1436,7 +1436,7 @@ func TestVirtualModels_GetModels_WithValidation(t *testing.T) {
 					},
 				},
 			},
-			expectedModels: 1,
+			expectedModels:  1,
 			expectedDefault: "fast-model",
 		},
 		{
@@ -1458,7 +1458,7 @@ func TestVirtualModels_GetModels_WithValidation(t *testing.T) {
 					},
 				},
 			},
-			expectedModels: 3,
+			expectedModels:  3,
 			expectedDefault: "quality-model",
 		},
 		{
@@ -1472,7 +1472,7 @@ func TestVirtualModels_GetModels_WithValidation(t *testing.T) {
 					},
 				},
 			},
-			expectedModels: 1,
+			expectedModels:  1,
 			expectedDefault: "fast-model", // Should fall back to first available
 		},
 	}
@@ -1558,7 +1558,7 @@ func TestVirtualModels_ModelValidation(t *testing.T) {
 			config: &Config{
 				TimeoutMS:           5000,
 				DefaultVirtualModel: "default",
-				VirtualModels:      map[string]VirtualModelConfig{},
+				VirtualModels:       map[string]VirtualModelConfig{},
 			},
 			shouldErr:   true,
 			errContains: "at least one virtual model",
@@ -1658,10 +1658,10 @@ func TestVirtualModel_DifferentStrategies(t *testing.T) {
 		providers        []types.Provider
 	}{
 		{
-			name:     "first_wins strategy",
-			virtualModel: "fast-model",
+			name:             "first_wins strategy",
+			virtualModel:     "fast-model",
 			expectedStrategy: StrategyFirstWins,
-			expectedWinner: "fast-provider",
+			expectedWinner:   "fast-provider",
 			providers: []types.Provider{
 				&mockChatProvider{
 					name:     "slow-provider",
@@ -1676,10 +1676,10 @@ func TestVirtualModel_DifferentStrategies(t *testing.T) {
 			},
 		},
 		{
-			name:     "weighted strategy with history",
-			virtualModel: "quality-model",
+			name:             "weighted strategy with history",
+			virtualModel:     "quality-model",
 			expectedStrategy: StrategyWeighted,
-			expectedWinner: "quality-provider", // Should win due to performance history
+			expectedWinner:   "quality-provider", // Should win due to performance history
 			providers: []types.Provider{
 				&mockChatProvider{
 					name:     "fast-provider",
@@ -1694,10 +1694,10 @@ func TestVirtualModel_DifferentStrategies(t *testing.T) {
 			},
 		},
 		{
-			name:     "quality strategy",
-			virtualModel: "balanced-model",
+			name:             "quality strategy",
+			virtualModel:     "balanced-model",
 			expectedStrategy: StrategyQuality,
-			expectedWinner: "fast-provider", // Should pick based on adjusted score
+			expectedWinner:   "fast-provider", // Should pick based on adjusted score
 			providers: []types.Provider{
 				&mockChatProvider{
 					name:     "fast-provider",
@@ -1766,7 +1766,7 @@ func TestVirtualModel_DifferentStrategies(t *testing.T) {
 
 			ctx := context.Background()
 			opts := types.GenerateOptions{
-				Model: tt.virtualModel,
+				Model:  tt.virtualModel,
 				Prompt: "test",
 			}
 
@@ -1798,30 +1798,30 @@ func TestVirtualModel_DifferentStrategies(t *testing.T) {
 
 func TestVirtualModel_PerVirtualModelTimeouts(t *testing.T) {
 	tests := []struct {
-		name         string
-		virtualModel string
-		timeoutMS    int
+		name          string
+		virtualModel  string
+		timeoutMS     int
 		shouldTimeout bool
 		providerDelay time.Duration
 	}{
 		{
-			name:         "short timeout should fail",
-			virtualModel: "fast-model",
-			timeoutMS:    100, // Very short timeout
+			name:          "short timeout should fail",
+			virtualModel:  "fast-model",
+			timeoutMS:     100, // Very short timeout
 			shouldTimeout: true,
 			providerDelay: 500 * time.Millisecond,
 		},
 		{
-			name:         "long timeout should succeed",
-			virtualModel: "slow-model",
-			timeoutMS:    2000, // Longer timeout
+			name:          "long timeout should succeed",
+			virtualModel:  "slow-model",
+			timeoutMS:     2000, // Longer timeout
 			shouldTimeout: false,
 			providerDelay: 100 * time.Millisecond,
 		},
 		{
-			name:         "default timeout fallback",
-			virtualModel: "default-model",
-			timeoutMS:    0, // Use default
+			name:          "default timeout fallback",
+			virtualModel:  "default-model",
+			timeoutMS:     0, // Use default
 			shouldTimeout: false,
 			providerDelay: 100 * time.Millisecond,
 		},
@@ -1871,7 +1871,7 @@ func TestVirtualModel_PerVirtualModelTimeouts(t *testing.T) {
 
 			ctx := context.Background()
 			opts := types.GenerateOptions{
-				Model: tt.virtualModel,
+				Model:  tt.virtualModel,
 				Prompt: "test",
 			}
 
@@ -1900,12 +1900,12 @@ func TestVirtualModel_PerVirtualModelTimeouts(t *testing.T) {
 
 func TestVirtualModel_ProviderReferences(t *testing.T) {
 	tests := []struct {
-		name         string
-		virtualModel string
-		providers    []ProviderReference
+		name              string
+		virtualModel      string
+		providers         []ProviderReference
 		expectedProviders []string
-		shouldErr     bool
-		errContains   string
+		shouldErr         bool
+		errContains       string
 	}{
 		{
 			name:         "valid provider references",
@@ -1930,8 +1930,8 @@ func TestVirtualModel_ProviderReferences(t *testing.T) {
 			name:         "empty provider list",
 			virtualModel: "empty-providers",
 			providers:    []ProviderReference{},
-			shouldErr:   true,
-			errContains: "no providers configured",
+			shouldErr:    true,
+			errContains:  "no providers configured",
 		},
 	}
 
@@ -1975,7 +1975,7 @@ func TestVirtualModel_ProviderReferences(t *testing.T) {
 
 			ctx := context.Background()
 			opts := types.GenerateOptions{
-				Model: tt.virtualModel,
+				Model:  tt.virtualModel,
 				Prompt: "test",
 			}
 
@@ -2020,7 +2020,7 @@ func TestVirtualModel_FallbackToDefaults(t *testing.T) {
 				DisplayName: "Custom Model",
 				Description: "Custom configuration",
 				Strategy:    StrategyFirstWins, // Override default
-				TimeoutMS:   2000,             // Override default
+				TimeoutMS:   2000,              // Override default
 				Providers: []ProviderReference{
 					{Name: "provider1"},
 					{Name: "provider2"},
@@ -2049,7 +2049,7 @@ func TestVirtualModel_FallbackToDefaults(t *testing.T) {
 	t.Run("default model uses default strategy", func(t *testing.T) {
 		ctx := context.Background()
 		opts := types.GenerateOptions{
-			Model: "default",
+			Model:  "default",
 			Prompt: "test",
 		}
 
@@ -2072,7 +2072,7 @@ func TestVirtualModel_FallbackToDefaults(t *testing.T) {
 	t.Run("custom model uses custom strategy", func(t *testing.T) {
 		ctx := context.Background()
 		opts := types.GenerateOptions{
-			Model: "custom",
+			Model:  "custom",
 			Prompt: "test",
 		}
 
@@ -2182,7 +2182,6 @@ func TestVirtualModel_ConfigurationValidation(t *testing.T) {
 // ============================================================================
 // Configuration Tests
 // ============================================================================
-
 
 func TestConfig_DefaultConfig(t *testing.T) {
 	config := DefaultConfig()
@@ -2334,7 +2333,7 @@ func TestRacingProvider_Integration_MetricsAggregation(t *testing.T) {
 	// Make a request
 	ctx := context.Background()
 	opts := types.GenerateOptions{
-		Model: "test-model",
+		Model:  "test-model",
 		Prompt: "test",
 	}
 
@@ -2442,7 +2441,7 @@ func TestRacingProvider_Integration_ConcurrentRequests(t *testing.T) {
 		go func() {
 			ctx := context.Background()
 			opts := types.GenerateOptions{
-				Model: "concurrent-model",
+				Model:  "concurrent-model",
 				Prompt: "test",
 			}
 
@@ -2502,7 +2501,7 @@ func TestRacingProvider_Integration_MetadataEnrichment(t *testing.T) {
 
 	ctx := context.Background()
 	opts := types.GenerateOptions{
-		Model: "metadata-model",
+		Model:  "metadata-model",
 		Prompt: "test",
 	}
 
@@ -2589,8 +2588,8 @@ func TestBackwardCompatibility_OldConfigurationFormat(t *testing.T) {
 
 func TestBackwardCompatibility_ConfigMigration(t *testing.T) {
 	tests := []struct {
-		name     string
-		oldConfig *Config
+		name             string
+		oldConfig        *Config
 		expectedBehavior string
 	}{
 		{
@@ -2667,8 +2666,8 @@ func TestBackwardCompatibility_ConfigMigration(t *testing.T) {
 func TestBackwardCompatibility_ProviderSetters(t *testing.T) {
 	// Test that SetProviders still works with old configuration
 	config := &Config{
-		TimeoutMS: 5000,
-		Strategy:  StrategyFirstWins,
+		TimeoutMS:     5000,
+		Strategy:      StrategyFirstWins,
 		ProviderNames: []string{"provider1", "provider2"},
 	}
 
@@ -2768,8 +2767,8 @@ func TestBackwardCompatibility_ConfigMethods(t *testing.T) {
 func TestBackwardCompatibility_PerformanceTracking(t *testing.T) {
 	// Test that performance tracking still works as before
 	config := &Config{
-		TimeoutMS: 5000,
-		Strategy:  StrategyFirstWins,
+		TimeoutMS:     5000,
+		Strategy:      StrategyFirstWins,
 		ProviderNames: []string{"provider1", "provider2"},
 	}
 
@@ -2797,8 +2796,8 @@ func TestBackwardCompatibility_PerformanceTracking(t *testing.T) {
 
 func TestBackwardCompatibility_ErrorHandling(t *testing.T) {
 	config := &Config{
-		TimeoutMS: 1000,
-		Strategy:  StrategyFirstWins,
+		TimeoutMS:     1000,
+		Strategy:      StrategyFirstWins,
 		ProviderNames: []string{"provider1"},
 	}
 
@@ -2809,7 +2808,7 @@ func TestBackwardCompatibility_ErrorHandling(t *testing.T) {
 
 	ctx := context.Background()
 	opts := types.GenerateOptions{
-		Model: "nonexistent-model", // Should use legacy mode when no virtual models configured
+		Model:  "nonexistent-model", // Should use legacy mode when no virtual models configured
 		Prompt: "test",
 	}
 
@@ -2895,7 +2894,7 @@ func TestBackwardCompatibility_MixedUsage(t *testing.T) {
 				// Should work with new virtual model format
 				ctx := context.Background()
 				opts := types.GenerateOptions{
-					Model: "modern",
+					Model:  "modern",
 					Prompt: "test",
 				}
 

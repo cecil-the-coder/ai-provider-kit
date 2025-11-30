@@ -50,7 +50,7 @@ func ExampleUsage() {
 	// Example 2: Test an Anthropic provider
 	fmt.Println("\nTesting Anthropic provider...")
 	anthropicConfig := map[string]interface{}{
-		"api_key": "sk-ant-your-anthropic-api-key",
+		"api_key":  "sk-ant-your-anthropic-api-key",
 		"base_url": "https://api.anthropic.com",
 	}
 

@@ -78,18 +78,22 @@ func (m *mockTestableProvider) TestConnectivity(ctx context.Context) error {
 // mockProvider implements the basic Provider interface for testing
 type mockProvider struct{}
 
-func (m *mockProvider) Name() string                           { return "mock" }
-func (m *mockProvider) Type() ProviderType                     { return "synthetic" }
-func (m *mockProvider) Description() string                    { return "mock provider" }
-func (m *mockProvider) GetModels(ctx context.Context) ([]Model, error) { return nil, nil }
-func (m *mockProvider) GetDefaultModel() string                { return "mock-model" }
+func (m *mockProvider) Name() string                                                  { return "mock" }
+func (m *mockProvider) Type() ProviderType                                            { return "synthetic" }
+func (m *mockProvider) Description() string                                           { return "mock provider" }
+func (m *mockProvider) GetModels(ctx context.Context) ([]Model, error)                { return nil, nil }
+func (m *mockProvider) GetDefaultModel() string                                       { return "mock-model" }
 func (m *mockProvider) Authenticate(ctx context.Context, authConfig AuthConfig) error { return nil }
-func (m *mockProvider) IsAuthenticated() bool                  { return true }
-func (m *mockProvider) Logout(ctx context.Context) error       { return nil }
-func (m *mockProvider) Configure(config ProviderConfig) error  { return nil }
-func (m *mockProvider) GetConfig() ProviderConfig             { return ProviderConfig{} }
-func (m *mockProvider) GenerateChatCompletion(ctx context.Context, options GenerateOptions) (ChatCompletionStream, error) { return nil, nil }
-func (m *mockProvider) InvokeServerTool(ctx context.Context, toolName string, params interface{}) (interface{}, error) { return nil, nil }
+func (m *mockProvider) IsAuthenticated() bool                                         { return true }
+func (m *mockProvider) Logout(ctx context.Context) error                              { return nil }
+func (m *mockProvider) Configure(config ProviderConfig) error                         { return nil }
+func (m *mockProvider) GetConfig() ProviderConfig                                     { return ProviderConfig{} }
+func (m *mockProvider) GenerateChatCompletion(ctx context.Context, options GenerateOptions) (ChatCompletionStream, error) {
+	return nil, nil
+}
+func (m *mockProvider) InvokeServerTool(ctx context.Context, toolName string, params interface{}) (interface{}, error) {
+	return nil, nil
+}
 func (m *mockProvider) SupportsToolCalling() bool             { return false }
 func (m *mockProvider) GetToolFormat() ToolFormat             { return ToolFormatOpenAI }
 func (m *mockProvider) SupportsStreaming() bool               { return true }

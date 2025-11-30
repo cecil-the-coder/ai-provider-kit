@@ -321,17 +321,17 @@ func TestTestResult_DetailManagement(t *testing.T) {
 
 	// Test setting multiple details
 	testDetails := map[string]string{
-		"auth_method":          "oauth",
-		"token_valid":          "true",
-		"supports_streaming":   "true",
-		"supports_tools":       "true",
-		"max_tokens":           "8192",
-		"provider_version":     "2.5-flash",
-		"region":               "us-central1",
-		"rate_limit_rpm":       "60",
-		"rate_limit_tpm":       "32000",
-		"model_pricing":        "0.00025/1k tokens",
-		"special_features":     "function_calling,vision",
+		"auth_method":        "oauth",
+		"token_valid":        "true",
+		"supports_streaming": "true",
+		"supports_tools":     "true",
+		"max_tokens":         "8192",
+		"provider_version":   "2.5-flash",
+		"region":             "us-central1",
+		"rate_limit_rpm":     "60",
+		"rate_limit_tpm":     "32000",
+		"model_pricing":      "0.00025/1k tokens",
+		"special_features":   "function_calling,vision",
 	}
 
 	for key, value := range testDetails {
@@ -528,16 +528,16 @@ func TestTestResult_AdvancedJSONSerialization(t *testing.T) {
 
 	// Verify all details are preserved
 	expectedDetails := map[string]string{
-		"request_id":     "req_123456789",
-		"error_code":     "internal_error",
-		"retry_after":    "120",
-		"service":        "claude-3-sonnet",
-		"region":         "us-west-2",
-		"user_id":        "user_abc123",
-		"request_type":   "chat_completion",
-		"model_version":  "3.5",
-		"api_version":    "2023-06-01",
-		"billing_id":     "bill_xyz789",
+		"request_id":    "req_123456789",
+		"error_code":    "internal_error",
+		"retry_after":   "120",
+		"service":       "claude-3-sonnet",
+		"region":        "us-west-2",
+		"user_id":       "user_abc123",
+		"request_type":  "chat_completion",
+		"model_version": "3.5",
+		"api_version":   "2023-06-01",
+		"billing_id":    "bill_xyz789",
 	}
 
 	for key, expectedValue := range expectedDetails {
@@ -805,11 +805,11 @@ func TestTestResult_FactoryIntegration(t *testing.T) {
 // Helper function to check if a string contains a substring
 func containsString(s, substr string) bool {
 	return len(s) >= len(substr) &&
-		   (s == substr ||
-		    (len(s) > len(substr) &&
-		     (s[:len(substr)] == substr ||
-		      s[len(s)-len(substr):] == substr ||
-		      containsInMiddle(s, substr))))
+		(s == substr ||
+			(len(s) > len(substr) &&
+				(s[:len(substr)] == substr ||
+					s[len(s)-len(substr):] == substr ||
+					containsInMiddle(s, substr))))
 }
 
 func containsInMiddle(s, substr string) bool {

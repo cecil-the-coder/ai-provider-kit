@@ -13,18 +13,18 @@ type Config struct {
 	ProviderNames []string `yaml:"providers"`
 
 	// Virtual models configuration
-	VirtualModels      map[string]VirtualModelConfig `yaml:"virtual_models"`
-	DefaultVirtualModel string                       `yaml:"default_virtual_model"`
-	PerformanceFile    string                       `yaml:"performance_file,omitempty"`
+	VirtualModels       map[string]VirtualModelConfig `yaml:"virtual_models"`
+	DefaultVirtualModel string                        `yaml:"default_virtual_model"`
+	PerformanceFile     string                        `yaml:"performance_file,omitempty"`
 }
 
 // VirtualModelConfig represents configuration for a single virtual model
 type VirtualModelConfig struct {
-	DisplayName string               `yaml:"display_name"`
-	Description string               `yaml:"description"`
-	Providers   []ProviderReference  `yaml:"providers"`
-	Strategy    Strategy             `yaml:"strategy"`
-	TimeoutMS   int                  `yaml:"timeout_ms"`
+	DisplayName string              `yaml:"display_name"`
+	Description string              `yaml:"description"`
+	Providers   []ProviderReference `yaml:"providers"`
+	Strategy    Strategy            `yaml:"strategy"`
+	TimeoutMS   int                 `yaml:"timeout_ms"`
 }
 
 // ProviderReference represents a reference to a provider with optional configuration
@@ -67,7 +67,6 @@ func (c *Config) resolveVirtualModelConfig(modelID string) (*VirtualModelConfig,
 
 	return resolved, nil
 }
-
 
 // GetVirtualModel returns the virtual model configuration for the given model name
 func (c *Config) GetVirtualModel(modelName string) *VirtualModelConfig {
@@ -146,9 +145,9 @@ func (c *Config) GetEffectiveStrategy(modelName string) Strategy {
 // DefaultConfig returns a default configuration with sensible defaults
 func DefaultConfig() *Config {
 	return &Config{
-		TimeoutMS:          5000,
-		GracePeriodMS:      1000,
-		Strategy:           StrategyFirstWins,
+		TimeoutMS:           5000,
+		GracePeriodMS:       1000,
+		Strategy:            StrategyFirstWins,
 		DefaultVirtualModel: "default",
 		VirtualModels: map[string]VirtualModelConfig{
 			"default": {

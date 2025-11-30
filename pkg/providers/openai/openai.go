@@ -889,7 +889,7 @@ func (p *OpenAIProvider) TestConnectivity(ctx context.Context) error {
 	// Try to parse a small portion of the response to ensure it's valid JSON
 	decoder := json.NewDecoder(io.LimitReader(resp.Body, 1024))
 	var testResponse struct {
-		Object string `json:"object"`
+		Object string        `json:"object"`
 		Data   []interface{} `json:"data"`
 	}
 	if err := decoder.Decode(&testResponse); err != nil {
