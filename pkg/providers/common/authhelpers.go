@@ -102,6 +102,16 @@ func (h *AuthHelper) ExecuteWithAuth(
 	log.Printf("🟡 [AuthHelper] ExecuteWithAuth ENTRY - provider=%s, Stream=%v", h.ProviderName, options.Stream)
 	log.Printf("🟡 [AuthHelper] OAuthManager=%p, KeyManager=%p", h.OAuthManager, h.KeyManager)
 
+	// Check for context-injected OAuth token first
+	if contextToken := GetOAuthToken(ctx); contextToken != "" {
+		log.Printf("[AuthHelper] Using context-injected OAuth token")
+		// Create a temporary credential set with the injected token
+		cred := &types.OAuthCredentialSet{
+			AccessToken: contextToken,
+		}
+		return oauthOperation(ctx, cred)
+	}
+
 	// Check if streaming is requested
 	if options.Stream {
 		log.Printf("🟡 [AuthHelper] Delegating to executeStreamWithAuth")
@@ -142,6 +152,18 @@ func (h *AuthHelper) executeStreamWithAuth(
 	oauthOperation func(context.Context, *types.OAuthCredentialSet) (string, *types.Usage, error),
 	apiKeyOperation func(context.Context, string) (string, *types.Usage, error),
 ) (string, *types.Usage, error) {
+	// Check for context-injected OAuth token first
+	if contextToken := GetOAuthToken(ctx); contextToken != "" {
+		log.Printf("[AuthHelper] Using context-injected OAuth token for streaming")
+		cred := &types.OAuthCredentialSet{
+			AccessToken: contextToken,
+		}
+		_, _, err := oauthOperation(ctx, cred)
+		if err == nil {
+			return "streaming_with_context_oauth", &types.Usage{}, nil
+		}
+	}
+
 	// For streaming, we need to return a mock result since the actual streaming
 	// is handled by provider-specific streaming methods
 	if h.OAuthManager != nil {
@@ -188,6 +210,18 @@ func (h *AuthHelper) SetAuthHeaders(req *http.Request, authToken string, authTyp
 		// For providers that need custom header handling
 		// The provider should override this method
 	}
+}
+
+// SetAuthHeadersFromContext sets auth headers using context-provided credentials
+func (h *AuthHelper) SetAuthHeadersFromContext(ctx context.Context, req *http.Request) bool {
+	token := GetOAuthToken(ctx)
+	if token == "" {
+		return false
+	}
+
+	authType := GetAuthType(ctx)
+	h.SetAuthHeaders(req, token, authType)
+	return true
 }
 
 // SetProviderSpecificHeaders sets provider-specific headers beyond auth
