@@ -1,7 +1,9 @@
 package common
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -390,6 +392,50 @@ func (h *AuthHelper) MakeAuthenticatedRequest(
 	}
 
 	return resp, nil
+}
+
+// CreateJSONRequest creates an HTTP request with JSON body and standard headers
+// This is a convenience method that combines request creation, JSON marshaling,
+// and header setup commonly used across providers.
+func (h *AuthHelper) CreateJSONRequest(
+	ctx context.Context,
+	method, url string,
+	body interface{},
+	credential string,
+	authType string,
+) (*http.Request, error) {
+	// Marshal body to JSON if provided
+	var reqBody *bytes.Buffer
+	if body != nil {
+		jsonBytes, err := json.Marshal(body)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal request body: %w", err)
+		}
+		reqBody = bytes.NewBuffer(jsonBytes)
+	}
+
+	// Create request
+	var req *http.Request
+	var err error
+	if reqBody != nil {
+		req, err = http.NewRequestWithContext(ctx, method, url, reqBody)
+	} else {
+		req, err = http.NewRequestWithContext(ctx, method, url, nil)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	// Set standard headers
+	req.Header.Set("Content-Type", "application/json")
+
+	// Set authentication headers
+	h.SetAuthHeaders(req, credential, authType)
+
+	// Set provider-specific headers
+	h.SetProviderSpecificHeaders(req)
+
+	return req, nil
 }
 
 // HandleAuthError handles authentication-specific errors and provides user-friendly messages

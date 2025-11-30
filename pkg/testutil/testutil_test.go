@@ -4,27 +4,27 @@ import (
 	"context"
 	"errors"
 	"io"
-	"net/http"
 	"testing"
-	"time"
 
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestNewConfigurableMockProvider tests the creation of a mock provider
 func TestNewConfigurableMockProvider(t *testing.T) {
 	provider := NewConfigurableMockProvider("TestProvider", types.ProviderTypeOpenAI)
 
-	AssertEqual(t, "TestProvider", provider.Name())
-	AssertEqual(t, types.ProviderTypeOpenAI, provider.Type())
-	AssertTrue(t, provider.IsAuthenticated())
-	AssertEqual(t, "mock-model", provider.GetDefaultModel())
+	assert.Equal(t, "TestProvider", provider.Name())
+	assert.Equal(t, types.ProviderTypeOpenAI, provider.Type())
+	assert.True(t, provider.IsAuthenticated())
+	assert.Equal(t, "mock-model", provider.GetDefaultModel())
 }
 
 // TestConfigurableMockProviderGenerateChatCompletion tests the GenerateChatCompletion method
 func TestConfigurableMockProviderGenerateChatCompletion(t *testing.T) {
 	provider := NewConfigurableMockProvider("TestProvider", types.ProviderTypeOpenAI)
-	ctx := BackgroundContext(t)
+	ctx := context.Background()
 
 	// Test successful generation
 	stream, err := provider.GenerateChatCompletion(ctx, types.GenerateOptions{
@@ -32,8 +32,8 @@ func TestConfigurableMockProviderGenerateChatCompletion(t *testing.T) {
 		Model:    "mock-model",
 	})
 
-	AssertNoError(t, err)
-	RequireNotNil(t, stream)
+	require.NoError(t, err)
+	require.NotNil(t, stream)
 
 	// Consume the stream to get content
 	var content string
@@ -55,8 +55,8 @@ func TestConfigurableMockProviderGenerateChatCompletion(t *testing.T) {
 		}
 	}
 
-	AssertEqual(t, "Mock response", content)
-	AssertEqual(t, 1, provider.GetGenerateChatCallCount())
+	assert.Equal(t, "Mock response", content)
+	assert.Equal(t, 1, provider.GetGenerateChatCallCount())
 
 	// Test error scenario
 	expectedErr := errors.New("generation failed")
@@ -67,54 +67,54 @@ func TestConfigurableMockProviderGenerateChatCompletion(t *testing.T) {
 		Model:    "mock-model",
 	})
 
-	AssertError(t, err)
-	AssertEqual(t, expectedErr, err)
+	require.Error(t, err)
+	assert.Equal(t, expectedErr, err)
 }
 
 // TestConfigurableMockProviderToolCalling tests the InvokeServerTool method
 func TestConfigurableMockProviderToolCalling(t *testing.T) {
 	provider := NewConfigurableMockProvider("TestProvider", types.ProviderTypeOpenAI)
-	ctx := BackgroundContext(t)
+	ctx := context.Background()
 
 	result, err := provider.InvokeServerTool(ctx, "test_tool", map[string]interface{}{"arg": "value"})
 
-	AssertNoError(t, err)
-	RequireNotNil(t, result)
+	require.NoError(t, err)
+	require.NotNil(t, result)
 
 	resultMap, ok := result.(map[string]interface{})
-	AssertTrue(t, ok)
-	AssertEqual(t, "test_tool", resultMap["tool"])
-	AssertEqual(t, "mock result", resultMap["result"])
+	assert.True(t, ok)
+	assert.Equal(t, "test_tool", resultMap["tool"])
+	assert.Equal(t, "mock result", resultMap["result"])
 }
 
 // TestConfigurableMockProviderHealthCheck tests the HealthCheck method
 func TestConfigurableMockProviderHealthCheck(t *testing.T) {
 	provider := NewConfigurableMockProvider("TestProvider", types.ProviderTypeOpenAI)
-	ctx := BackgroundContext(t)
+	ctx := context.Background()
 
 	// Test successful health check
 	err := provider.HealthCheck(ctx)
-	AssertNoError(t, err)
-	AssertEqual(t, 1, provider.GetHealthCheckCallCount())
+	require.NoError(t, err)
+	assert.Equal(t, 1, provider.GetHealthCheckCallCount())
 
 	// Test error scenario
 	expectedErr := errors.New("health check failed")
 	provider.SetHealthCheckError(expectedErr)
 
 	err = provider.HealthCheck(ctx)
-	AssertError(t, err)
-	AssertEqual(t, expectedErr, err)
+	require.Error(t, err)
+	assert.Equal(t, expectedErr, err)
 }
 
 // TestConfigurableMockProviderGetModels tests the GetModels method
 func TestConfigurableMockProviderGetModels(t *testing.T) {
 	provider := NewConfigurableMockProvider("TestProvider", types.ProviderTypeOpenAI)
-	ctx := BackgroundContext(t)
+	ctx := context.Background()
 
 	models, err := provider.GetModels(ctx)
-	AssertNoError(t, err)
-	AssertLen(t, models, 1)
-	AssertEqual(t, "mock-model", models[0].ID)
+	require.NoError(t, err)
+	assert.Len(t, models, 1)
+	assert.Equal(t, "mock-model", models[0].ID)
 
 	// Test with custom models
 	customModels := []types.Model{
@@ -124,8 +124,8 @@ func TestConfigurableMockProviderGetModels(t *testing.T) {
 	provider.SetModels(customModels)
 
 	models, err = provider.GetModels(ctx)
-	AssertNoError(t, err)
-	AssertLen(t, models, 2)
+	require.NoError(t, err)
+	assert.Len(t, models, 2)
 }
 
 // TestConfigurableMockStream tests the mock stream
@@ -167,13 +167,13 @@ func TestConfigurableMockStream(t *testing.T) {
 		}
 	}
 
-	AssertEqual(t, "Hello world", content)
+	assert.Equal(t, "Hello world", content)
 
 	// Test reset
 	stream.Reset()
 	chunk, err := stream.Next()
-	AssertNoError(t, err)
-	AssertEqual(t, "Hello", chunk.Choices[0].Delta.Content)
+	require.NoError(t, err)
+	assert.Equal(t, "Hello", chunk.Choices[0].Delta.Content)
 }
 
 // TestTestFixtures tests the fixture creation
@@ -181,27 +181,27 @@ func TestTestFixtures(t *testing.T) {
 	fixtures := NewTestFixtures()
 
 	// Test provider configs
-	AssertEqual(t, types.ProviderTypeOpenAI, fixtures.OpenAIConfig.Type)
-	AssertEqual(t, types.ProviderTypeAnthropic, fixtures.AnthropicConfig.Type)
-	AssertNotEmpty(t, fixtures.OpenAIConfig.APIKey)
+	assert.Equal(t, types.ProviderTypeOpenAI, fixtures.OpenAIConfig.Type)
+	assert.Equal(t, types.ProviderTypeAnthropic, fixtures.AnthropicConfig.Type)
+	assert.NotEmpty(t, fixtures.OpenAIConfig.APIKey)
 
 	// Test messages
-	AssertEqual(t, "user", fixtures.SimpleMessage.Role)
-	AssertNotEmpty(t, fixtures.SimpleMessage.Content)
-	AssertNotEmpty(t, fixtures.MultiTurnMessages)
+	assert.Equal(t, "user", fixtures.SimpleMessage.Role)
+	assert.NotEmpty(t, fixtures.SimpleMessage.Content)
+	assert.NotEmpty(t, fixtures.MultiTurnMessages)
 
 	// Test tools
-	AssertEqual(t, "get_weather", fixtures.WeatherTool.Name)
-	AssertEqual(t, "calculate", fixtures.CalculatorTool.Name)
-	AssertLen(t, fixtures.AllTools, 3)
+	assert.Equal(t, "get_weather", fixtures.WeatherTool.Name)
+	assert.Equal(t, "calculate", fixtures.CalculatorTool.Name)
+	assert.Len(t, fixtures.AllTools, 3)
 
 	// Test models
-	AssertNotEmpty(t, fixtures.OpenAIModels)
-	AssertNotEmpty(t, fixtures.AnthropicModels)
+	assert.NotEmpty(t, fixtures.OpenAIModels)
+	assert.NotEmpty(t, fixtures.AnthropicModels)
 
 	// Test responses
-	AssertNotEmpty(t, fixtures.StreamChunks)
-	AssertNotEmpty(t, fixtures.StandardResponse.Choices)
+	assert.NotEmpty(t, fixtures.StreamChunks)
+	assert.NotEmpty(t, fixtures.StandardResponse.Choices)
 }
 
 // TestTestFixturesHelpers tests the fixture helper methods
@@ -210,149 +210,62 @@ func TestTestFixturesHelpers(t *testing.T) {
 
 	// Test NewProviderConfig
 	config := fixtures.NewProviderConfig(types.ProviderTypeOpenAI, "custom-key")
-	AssertEqual(t, "custom-key", config.APIKey)
-	AssertEqual(t, types.ProviderTypeOpenAI, config.Type)
+	assert.Equal(t, "custom-key", config.APIKey)
+	assert.Equal(t, types.ProviderTypeOpenAI, config.Type)
 
 	// Test NewMessage
 	msg := fixtures.NewMessage("system", "You are helpful")
-	AssertEqual(t, "system", msg.Role)
-	AssertEqual(t, "You are helpful", msg.Content)
+	assert.Equal(t, "system", msg.Role)
+	assert.Equal(t, "You are helpful", msg.Content)
 
 	// Test NewToolCall
 	toolCall := fixtures.NewToolCall("call_123", "test_func", `{"key":"value"}`)
-	AssertEqual(t, "call_123", toolCall.ID)
-	AssertEqual(t, "test_func", toolCall.Function.Name)
+	assert.Equal(t, "call_123", toolCall.ID)
+	assert.Equal(t, "test_func", toolCall.Function.Name)
 
 	// Test NewGenerateOptions
 	opts := fixtures.NewGenerateOptions(
 		[]types.ChatMessage{{Role: "user", Content: "Test"}},
 		"gpt-4",
 	)
-	AssertEqual(t, "gpt-4", opts.Model)
-	AssertLen(t, opts.Messages, 1)
-}
-
-// TestAssertions tests various assertion helpers
-func TestAssertions(t *testing.T) {
-	// Test AssertNoError
-	AssertNoError(t, nil)
-
-	// Test AssertError
-	AssertError(t, errors.New("test error"))
-
-	// Test AssertEqual
-	AssertEqual(t, 1, 1)
-	AssertEqual(t, "test", "test")
-
-	// Test AssertNotEqual
-	AssertNotEqual(t, 1, 2)
-
-	// Test AssertTrue/False
-	AssertTrue(t, true)
-	AssertFalse(t, false)
-
-	// Test AssertNil/NotNil
-	AssertNil(t, nil)
-	AssertNotNil(t, "not nil")
-
-	// Test AssertEmpty/NotEmpty
-	AssertEmpty(t, "")
-	AssertEmpty(t, []int{})
-	AssertNotEmpty(t, "not empty")
-	AssertNotEmpty(t, []int{1})
-
-	// Test AssertContains
-	AssertContains(t, "hello world", "world")
-
-	// Test AssertNotContains
-	AssertNotContains(t, "hello world", "xyz")
-
-	// Test AssertLen
-	AssertLen(t, []int{1, 2, 3}, 3)
-
-	// Test AssertStatusCode
-	AssertStatusCode(t, http.StatusOK, 200)
-
-	// Test AssertStatusOK
-	AssertStatusOK(t, http.StatusOK)
-}
-
-// TestContextHelpers tests the context helper functions
-func TestContextHelpers(t *testing.T) {
-	// Test TestContext
-	ctx, cancel := TestContext(t)
-	defer cancel()
-	RequireNotNil(t, ctx)
-
-	deadline, ok := ctx.Deadline()
-	AssertTrue(t, ok)
-	AssertTrue(t, deadline.After(time.Now()))
-
-	// Test ShortTestContext
-	shortCtx, shortCancel := ShortTestContext(t)
-	defer shortCancel()
-	RequireNotNil(t, shortCtx)
-
-	// Test LongTestContext
-	longCtx, longCancel := LongTestContext(t)
-	defer longCancel()
-	RequireNotNil(t, longCtx)
-
-	// Test TestContextWithTimeout
-	customCtx, customCancel := TestContextWithTimeout(t, 10*time.Second)
-	defer customCancel()
-	RequireNotNil(t, customCtx)
-
-	// Test TestContextWithCancel
-	cancelCtx, cancelFunc := TestContextWithCancel(t)
-	defer cancelFunc()
-	RequireNotNil(t, cancelCtx)
-
-	// Test BackgroundContext
-	bgCtx := BackgroundContext(t)
-	RequireNotNil(t, bgCtx)
-	AssertEqual(t, context.Background(), bgCtx)
-
-	// Test ContextWithValue
-	valueCtx := ContextWithValue(t, "key", "value")
-	RequireNotNil(t, valueCtx)
-	AssertEqual(t, "value", valueCtx.Value("key"))
+	assert.Equal(t, "gpt-4", opts.Model)
+	assert.Len(t, opts.Messages, 1)
 }
 
 // TestProviderMetrics tests that metrics are tracked correctly
 func TestProviderMetrics(t *testing.T) {
 	provider := NewConfigurableMockProvider("TestProvider", types.ProviderTypeOpenAI)
-	ctx := BackgroundContext(t)
+	ctx := context.Background()
 
 	// Initial metrics should be zero
 	metrics := provider.GetMetrics()
-	AssertEqual(t, int64(0), metrics.RequestCount)
-	AssertEqual(t, int64(0), metrics.SuccessCount)
-	AssertEqual(t, int64(0), metrics.ErrorCount)
+	assert.Equal(t, int64(0), metrics.RequestCount)
+	assert.Equal(t, int64(0), metrics.SuccessCount)
+	assert.Equal(t, int64(0), metrics.ErrorCount)
 
 	// Make a successful request
 	stream, err := provider.GenerateChatCompletion(ctx, types.GenerateOptions{
 		Messages: []types.ChatMessage{{Role: "user", Content: "Hello"}},
 	})
-	AssertNoError(t, err)
-	RequireNotNil(t, stream)
+	require.NoError(t, err)
+	require.NotNil(t, stream)
 
 	// Check metrics updated
 	metrics = provider.GetMetrics()
-	AssertEqual(t, int64(1), metrics.RequestCount)
-	AssertEqual(t, int64(1), metrics.SuccessCount)
-	AssertEqual(t, int64(0), metrics.ErrorCount)
+	assert.Equal(t, int64(1), metrics.RequestCount)
+	assert.Equal(t, int64(1), metrics.SuccessCount)
+	assert.Equal(t, int64(0), metrics.ErrorCount)
 
 	// Make a failing request
 	provider.SetGenerateError(errors.New("test error"))
 	_, err = provider.GenerateChatCompletion(ctx, types.GenerateOptions{
 		Messages: []types.ChatMessage{{Role: "user", Content: "Hello"}},
 	})
-	AssertError(t, err)
+	require.Error(t, err)
 
 	// Check metrics updated
 	metrics = provider.GetMetrics()
-	AssertEqual(t, int64(2), metrics.RequestCount)
-	AssertEqual(t, int64(1), metrics.SuccessCount)
-	AssertEqual(t, int64(1), metrics.ErrorCount)
+	assert.Equal(t, int64(2), metrics.RequestCount)
+	assert.Equal(t, int64(1), metrics.SuccessCount)
+	assert.Equal(t, int64(1), metrics.ErrorCount)
 }

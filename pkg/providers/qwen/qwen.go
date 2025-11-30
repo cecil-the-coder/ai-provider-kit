@@ -799,15 +799,20 @@ func (s *QwenRealStream) Close() error {
 }
 
 // convertToQwenTools converts universal tools to Qwen format
+// Qwen uses OpenAI-compatible format, so we use the shared implementation
 func convertToQwenTools(tools []types.Tool) []QwenTool {
-	qwenTools := make([]QwenTool, len(tools))
-	for i, tool := range tools {
+	// Convert using shared OpenAI-compatible converter
+	compatibleTools := common.ConvertToOpenAICompatibleTools(tools)
+
+	// Convert to Qwen-specific types (same structure, different type names)
+	qwenTools := make([]QwenTool, len(compatibleTools))
+	for i, ct := range compatibleTools {
 		qwenTools[i] = QwenTool{
-			Type: "function",
+			Type: ct.Type,
 			Function: QwenFunctionDef{
-				Name:        tool.Name,
-				Description: tool.Description,
-				Parameters:  tool.InputSchema,
+				Name:        ct.Function.Name,
+				Description: ct.Function.Description,
+				Parameters:  ct.Function.Parameters,
 			},
 		}
 	}
@@ -815,15 +820,20 @@ func convertToQwenTools(tools []types.Tool) []QwenTool {
 }
 
 // convertToQwenToolCalls converts universal tool calls to Qwen format
+// Qwen uses OpenAI-compatible format, so we use the shared implementation
 func convertToQwenToolCalls(toolCalls []types.ToolCall) []QwenToolCall {
-	qwenToolCalls := make([]QwenToolCall, len(toolCalls))
-	for i, tc := range toolCalls {
+	// Convert using shared OpenAI-compatible converter
+	compatibleCalls := common.ConvertToOpenAICompatibleToolCalls(toolCalls)
+
+	// Convert to Qwen-specific types (same structure, different type names)
+	qwenToolCalls := make([]QwenToolCall, len(compatibleCalls))
+	for i, cc := range compatibleCalls {
 		qwenToolCalls[i] = QwenToolCall{
-			ID:   tc.ID,
-			Type: tc.Type,
+			ID:   cc.ID,
+			Type: cc.Type,
 			Function: QwenToolCallFunction{
-				Name:      tc.Function.Name,
-				Arguments: tc.Function.Arguments,
+				Name:      cc.Function.Name,
+				Arguments: cc.Function.Arguments,
 			},
 		}
 	}
@@ -831,17 +841,21 @@ func convertToQwenToolCalls(toolCalls []types.ToolCall) []QwenToolCall {
 }
 
 // convertQwenToolCallsToUniversal converts Qwen tool calls to universal format
+// Qwen uses OpenAI-compatible format, so we use the shared implementation
 func convertQwenToolCallsToUniversal(toolCalls []QwenToolCall) []types.ToolCall {
-	universal := make([]types.ToolCall, len(toolCalls))
+	// Convert to OpenAI-compatible format
+	compatibleCalls := make([]common.OpenAICompatibleToolCall, len(toolCalls))
 	for i, tc := range toolCalls {
-		universal[i] = types.ToolCall{
+		compatibleCalls[i] = common.OpenAICompatibleToolCall{
 			ID:   tc.ID,
 			Type: tc.Type,
-			Function: types.ToolCallFunction{
+			Function: common.OpenAICompatibleToolCallFunction{
 				Name:      tc.Function.Name,
 				Arguments: tc.Function.Arguments,
 			},
 		}
 	}
-	return universal
+
+	// Convert using shared converter
+	return common.ConvertOpenAICompatibleToolCallsToUniversal(compatibleCalls)
 }

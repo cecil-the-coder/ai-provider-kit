@@ -4,7 +4,6 @@ package cerebras
 
 import (
 	"bufio"
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -17,7 +16,6 @@ import (
 
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/base"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common"
-	"github.com/cecil-the-coder/ai-provider-kit/pkg/ratelimit"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 )
 
@@ -33,29 +31,26 @@ type CerebrasProvider struct {
 
 // NewCerebrasProvider creates a new Cerebras provider
 func NewCerebrasProvider(config types.ProviderConfig) *CerebrasProvider {
-	// Use the shared config helper
-	configHelper := common.NewConfigHelper("Cerebras", types.ProviderTypeCerebras)
-
-	// Merge with defaults and extract configuration
-	mergedConfig := configHelper.MergeWithDefaults(config)
-
-	client := &http.Client{
-		Timeout: configHelper.ExtractTimeout(mergedConfig),
+	// Initialize common provider components using the factory pattern
+	components, err := base.InitializeProviderComponents(base.ProviderInitConfig{
+		ProviderType: types.ProviderTypeCerebras,
+		ProviderName: "Cerebras",
+		Config:       config,
+		HTTPTimeout:  10 * time.Second,
+	})
+	if err != nil {
+		// This should rarely happen, but log and return nil if it does
+		log.Printf("Failed to initialize Cerebras provider: %v", err)
+		return nil
 	}
 
-	// Create auth helper
-	authHelper := common.NewAuthHelper("cerebras", mergedConfig, client)
-
-	// Setup API keys using shared helper
-	authHelper.SetupAPIKeys()
-
 	return &CerebrasProvider{
-		BaseProvider:    base.NewBaseProvider("cerebras", mergedConfig, client, log.Default()),
-		config:          mergedConfig,
-		httpClient:      client,
-		authHelper:      authHelper,
+		BaseProvider:    components.BaseProvider,
+		config:          components.MergedConfig,
+		httpClient:      components.HTTPClient,
+		authHelper:      components.AuthHelper,
 		modelCache:      common.NewModelCache(common.GetModelCacheTTL(types.ProviderTypeCerebras)),
-		rateLimitHelper: common.NewRateLimitHelper(&ratelimit.CerebrasParser{}),
+		rateLimitHelper: components.RateLimitHelper,
 	}
 }
 
@@ -121,15 +116,12 @@ func (p *CerebrasProvider) fetchModelsFromAPI(ctx context.Context) ([]types.Mode
 			WithOriginalErr(err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	req, err := p.authHelper.CreateJSONRequest(ctx, "GET", url, nil, apiKey, "api_key")
 	if err != nil {
 		return nil, types.NewInvalidRequestError(types.ProviderTypeCerebras, "failed to create request").
 			WithOperation("list_models").
 			WithOriginalErr(err)
 	}
-
-	// Use auth helper to set headers
-	p.authHelper.SetAuthHeaders(req, apiKey, "api_key")
 
 	resp, err := p.httpClient.Do(req)
 	if err != nil {
@@ -570,22 +562,12 @@ func (p *CerebrasProvider) createResponseStream(responseContent string, usage *t
 
 // makeAPICall makes a single API call
 func (p *CerebrasProvider) makeAPICall(ctx context.Context, url string, request CerebrasRequest, apiKey string) (*CerebrasResponse, error) {
-	jsonBody, err := json.Marshal(request)
-	if err != nil {
-		return nil, types.NewInvalidRequestError(types.ProviderTypeCerebras, "failed to marshal request").
-			WithOperation("chat_completion").
-			WithOriginalErr(err)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonBody))
+	req, err := p.authHelper.CreateJSONRequest(ctx, "POST", url, request, apiKey, "api_key")
 	if err != nil {
 		return nil, types.NewInvalidRequestError(types.ProviderTypeCerebras, "failed to create request").
 			WithOperation("chat_completion").
 			WithOriginalErr(err)
 	}
-
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+apiKey)
 
 	startTime := time.Now()
 	resp, err := p.httpClient.Do(req)
@@ -734,15 +716,6 @@ func (p *CerebrasProvider) HealthCheck(ctx context.Context) error {
 		baseURL = "https://api.cerebras.ai/v1"
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "GET", baseURL+"/models", nil)
-	if err != nil {
-		providerErr := types.NewInvalidRequestError(types.ProviderTypeCerebras, "failed to create health check request").
-			WithOperation("health_check").
-			WithOriginalErr(err)
-		p.UpdateHealthStatus(false, providerErr.Error())
-		return providerErr
-	}
-
 	// Get API key from auth helper
 	if p.authHelper.KeyManager == nil || len(p.authHelper.KeyManager.GetKeys()) == 0 {
 		err := types.NewAuthError(types.ProviderTypeCerebras, "no API keys available for health check").
@@ -760,8 +733,14 @@ func (p *CerebrasProvider) HealthCheck(ctx context.Context) error {
 		return providerErr
 	}
 
-	// Use auth helper to set headers
-	p.authHelper.SetAuthHeaders(req, apiKey, "api_key")
+	req, err := p.authHelper.CreateJSONRequest(ctx, "GET", baseURL+"/models", nil, apiKey, "api_key")
+	if err != nil {
+		providerErr := types.NewInvalidRequestError(types.ProviderTypeCerebras, "failed to create health check request").
+			WithOperation("health_check").
+			WithOriginalErr(err)
+		p.UpdateHealthStatus(false, providerErr.Error())
+		return providerErr
+	}
 
 	startTime := time.Now()
 	resp, err := p.httpClient.Do(req)
@@ -806,22 +785,12 @@ func (p *CerebrasProvider) GetMetrics() types.ProviderMetrics {
 
 // makeStreamingAPICall makes a streaming API call
 func (p *CerebrasProvider) makeStreamingAPICall(ctx context.Context, url string, request CerebrasRequest, apiKey string) (types.ChatCompletionStream, error) {
-	jsonBody, err := json.Marshal(request)
-	if err != nil {
-		return nil, types.NewInvalidRequestError(types.ProviderTypeCerebras, "failed to marshal request").
-			WithOperation("chat_completion_stream").
-			WithOriginalErr(err)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonBody))
+	req, err := p.authHelper.CreateJSONRequest(ctx, "POST", url, request, apiKey, "api_key")
 	if err != nil {
 		return nil, types.NewInvalidRequestError(types.ProviderTypeCerebras, "failed to create request").
 			WithOperation("chat_completion_stream").
 			WithOriginalErr(err)
 	}
-
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+apiKey)
 
 	resp, err := p.httpClient.Do(req)
 	if err != nil {
