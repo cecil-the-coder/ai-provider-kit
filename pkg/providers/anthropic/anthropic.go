@@ -14,6 +14,10 @@ import (
 
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/base"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common"
+	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common/auth"
+	commonconfig "github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common/config"
+	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common/models"
+	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common/streaming"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/ratelimit"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 )
@@ -21,12 +25,12 @@ import (
 // AnthropicProvider implements the Provider interface for Anthropic Claude
 type AnthropicProvider struct {
 	*base.BaseProvider
-	authHelper  *common.AuthHelper
+	authHelper  *auth.AuthHelper
 	client      *http.Client
 	lastUsage   *types.Usage
 	displayName string
 	config      AnthropicConfig
-	modelCache  *common.ModelCache
+	modelCache  *models.ModelCache
 
 	// Rate limiting (header-based tracking)
 	rateLimitHelper *common.RateLimitHelper
@@ -49,7 +53,7 @@ type AnthropicConfig struct {
 // NewAnthropicProvider creates a new Anthropic provider
 func NewAnthropicProvider(config types.ProviderConfig) *AnthropicProvider {
 	// Use the shared config helper
-	configHelper := common.NewConfigHelper("Anthropic", types.ProviderTypeAnthropic)
+	configHelper := commonconfig.NewConfigHelper("Anthropic", types.ProviderTypeAnthropic)
 
 	// Merge with defaults and extract configuration
 	mergedConfig := configHelper.MergeWithDefaults(config)
@@ -77,13 +81,13 @@ func NewAnthropicProvider(config types.ProviderConfig) *AnthropicProvider {
 	}
 
 	// Create auth helper
-	authHelper := common.NewAuthHelper("anthropic", mergedConfig, client)
+	authHelper := auth.NewAuthHelper("anthropic", mergedConfig, client)
 
 	// Setup API keys using shared helper
 	authHelper.SetupAPIKeys()
 
 	// Setup OAuth using shared helper with refresh function factory
-	refreshFactory := common.NewRefreshFuncFactory("anthropic", client)
+	refreshFactory := auth.NewRefreshFuncFactory("anthropic", client)
 	authHelper.SetupOAuth(refreshFactory.CreateAnthropicRefreshFunc())
 
 	// Determine base URL
@@ -101,7 +105,7 @@ func NewAnthropicProvider(config types.ProviderConfig) *AnthropicProvider {
 		client:          client,
 		displayName:     anthropicConfig.DisplayName,
 		config:          anthropicConfig,
-		modelCache:      common.NewModelCache(6 * time.Hour), // 6 hour cache for Anthropic
+		modelCache:      models.NewModelCache(6 * time.Hour), // 6 hour cache for Anthropic
 		rateLimitHelper: rateLimitHelper,
 		requestHandler:  base.NewDefaultRequestHandler(client, authHelper, baseURL),
 		responseParser:  base.NewDefaultResponseParser(rateLimitHelper),
@@ -171,12 +175,16 @@ func (p *AnthropicProvider) fetchModelsFromAPI(ctx context.Context) ([]types.Mod
 	// Use auth helper to execute with automatic failover
 	modelsJSON, _, err := p.authHelper.ExecuteWithAuth(ctx, types.GenerateOptions{}, oauthOperation, apiKeyOperation)
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch models: %w", err)
+		return nil, types.NewNetworkError(types.ProviderTypeAnthropic, "failed to fetch models").
+			WithOperation("GetModels").
+			WithOriginalErr(err)
 	}
 
 	var modelsResp AnthropicModelsResponse
 	if err := json.Unmarshal([]byte(modelsJSON), &modelsResp); err != nil {
-		return nil, fmt.Errorf("failed to parse models response: %w", err)
+		return nil, types.NewInvalidRequestError(types.ProviderTypeAnthropic, "failed to parse models response").
+			WithOperation("GetModels").
+			WithOriginalErr(err)
 	}
 
 	// Convert to internal Model format
@@ -383,7 +391,8 @@ func (p *AnthropicProvider) GenerateChatCompletion(
 		model = p.GetDefaultModel()
 		if model == "" {
 			log.Printf("🔴 [Anthropic] ERROR: No model specified and no default available")
-			return nil, fmt.Errorf("no model specified and no default model available (required when using third-party OAuth tokens)")
+			return nil, types.NewInvalidRequestError(types.ProviderTypeAnthropic, "no model specified and no default model available (required when using third-party OAuth tokens)").
+				WithOperation("GenerateChatCompletion")
 		}
 		log.Printf("🟣 [Anthropic] Using default model: %s", model)
 	} else {
@@ -478,7 +487,7 @@ func (p *AnthropicProvider) GenerateChatCompletion(
 		}
 	}
 
-	return common.NewMockStream([]types.ChatCompletionChunk{chunk}), nil
+	return streaming.NewMockStream([]types.ChatCompletionChunk{chunk}), nil
 }
 
 // executeStreamWithAuth handles streaming requests with authentication
@@ -487,7 +496,7 @@ func (p *AnthropicProvider) executeStreamWithAuth(ctx context.Context, options t
 	requestData.Stream = true
 
 	// Check for context-injected OAuth token first
-	if contextToken := common.GetOAuthToken(ctx); contextToken != "" {
+	if contextToken := auth.GetOAuthToken(ctx); contextToken != "" {
 		log.Printf("🟣 [Anthropic] Using context-injected OAuth token for streaming")
 		return p.makeStreamingAPICallWithOAuth(ctx, requestData, contextToken)
 	}
@@ -506,7 +515,9 @@ func (p *AnthropicProvider) executeStreamWithAuth(ctx context.Context, options t
 			lastErr = err
 		}
 		// If OAuth was configured, don't fall back to API keys - return the OAuth error
-		return nil, fmt.Errorf("OAuth authentication failed (all %d credentials tried): %w", len(creds), lastErr)
+		return nil, types.NewAuthError(types.ProviderTypeAnthropic, fmt.Sprintf("OAuth authentication failed (all %d credentials tried)", len(creds))).
+			WithOperation("executeStreamWithAuth").
+			WithOriginalErr(lastErr)
 	}
 
 	// Only try API keys if OAuth was not configured
@@ -521,10 +532,13 @@ func (p *AnthropicProvider) executeStreamWithAuth(ctx context.Context, options t
 			log.Printf("Anthropic API key streaming failed: %v", err)
 			lastErr = err
 		}
-		return nil, fmt.Errorf("API key authentication failed (all %d keys tried): %w", len(keys), lastErr)
+		return nil, types.NewAuthError(types.ProviderTypeAnthropic, fmt.Sprintf("API key authentication failed (all %d keys tried)", len(keys))).
+			WithOperation("executeStreamWithAuth").
+			WithOriginalErr(lastErr)
 	}
 
-	return nil, fmt.Errorf("no valid authentication available for streaming")
+	return nil, types.NewAuthError(types.ProviderTypeAnthropic, "no valid authentication available for streaming").
+			WithOperation("executeStreamWithAuth")
 }
 
 // prepareRequest prepares the API request payload
@@ -1176,7 +1190,7 @@ func (p *AnthropicProvider) Logout(ctx context.Context) error {
 
 func (p *AnthropicProvider) Configure(config types.ProviderConfig) error {
 	// Use the shared config helper for validation and extraction
-	configHelper := common.NewConfigHelper("Anthropic", types.ProviderTypeAnthropic)
+	configHelper := commonconfig.NewConfigHelper("Anthropic", types.ProviderTypeAnthropic)
 
 	// Validate configuration
 	validation := configHelper.ValidateProviderConfig(config)
@@ -1209,7 +1223,7 @@ func (p *AnthropicProvider) Configure(config types.ProviderConfig) error {
 
 	// Re-setup authentication with new config
 	p.authHelper.SetupAPIKeys()
-	refreshFactory := common.NewRefreshFuncFactory("anthropic", p.client)
+	refreshFactory := auth.NewRefreshFuncFactory("anthropic", p.client)
 	p.authHelper.SetupOAuth(refreshFactory.CreateAnthropicRefreshFunc())
 
 	p.displayName = anthropicConfig.DisplayName
@@ -1251,7 +1265,9 @@ func (p *AnthropicProvider) makeStreamingAPICallWithKey(ctx context.Context, req
 	// Create HTTP request
 	req, err := http.NewRequestWithContext(ctx, "POST", url, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
+		return nil, types.NewNetworkError(types.ProviderTypeAnthropic, "failed to create request").
+			WithOperation("makeStreamingAPICallWithKey").
+			WithOriginalErr(err)
 	}
 
 	// Prepare JSON body using request handler
@@ -1268,7 +1284,9 @@ func (p *AnthropicProvider) makeStreamingAPICallWithKey(ctx context.Context, req
 
 	resp, err := p.client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("request failed: %w", err)
+		return nil, types.NewNetworkError(types.ProviderTypeAnthropic, "request failed").
+			WithOperation("makeStreamingAPICallWithKey").
+			WithOriginalErr(err)
 	}
 
 	// Parse rate limit headers from streaming response
@@ -1280,12 +1298,13 @@ func (p *AnthropicProvider) makeStreamingAPICallWithKey(ctx context.Context, req
 			//nolint:staticcheck // Empty branch is intentional - we ignore close errors
 			_ = resp.Body.Close()
 		}()
-		return nil, fmt.Errorf("anthropic API error: %d - %s", resp.StatusCode, string(body))
+		return nil, types.NewServerError(types.ProviderTypeAnthropic, resp.StatusCode, fmt.Sprintf("anthropic API error: %s", string(body))).
+			WithOperation("makeStreamingAPICallWithKey")
 	}
 
 	// Use the shared streaming utility
-	stream := common.CreateAnthropicStream(resp)
-	return common.StreamFromContext(ctx, stream), nil
+	stream := streaming.CreateAnthropicStream(resp)
+	return streaming.StreamFromContext(ctx, stream), nil
 }
 
 // makeStreamingAPICallWithOAuth makes a streaming API call with OAuth
@@ -1313,7 +1332,9 @@ func (p *AnthropicProvider) makeStreamingAPICallWithOAuth(ctx context.Context, r
 	// Create HTTP request
 	req, err := http.NewRequestWithContext(ctx, "POST", url, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
+		return nil, types.NewNetworkError(types.ProviderTypeAnthropic, "failed to create request").
+			WithOperation("makeStreamingAPICallWithOAuth").
+			WithOriginalErr(err)
 	}
 
 	// Prepare JSON body using request handler
@@ -1330,7 +1351,9 @@ func (p *AnthropicProvider) makeStreamingAPICallWithOAuth(ctx context.Context, r
 
 	resp, err := p.client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("request failed: %w", err)
+		return nil, types.NewNetworkError(types.ProviderTypeAnthropic, "request failed").
+			WithOperation("makeStreamingAPICallWithOAuth").
+			WithOriginalErr(err)
 	}
 
 	// Parse rate limit headers from streaming response
@@ -1342,10 +1365,11 @@ func (p *AnthropicProvider) makeStreamingAPICallWithOAuth(ctx context.Context, r
 			//nolint:staticcheck // Empty branch is intentional - we ignore close errors
 			_ = resp.Body.Close()
 		}()
-		return nil, fmt.Errorf("anthropic API error: %d - %s", resp.StatusCode, string(body))
+		return nil, types.NewServerError(types.ProviderTypeAnthropic, resp.StatusCode, fmt.Sprintf("anthropic API error: %s", string(body))).
+			WithOperation("makeStreamingAPICallWithOAuth")
 	}
 
 	// Use the shared streaming utility
-	stream := common.CreateAnthropicStream(resp)
-	return common.StreamFromContext(ctx, stream), nil
+	stream := streaming.CreateAnthropicStream(resp)
+	return streaming.StreamFromContext(ctx, stream), nil
 }

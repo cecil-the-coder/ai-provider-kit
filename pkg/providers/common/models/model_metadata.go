@@ -1,8 +1,20 @@
-package common
+package models
 
 import (
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 )
+
+// ModelCapability represents provider model capabilities
+type ModelCapability struct {
+	MaxTokens         int                  `json:"max_tokens"`
+	SupportsStreaming bool                 `json:"supports_streaming"`
+	SupportsTools     bool                 `json:"supports_tools"`
+	SupportsVision    bool                 `json:"supports_vision"`
+	Providers         []types.ProviderType `json:"providers"`
+	InputPrice        float64              `json:"input_price_per_1k"`  // Price per 1K input tokens
+	OutputPrice       float64              `json:"output_price_per_1k"` // Price per 1K output tokens
+	Categories        []string             `json:"categories"`          // e.g., "text", "code", "multimodal"
+}
 
 // GetStaticFallback returns fallback models for a provider
 // This is used when the provider's API is unavailable or returns an error

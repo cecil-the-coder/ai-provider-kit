@@ -14,6 +14,10 @@ import (
 
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/base"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common"
+	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common/auth"
+	commonconfig "github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common/config"
+	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common/models"
+	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common/streaming"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/ratelimit"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 )
@@ -166,20 +170,20 @@ type OpenAIModel struct {
 // OpenAIProvider implements the Provider interface for OpenAI
 type OpenAIProvider struct {
 	*base.BaseProvider
-	authHelper      *common.AuthHelper
+	authHelper      *auth.AuthHelper
 	client          *http.Client
 	baseURL         string
 	useResponsesAPI bool
 	rateLimitHelper *common.RateLimitHelper
-	modelCache      *common.ModelCache
-	modelRegistry   *common.ModelMetadataRegistry
+	modelCache      *models.ModelCache
+	modelRegistry   *models.ModelMetadataRegistry
 	organizationID  string
 }
 
 // NewOpenAIProvider creates a new OpenAI provider
 func NewOpenAIProvider(config types.ProviderConfig) *OpenAIProvider {
 	// Use the shared config helper
-	configHelper := common.NewConfigHelper("OpenAI", types.ProviderTypeOpenAI)
+	configHelper := commonconfig.NewConfigHelper("OpenAI", types.ProviderTypeOpenAI)
 
 	// Merge with defaults and extract configuration
 	mergedConfig := configHelper.MergeWithDefaults(config)
@@ -193,7 +197,7 @@ func NewOpenAIProvider(config types.ProviderConfig) *OpenAIProvider {
 	organizationID := configHelper.ExtractStringField(mergedConfig, "organization_id", "")
 
 	// Create auth helper
-	authHelper := common.NewAuthHelper("openai", mergedConfig, client)
+	authHelper := auth.NewAuthHelper("openai", mergedConfig, client)
 
 	// Setup API keys using shared helper
 	authHelper.SetupAPIKeys()
@@ -216,8 +220,8 @@ func NewOpenAIProvider(config types.ProviderConfig) *OpenAIProvider {
 		useResponsesAPI: useResponsesAPI,
 		rateLimitHelper: common.NewRateLimitHelper(ratelimit.NewOpenAIParser()),
 		organizationID:  organizationID,
-		modelCache:      common.NewModelCache(24 * time.Hour), // 24 hour cache for OpenAI
-		modelRegistry:   common.GetOpenAIMetadataRegistry(),
+		modelCache:      models.NewModelCache(24 * time.Hour), // 24 hour cache for OpenAI
+		modelRegistry:   models.GetOpenAIMetadataRegistry(),
 	}
 
 	return provider
@@ -258,7 +262,8 @@ func (p *OpenAIProvider) GetModels(ctx context.Context) ([]types.Model, error) {
 // fetchModelsFromAPI fetches models from OpenAI API
 func (p *OpenAIProvider) fetchModelsFromAPI(ctx context.Context) ([]types.Model, error) {
 	if p.authHelper.KeyManager == nil || len(p.authHelper.KeyManager.GetKeys()) == 0 {
-		return nil, fmt.Errorf("no OpenAI API key configured")
+		return nil, types.NewAuthError(types.ProviderTypeOpenAI, "no OpenAI API key configured").
+			WithOperation("fetchModelsFromAPI")
 	}
 
 	url := p.baseURL + "/models"
@@ -266,12 +271,15 @@ func (p *OpenAIProvider) fetchModelsFromAPI(ctx context.Context) ([]types.Model,
 	// Use first available API key
 	keys := p.authHelper.KeyManager.GetKeys()
 	if len(keys) == 0 {
-		return nil, fmt.Errorf("no API keys available")
+		return nil, types.NewAuthError(types.ProviderTypeOpenAI, "no API keys available").
+			WithOperation("fetchModelsFromAPI")
 	}
 
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
+		return nil, types.NewNetworkError(types.ProviderTypeOpenAI, "failed to create request").
+			WithOperation("fetchModelsFromAPI").
+			WithOriginalErr(err)
 	}
 
 	// Use auth helper to set headers
@@ -279,23 +287,30 @@ func (p *OpenAIProvider) fetchModelsFromAPI(ctx context.Context) ([]types.Model,
 
 	resp, err := p.client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch models: %w", err)
+		return nil, types.NewNetworkError(types.ProviderTypeOpenAI, "failed to fetch models").
+			WithOperation("fetchModelsFromAPI").
+			WithOriginalErr(err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("failed to fetch models: HTTP %d - %s", resp.StatusCode, string(body))
+		return nil, types.NewServerError(types.ProviderTypeOpenAI, resp.StatusCode, fmt.Sprintf("failed to fetch models: %s", string(body))).
+			WithOperation("fetchModelsFromAPI")
 	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read response: %w", err)
+		return nil, types.NewNetworkError(types.ProviderTypeOpenAI, "failed to read response").
+			WithOperation("fetchModelsFromAPI").
+			WithOriginalErr(err)
 	}
 
 	var modelsResp OpenAIModelsResponse
 	if err := json.Unmarshal(body, &modelsResp); err != nil {
-		return nil, fmt.Errorf("failed to parse models response: %w", err)
+		return nil, types.NewInvalidRequestError(types.ProviderTypeOpenAI, "failed to parse models response").
+			WithOperation("fetchModelsFromAPI").
+			WithOriginalErr(err)
 	}
 
 	// Convert to internal Model format - no filtering to support OpenAI-compatible providers
@@ -317,7 +332,7 @@ func (p *OpenAIProvider) enrichModels(models []types.Model) []types.Model {
 
 // getStaticFallback returns static model list using the shared fallback
 func (p *OpenAIProvider) getStaticFallback() []types.Model {
-	return common.GetStaticFallback(p.Type())
+	return models.GetStaticFallback(p.Type())
 }
 
 func (p *OpenAIProvider) GetDefaultModel() string {
@@ -415,7 +430,7 @@ func (p *OpenAIProvider) GenerateChatCompletion(
 		}
 	}
 
-	return common.NewMockStream([]types.ChatCompletionChunk{chunk}), nil
+	return streaming.NewMockStream([]types.ChatCompletionChunk{chunk}), nil
 }
 
 // executeStreamWithAuth handles streaming requests with authentication
@@ -433,7 +448,8 @@ func (p *OpenAIProvider) executeStreamWithAuth(ctx context.Context, requestData 
 		}
 	}
 
-	return nil, fmt.Errorf("no valid API key available for streaming")
+	return nil, types.NewAuthError(types.ProviderTypeOpenAI, "no valid API key available for streaming").
+			WithOperation("executeStreamWithAuth")
 }
 
 // buildOpenAIRequest builds the OpenAI API request from options
@@ -516,14 +532,18 @@ func (p *OpenAIProvider) makeAPICall(ctx context.Context, requestData OpenAIRequ
 	// Serialize request
 	jsonBody, err := json.Marshal(requestData)
 	if err != nil {
-		return types.ChatMessage{}, nil, fmt.Errorf("failed to marshal request: %w", err)
+		return types.ChatMessage{}, nil, types.NewInvalidRequestError(types.ProviderTypeOpenAI, "failed to marshal request").
+			WithOperation("makeAPICall").
+			WithOriginalErr(err)
 	}
 
 	// Create HTTP request
 	url := p.baseURL + "/chat/completions"
 	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonBody))
 	if err != nil {
-		return types.ChatMessage{}, nil, fmt.Errorf("failed to create request: %w", err)
+		return types.ChatMessage{}, nil, types.NewNetworkError(types.ProviderTypeOpenAI, "failed to create request").
+			WithOperation("makeAPICall").
+			WithOriginalErr(err)
 	}
 
 	// Use auth helper to set headers
@@ -540,14 +560,18 @@ func (p *OpenAIProvider) makeAPICall(ctx context.Context, requestData OpenAIRequ
 	// Make the request
 	resp, err := p.client.Do(req)
 	if err != nil {
-		return types.ChatMessage{}, nil, fmt.Errorf("request failed: %w", err)
+		return types.ChatMessage{}, nil, types.NewNetworkError(types.ProviderTypeOpenAI, "request failed").
+			WithOperation("makeAPICall").
+			WithOriginalErr(err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	// Read response
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return types.ChatMessage{}, nil, fmt.Errorf("failed to read response body: %w", err)
+		return types.ChatMessage{}, nil, types.NewNetworkError(types.ProviderTypeOpenAI, "failed to read response body").
+			WithOperation("makeAPICall").
+			WithOriginalErr(err)
 	}
 
 	// Parse and update rate limit info
@@ -560,20 +584,37 @@ func (p *OpenAIProvider) makeAPICall(ctx context.Context, requestData OpenAIRequ
 			// Handle specific error types
 			switch errorResponse.Error.Type {
 			case "invalid_api_key":
-				return types.ChatMessage{}, nil, fmt.Errorf("invalid OpenAI API key")
+				return types.ChatMessage{}, nil, types.NewAuthError(types.ProviderTypeOpenAI, "invalid OpenAI API key").
+					WithOperation("makeAPICall").
+					WithStatusCode(resp.StatusCode)
 			case "insufficient_quota":
-				return types.ChatMessage{}, nil, fmt.Errorf("OpenAI quota exceeded")
+				return types.ChatMessage{}, nil, &types.ProviderError{
+					Code:       types.ErrCodeRateLimit,
+					Message:    "OpenAI quota exceeded",
+					Provider:   types.ProviderTypeOpenAI,
+					StatusCode: resp.StatusCode,
+					Operation:  "makeAPICall",
+				}
 			case "rate_limit_exceeded":
-				return types.ChatMessage{}, nil, fmt.Errorf("OpenAI rate limit exceeded")
+				return types.ChatMessage{}, nil, types.NewRateLimitError(types.ProviderTypeOpenAI, 0).
+					WithOperation("makeAPICall").
+					WithStatusCode(resp.StatusCode).
+					WithOriginalErr(fmt.Errorf("OpenAI rate limit exceeded"))
 			case "model_not_found":
-				return types.ChatMessage{}, nil, fmt.Errorf("OpenAI model not found: %s", errorResponse.Error.Message)
+				return types.ChatMessage{}, nil, types.NewNotFoundError(types.ProviderTypeOpenAI, fmt.Sprintf("OpenAI model not found: %s", errorResponse.Error.Message)).
+					WithOperation("makeAPICall").
+					WithStatusCode(resp.StatusCode)
 			case "invalid_request_error":
-				return types.ChatMessage{}, nil, fmt.Errorf("invalid OpenAI request: %s", errorResponse.Error.Message)
+				return types.ChatMessage{}, nil, types.NewInvalidRequestError(types.ProviderTypeOpenAI, fmt.Sprintf("invalid OpenAI request: %s", errorResponse.Error.Message)).
+					WithOperation("makeAPICall").
+					WithStatusCode(resp.StatusCode)
 			default:
-				return types.ChatMessage{}, nil, fmt.Errorf("OpenAI API error (%s): %s", errorResponse.Error.Type, errorResponse.Error.Message)
+				return types.ChatMessage{}, nil, types.NewServerError(types.ProviderTypeOpenAI, resp.StatusCode, fmt.Sprintf("OpenAI API error (%s): %s", errorResponse.Error.Type, errorResponse.Error.Message)).
+					WithOperation("makeAPICall")
 			}
 		}
-		return types.ChatMessage{}, nil, fmt.Errorf("OpenAI API error: %d - %s", resp.StatusCode, string(body))
+		return types.ChatMessage{}, nil, types.NewServerError(types.ProviderTypeOpenAI, resp.StatusCode, fmt.Sprintf("OpenAI API error: %s", string(body))).
+			WithOperation("makeAPICall")
 	}
 
 	// Parse successful response
@@ -632,13 +673,17 @@ func (p *OpenAIProvider) makeStreamingAPICall(ctx context.Context, requestData O
 	requestData.Stream = true
 	jsonBody, err := json.Marshal(requestData)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal request: %w", err)
+		return nil, types.NewInvalidRequestError(types.ProviderTypeOpenAI, "failed to marshal request").
+			WithOperation("makeStreamingAPICall").
+			WithOriginalErr(err)
 	}
 
 	url := p.baseURL + "/chat/completions"
 	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonBody))
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
+		return nil, types.NewNetworkError(types.ProviderTypeOpenAI, "failed to create request").
+			WithOperation("makeStreamingAPICall").
+			WithOriginalErr(err)
 	}
 
 	req.Header.Set("Content-Type", "application/json")
@@ -647,7 +692,9 @@ func (p *OpenAIProvider) makeStreamingAPICall(ctx context.Context, requestData O
 
 	resp, err := p.client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("request failed: %w", err)
+		return nil, types.NewNetworkError(types.ProviderTypeOpenAI, "request failed").
+			WithOperation("makeStreamingAPICall").
+			WithOriginalErr(err)
 	}
 
 	// Parse and update rate limit info from response headers
@@ -656,12 +703,13 @@ func (p *OpenAIProvider) makeStreamingAPICall(ctx context.Context, requestData O
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		func() { _ = resp.Body.Close() }()
-		return nil, fmt.Errorf("OpenAI API error: %d - %s", resp.StatusCode, string(body))
+		return nil, types.NewServerError(types.ProviderTypeOpenAI, resp.StatusCode, fmt.Sprintf("OpenAI API error: %s", string(body))).
+			WithOperation("makeStreamingAPICall")
 	}
 
 	// Use the shared streaming utility
-	stream := common.CreateOpenAIStream(resp)
-	return common.StreamFromContext(ctx, stream), nil
+	stream := streaming.CreateOpenAIStream(resp)
+	return streaming.StreamFromContext(ctx, stream), nil
 }
 
 // InvokeServerTool invokes a server tool (not yet implemented)
@@ -670,7 +718,8 @@ func (p *OpenAIProvider) InvokeServerTool(
 	toolName string,
 	params interface{},
 ) (interface{}, error) {
-	return nil, fmt.Errorf("tool invocation not yet implemented for OpenAI provider")
+	return nil, types.NewInvalidRequestError(types.ProviderTypeOpenAI, "tool invocation not yet implemented for OpenAI provider").
+			WithOperation("InvokeTool")
 }
 
 func (p *OpenAIProvider) Authenticate(ctx context.Context, authConfig types.AuthConfig) error {
@@ -716,7 +765,7 @@ func (p *OpenAIProvider) Logout(ctx context.Context) error {
 
 func (p *OpenAIProvider) Configure(config types.ProviderConfig) error {
 	// Use the shared config helper for validation and extraction
-	configHelper := common.NewConfigHelper("OpenAI", types.ProviderTypeOpenAI)
+	configHelper := commonconfig.NewConfigHelper("OpenAI", types.ProviderTypeOpenAI)
 
 	// Validate configuration
 	validation := configHelper.ValidateProviderConfig(config)

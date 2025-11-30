@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/http"
+	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common/models"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 )
 
@@ -18,7 +19,7 @@ type ProviderInitializer struct {
 	httpClient    *http.HTTPClient
 	healthCheck   *HealthChecker
 	metrics       *ProviderMetrics
-	modelRegistry *ModelRegistry
+	modelRegistry *models.ModelRegistry
 }
 
 // InitializerConfig configures provider initialization
@@ -31,18 +32,6 @@ type InitializerConfig struct {
 	AutoDetectModels    bool          `json:"auto_detect_models"`
 	CacheModels         bool          `json:"cache_models"`
 	ModelCacheTTL       time.Duration `json:"model_cache_ttl"`
-}
-
-// ModelCapability represents provider model capabilities
-type ModelCapability struct {
-	MaxTokens         int                  `json:"max_tokens"`
-	SupportsStreaming bool                 `json:"supports_streaming"`
-	SupportsTools     bool                 `json:"supports_tools"`
-	SupportsVision    bool                 `json:"supports_vision"`
-	Providers         []types.ProviderType `json:"providers"`
-	InputPrice        float64              `json:"input_price_per_1k"`  // Price per 1K input tokens
-	OutputPrice       float64              `json:"output_price_per_1k"` // Price per 1K output tokens
-	Categories        []string             `json:"categories"`          // e.g., "text", "code", "multimodal"
 }
 
 // NewProviderInitializer creates a new provider initializer
@@ -62,15 +51,10 @@ func NewProviderInitializer(config InitializerConfig) *ProviderInitializer {
 	}
 
 	initializer := &ProviderInitializer{
-		config:     config,
-		httpClient: http.DefaultClient(types.ProviderTypeOpenAI), // Will be overridden per provider
-		metrics:    NewProviderMetrics(),
-		modelRegistry: &ModelRegistry{
-			models:        make(map[string]*ModelCapability),
-			providerCache: make(map[types.ProviderType][]types.Model),
-			cacheTime:     make(map[string]time.Time),
-			ttl:           config.ModelCacheTTL,
-		},
+		config:        config,
+		httpClient:    http.DefaultClient(types.ProviderTypeOpenAI), // Will be overridden per provider
+		metrics:       NewProviderMetrics(),
+		modelRegistry: models.NewModelRegistry(config.ModelCacheTTL),
 	}
 
 	if config.EnableHealthCheck {

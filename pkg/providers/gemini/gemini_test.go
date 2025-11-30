@@ -263,8 +263,8 @@ func TestGeminiProvider_SupportsFeatures(t *testing.T) {
 		t.Error("Gemini should not support Responses API")
 	}
 
-	if provider.GetToolFormat() != types.ToolFormatOpenAI {
-		t.Errorf("Expected tool format %s, got %s", types.ToolFormatOpenAI, provider.GetToolFormat())
+	if provider.GetToolFormat() != types.ToolFormatGemini {
+		t.Errorf("Expected tool format %s, got %s", types.ToolFormatGemini, provider.GetToolFormat())
 	}
 }
 

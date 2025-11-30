@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/keymanager"
-	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common"
+	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common/streaming"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 )
 
@@ -378,7 +378,7 @@ func TestMockStream(t *testing.T) {
 		{Content: "!", Done: true, Usage: usage},
 	}
 
-	stream := common.NewMockStream(chunks)
+	stream := streaming.NewMockStream(chunks)
 
 	// Test Next()
 	chunk, err := stream.Next()

@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common"
+	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common/auth"
 )
 
 // RequestHandler interface for executing HTTP requests with authentication
@@ -28,12 +28,12 @@ type RequestHandler interface {
 // DefaultRequestHandler provides a default implementation of RequestHandler
 type DefaultRequestHandler struct {
 	client     *http.Client
-	authHelper *common.AuthHelper
+	authHelper *auth.AuthHelper
 	baseURL    string
 }
 
 // NewDefaultRequestHandler creates a new DefaultRequestHandler
-func NewDefaultRequestHandler(client *http.Client, authHelper *common.AuthHelper, baseURL string) *DefaultRequestHandler {
+func NewDefaultRequestHandler(client *http.Client, authHelper *auth.AuthHelper, baseURL string) *DefaultRequestHandler {
 	return &DefaultRequestHandler{
 		client:     client,
 		authHelper: authHelper,

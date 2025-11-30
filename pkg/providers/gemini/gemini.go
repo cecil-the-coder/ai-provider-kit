@@ -19,6 +19,8 @@ import (
 
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/base"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common"
+	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common/auth"
+	commonconfig "github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common/config"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/ratelimit"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 	"golang.org/x/time/rate"
@@ -43,7 +45,7 @@ const (
 // GeminiProvider implements the Provider interface for Google Gemini with OAuth support
 type GeminiProvider struct {
 	*base.BaseProvider
-	authHelper        *common.AuthHelper // Shared authentication helper
+	authHelper        *auth.AuthHelper // Shared authentication helper
 	client            *http.Client
 	config            GeminiConfig
 	projectID         string
@@ -69,7 +71,7 @@ type GeminiConfig struct {
 // NewGeminiProvider creates a new Gemini provider
 func NewGeminiProvider(config types.ProviderConfig) *GeminiProvider {
 	// Use the shared config helper
-	configHelper := common.NewConfigHelper("Gemini", types.ProviderTypeGemini)
+	configHelper := commonconfig.NewConfigHelper("Gemini", types.ProviderTypeGemini)
 
 	// Merge with defaults and extract configuration
 	mergedConfig := configHelper.MergeWithDefaults(config)
@@ -92,13 +94,13 @@ func NewGeminiProvider(config types.ProviderConfig) *GeminiProvider {
 	}
 
 	// Create auth helper
-	authHelper := common.NewAuthHelper("gemini", mergedConfig, client)
+	authHelper := auth.NewAuthHelper("gemini", mergedConfig, client)
 
 	// Setup API keys using shared helper
 	authHelper.SetupAPIKeys()
 
 	// Setup OAuth using shared helper with refresh function factory
-	refreshFactory := common.NewRefreshFuncFactory("gemini", client)
+	refreshFactory := auth.NewRefreshFuncFactory("gemini", client)
 	authHelper.SetupOAuth(refreshFactory.CreateGeminiRefreshFunc())
 
 	provider := &GeminiProvider{
@@ -179,18 +181,11 @@ func (p *GeminiProvider) GenerateChatCompletion(
 		var err error
 
 		// Check for context-injected OAuth token first
-		if contextToken := common.GetOAuthToken(ctx); contextToken != "" {
+		if contextToken := auth.GetOAuthToken(ctx); contextToken != "" {
 			stream, err = p.makeStreamingAPICallWithToken(ctx, options, model, contextToken)
 		} else {
-			// Fall back to configured auth methods
-			switch {
-			case p.authHelper.OAuthManager != nil:
-				stream, err = p.executeStreamWithOAuth(ctx, options)
-			case p.authHelper.KeyManager != nil && len(p.authHelper.KeyManager.GetKeys()) > 0:
-				stream, err = p.executeStreamWithAPIKey(ctx, options)
-			default:
-				err = fmt.Errorf("no authentication configured (neither OAuth nor API key)")
-			}
+			// Use the unified executeStreamWithAuth method
+			stream, err = p.executeStreamWithAuth(ctx, options)
 		}
 
 		if err != nil {
@@ -479,7 +474,7 @@ func (p *GeminiProvider) Logout(ctx context.Context) error {
 
 func (p *GeminiProvider) Configure(config types.ProviderConfig) error {
 	// Use the shared config helper for validation and extraction
-	configHelper := common.NewConfigHelper("Gemini", types.ProviderTypeGemini)
+	configHelper := commonconfig.NewConfigHelper("Gemini", types.ProviderTypeGemini)
 
 	// Validate configuration
 	validation := configHelper.ValidateProviderConfig(config)
@@ -511,7 +506,7 @@ func (p *GeminiProvider) Configure(config types.ProviderConfig) error {
 
 	// Re-setup authentication with new config
 	p.authHelper.SetupAPIKeys()
-	refreshFactory := common.NewRefreshFuncFactory("gemini", p.client)
+	refreshFactory := auth.NewRefreshFuncFactory("gemini", p.client)
 	p.authHelper.SetupOAuth(refreshFactory.CreateGeminiRefreshFunc())
 
 	// Update project ID if available
@@ -540,7 +535,7 @@ func (p *GeminiProvider) SupportsResponsesAPI() bool {
 }
 
 func (p *GeminiProvider) GetToolFormat() types.ToolFormat {
-	return types.ToolFormatOpenAI
+	return types.ToolFormatGemini
 }
 
 func (p *GeminiProvider) InvokeServerTool(
@@ -771,8 +766,8 @@ func convertUniversalToolCallsToGeminiParts(toolCalls []types.ToolCall) []Part {
 
 // Helper Methods
 
-// executeStreamWithOAuth executes a streaming request using OAuth authentication
-func (p *GeminiProvider) executeStreamWithOAuth(ctx context.Context, options types.GenerateOptions) (types.ChatCompletionStream, error) {
+// executeStreamWithAuth handles streaming requests with authentication
+func (p *GeminiProvider) executeStreamWithAuth(ctx context.Context, options types.GenerateOptions) (types.ChatCompletionStream, error) {
 	options.ContextObj = ctx
 	// Determine which model to use: options.Model takes precedence over default
 	model := options.Model
@@ -783,50 +778,51 @@ func (p *GeminiProvider) executeStreamWithOAuth(ctx context.Context, options typ
 		}
 	}
 
-	// Use authHelper.OAuthManager for automatic failover
-	var lastErr error
-	creds := p.authHelper.OAuthManager.GetCredentials()
-	for _, cred := range creds {
-		stream, err := p.makeStreamingAPICallWithToken(ctx, options, model, cred.AccessToken)
-		if err != nil {
+	// Check for context-injected OAuth token first
+	if contextToken := auth.GetOAuthToken(ctx); contextToken != "" {
+		log.Printf("🔵 [Gemini] Using context-injected OAuth token for streaming")
+		return p.makeStreamingAPICallWithToken(ctx, options, model, contextToken)
+	}
+
+	// Try OAuth credentials first
+	if p.authHelper.OAuthManager != nil {
+		creds := p.authHelper.OAuthManager.GetCredentials()
+		var lastErr error
+		for _, cred := range creds {
+			stream, err := p.makeStreamingAPICallWithToken(ctx, options, model, cred.AccessToken)
+			if err == nil {
+				return stream, nil
+			}
+			// Log OAuth failure for debugging
+			log.Printf("Gemini OAuth streaming failed for credential %s: %v", cred.ID, err)
 			lastErr = err
-			continue
 		}
-		return stream, nil
-	}
-	return nil, lastErr
-}
-
-// executeStreamWithAPIKey executes a streaming request using API key authentication
-func (p *GeminiProvider) executeStreamWithAPIKey(ctx context.Context, options types.GenerateOptions) (types.ChatCompletionStream, error) {
-	options.ContextObj = ctx
-	// Determine which model to use: options.Model takes precedence over default
-	model := options.Model
-	if model == "" {
-		model = p.config.Model
-		if model == "" {
-			model = geminiDefaultModel
-		}
+		// If OAuth was configured, don't fall back to API keys - return the OAuth error
+		return nil, types.NewAuthError(types.ProviderTypeGemini, fmt.Sprintf("OAuth authentication failed (all %d credentials tried)", len(creds))).
+			WithOperation("executeStreamWithAuth").
+			WithOriginalErr(lastErr)
 	}
 
-	// Use authHelper.KeyManager for automatic failover (try all keys)
-	if p.authHelper.KeyManager == nil {
-		return nil, fmt.Errorf("no API keys configured")
-	}
-
-	var lastErr error
-	keys := p.authHelper.KeyManager.GetKeys()
-	for _, apiKey := range keys {
-		stream, err := p.makeStreamingAPICallWithAPIKey(ctx, options, model, apiKey)
-		if err != nil {
-			lastErr = err
+	// Try API keys
+	if p.authHelper.KeyManager != nil {
+		keys := p.authHelper.KeyManager.GetKeys()
+		var lastErr error
+		for _, apiKey := range keys {
+			stream, err := p.makeStreamingAPICallWithAPIKey(ctx, options, model, apiKey)
+			if err == nil {
+				p.authHelper.KeyManager.ReportSuccess(apiKey)
+				return stream, nil
+			}
 			p.authHelper.KeyManager.ReportFailure(apiKey, err)
-			continue
+			lastErr = err
 		}
-		p.authHelper.KeyManager.ReportSuccess(apiKey)
-		return stream, nil
+		return nil, types.NewAuthError(types.ProviderTypeGemini, "no valid API key available for streaming").
+			WithOperation("executeStreamWithAuth").
+			WithOriginalErr(lastErr)
 	}
-	return nil, lastErr
+
+	return nil, types.NewAuthError(types.ProviderTypeGemini, "no authentication method configured for streaming").
+		WithOperation("executeStreamWithAuth")
 }
 
 // makeStreamingAPICallWithToken makes a streaming API call with OAuth token

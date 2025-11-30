@@ -1,5 +1,5 @@
-// Package common provides shared utilities for AI provider implementations
-package common
+// Package config provides configuration utilities for AI provider implementations
+package config
 
 import (
 	"time"

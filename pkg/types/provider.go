@@ -48,6 +48,7 @@ type ToolFormat string
 const (
 	ToolFormatOpenAI    ToolFormat = "openai"
 	ToolFormatAnthropic ToolFormat = "anthropic"
+	ToolFormatGemini    ToolFormat = "gemini"
 	ToolFormatXML       ToolFormat = "xml"
 	ToolFormatHermes    ToolFormat = "hermes"
 	ToolFormatText      ToolFormat = "text"

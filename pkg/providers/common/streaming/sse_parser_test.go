@@ -1,4 +1,4 @@
-package common
+package streaming
 
 import (
 	"bytes"

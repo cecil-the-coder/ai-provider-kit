@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common/models"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 )
 
@@ -275,7 +276,7 @@ func TestInitializerConfig_Defaults(t *testing.T) {
 }
 
 func TestModelCapability_Structure(t *testing.T) {
-	capability := &ModelCapability{
+	capability := &models.ModelCapability{
 		MaxTokens:         8192,
 		SupportsStreaming: true,
 		SupportsTools:     true,

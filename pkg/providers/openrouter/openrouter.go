@@ -19,6 +19,9 @@ import (
 
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/base"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common"
+	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common/auth"
+	commonconfig "github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common/config"
+	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common/models"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/ratelimit"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 )
@@ -28,12 +31,12 @@ type OpenRouterProvider struct {
 	*base.BaseProvider
 	config        ProviderConfig
 	client        *http.Client
-	authHelper    *common.AuthHelper
+	authHelper    *auth.AuthHelper
 	modelSelector *ModelSelector
 	lastUsedModel string
 	lastUsage     *types.Usage
 	mutex         sync.RWMutex
-	modelCache    *common.ModelCache
+	modelCache    *models.ModelCache
 
 	// Configuration fields
 	apiKey        string
@@ -101,15 +104,15 @@ func NewOpenRouterProvider(config types.ProviderConfig) *OpenRouterProvider {
 		siteName = "MCP Code API"
 	}
 
-	models := providerConfig.Models
-	if len(models) == 0 && providerConfig.Model != "" {
-		models = []string{providerConfig.Model}
+	modelList := providerConfig.Models
+	if len(modelList) == 0 && providerConfig.Model != "" {
+		modelList = []string{providerConfig.Model}
 	}
-	if len(models) == 0 && config.DefaultModel != "" {
-		models = []string{config.DefaultModel}
+	if len(modelList) == 0 && config.DefaultModel != "" {
+		modelList = []string{config.DefaultModel}
 	}
-	if len(models) == 0 {
-		models = []string{"qwen/qwen3-coder"}
+	if len(modelList) == 0 {
+		modelList = []string{"qwen/qwen3-coder"}
 	}
 
 	modelStrategy := providerConfig.ModelStrategy
@@ -122,7 +125,7 @@ func NewOpenRouterProvider(config types.ProviderConfig) *OpenRouterProvider {
 	}
 
 	// Create auth helper
-	authHelper := common.NewAuthHelper("openrouter", config, client)
+	authHelper := auth.NewAuthHelper("openrouter", config, client)
 
 	// Setup API keys using shared helper
 	authHelper.SetupAPIKeys()
@@ -135,15 +138,15 @@ func NewOpenRouterProvider(config types.ProviderConfig) *OpenRouterProvider {
 		config:           providerConfig,
 		client:           client,
 		authHelper:       authHelper,
-		modelSelector:    NewModelSelector(models, modelStrategy),
+		modelSelector:    NewModelSelector(modelList, modelStrategy),
 		apiKey:           apiKey,
 		baseURL:          baseURL,
 		siteURL:          siteURL,
 		siteName:         siteName,
-		models:           models,
+		models:           modelList,
 		modelStrategy:    modelStrategy,
 		freeOnly:         providerConfig.FreeOnly,
-		modelCache:       common.NewModelCache(common.GetModelCacheTTL(types.ProviderTypeOpenRouter)),
+		modelCache:       models.NewModelCache(commonconfig.GetModelCacheTTL(types.ProviderTypeOpenRouter)),
 		rateLimitHelper:  common.NewRateLimitHelper(openRouterParser),
 		rateLimitTracker: common.NewRateLimitTracker(openRouterParser),
 	}

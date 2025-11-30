@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common"
+	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common/auth"
+	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common/config"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/ratelimit"
 	"golang.org/x/time/rate"
 )
@@ -59,7 +61,7 @@ func InitializeProviderComponents(cfg ProviderInitConfig) (*ProviderComponents, 
 	}
 
 	// 3. Configuration helper setup
-	configHelper := common.NewConfigHelper(cfg.ProviderName, cfg.ProviderType)
+	configHelper := config.NewConfigHelper(cfg.ProviderName, cfg.ProviderType)
 
 	// 4. Merge configuration with defaults
 	mergedConfig := configHelper.MergeWithDefaults(cfg.Config)
@@ -71,7 +73,7 @@ func InitializeProviderComponents(cfg ProviderInitConfig) (*ProviderComponents, 
 	maxTokens := configHelper.ExtractMaxTokens(mergedConfig)
 
 	// 6. Authentication helper setup
-	authHelper := common.NewAuthHelper(cfg.ProviderName, mergedConfig, httpClient)
+	authHelper := auth.NewAuthHelper(cfg.ProviderName, mergedConfig, httpClient)
 
 	// Setup API keys from config
 	authHelper.SetupAPIKeys()

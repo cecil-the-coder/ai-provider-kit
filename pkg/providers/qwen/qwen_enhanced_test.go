@@ -138,8 +138,8 @@ func TestQwenProvider_GenerateChatCompletion_StreamingError(t *testing.T) {
 		t.Error("Expected error for invalid API key")
 	}
 
-	if !strings.Contains(err.Error(), "401") {
-		t.Errorf("Expected error to mention status code 401, got: %v", err)
+	if !strings.Contains(err.Error(), "no valid API key available for streaming") {
+		t.Errorf("Expected error to mention 'no valid API key available for streaming', got: %v", err)
 	}
 }
 

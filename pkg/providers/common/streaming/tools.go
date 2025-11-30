@@ -1,6 +1,6 @@
-// Package common provides shared utilities for AI provider implementations.
+// Package streaming provides streaming utilities for AI provider implementations.
 // This file contains tool conversion functions for OpenAI-compatible providers.
-package common
+package streaming
 
 import "github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 

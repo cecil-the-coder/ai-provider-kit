@@ -1,5 +1,5 @@
-// Package common provides shared utilities and helper functions for AI provider implementations
-package common
+// Package auth provides authentication utilities and helper functions for AI provider implementations
+package auth
 
 import (
 	"bytes"

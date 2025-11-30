@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common"
+	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common/auth"
+	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common/config"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 	"golang.org/x/time/rate"
 )
@@ -44,10 +46,10 @@ type ProviderComponents struct {
 	HTTPClient *http.Client
 
 	// Authentication helper
-	AuthHelper *common.AuthHelper
+	AuthHelper *auth.AuthHelper
 
 	// Configuration helper
-	ConfigHelper *common.ConfigHelper
+	ConfigHelper *config.ConfigHelper
 
 	// Rate limit helper
 	RateLimitHelper *common.RateLimitHelper

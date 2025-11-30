@@ -16,6 +16,9 @@ import (
 
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/base"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common"
+	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common/auth"
+	commonconfig "github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common/config"
+	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common/models"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 )
 
@@ -24,8 +27,8 @@ type CerebrasProvider struct {
 	*base.BaseProvider
 	config          types.ProviderConfig
 	httpClient      *http.Client
-	authHelper      *common.AuthHelper
-	modelCache      *common.ModelCache
+	authHelper      *auth.AuthHelper
+	modelCache      *models.ModelCache
 	rateLimitHelper *common.RateLimitHelper
 }
 
@@ -49,7 +52,7 @@ func NewCerebrasProvider(config types.ProviderConfig) *CerebrasProvider {
 		config:          components.MergedConfig,
 		httpClient:      components.HTTPClient,
 		authHelper:      components.AuthHelper,
-		modelCache:      common.NewModelCache(common.GetModelCacheTTL(types.ProviderTypeCerebras)),
+		modelCache:      models.NewModelCache(commonconfig.GetModelCacheTTL(types.ProviderTypeCerebras)),
 		rateLimitHelper: components.RateLimitHelper,
 	}
 }
@@ -653,7 +656,7 @@ func (p *CerebrasProvider) Logout(ctx context.Context) error {
 // Configure updates the provider configuration
 func (p *CerebrasProvider) Configure(config types.ProviderConfig) error {
 	// Use the shared config helper for validation and extraction
-	configHelper := common.NewConfigHelper("Cerebras", types.ProviderTypeCerebras)
+	configHelper := commonconfig.NewConfigHelper("Cerebras", types.ProviderTypeCerebras)
 
 	// Validate configuration
 	validation := configHelper.ValidateProviderConfig(config)

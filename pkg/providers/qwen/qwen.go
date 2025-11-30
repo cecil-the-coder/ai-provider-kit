@@ -17,6 +17,8 @@ import (
 
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/base"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common"
+	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common/auth"
+	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common/streaming"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 	"github.com/google/uuid"
 	"golang.org/x/time/rate"
@@ -35,7 +37,7 @@ type QwenProvider struct {
 	*base.BaseProvider
 	mu                sync.RWMutex
 	httpClient        *http.Client
-	authHelper        *common.AuthHelper
+	authHelper        *auth.AuthHelper
 	rateLimitHelper   *common.RateLimitHelper
 	rateLimitMutex    sync.RWMutex
 	clientSideLimiter *rate.Limiter // Client-side rate limiting (Qwen doesn't provide headers)
@@ -203,18 +205,11 @@ func (p *QwenProvider) GenerateChatCompletion(
 		var err error
 
 		// Check for context-injected OAuth token first
-		if contextToken := common.GetOAuthToken(ctx); contextToken != "" {
+		if contextToken := auth.GetOAuthToken(ctx); contextToken != "" {
 			stream, err = p.makeStreamingAPICall(ctx, baseURL+"/chat/completions", request, contextToken)
 		} else {
-			// Fall back to configured auth methods
-			switch {
-			case p.authHelper.OAuthManager != nil:
-				stream, err = p.executeStreamWithOAuth(ctx, options)
-			case p.authHelper.KeyManager != nil:
-				stream, err = p.executeStreamWithAPIKey(ctx, options)
-			default:
-				err = fmt.Errorf("no authentication method configured")
-			}
+			// Use the unified executeStreamWithAuth method
+			stream, err = p.executeStreamWithAuth(ctx, options)
 		}
 
 		if err != nil {
@@ -613,8 +608,8 @@ func (p *QwenProvider) InvokeServerTool(
 	return nil, fmt.Errorf("tool invocation not yet implemented for Qwen provider")
 }
 
-// executeStreamWithOAuth executes a streaming request using OAuth authentication
-func (p *QwenProvider) executeStreamWithOAuth(ctx context.Context, options types.GenerateOptions) (types.ChatCompletionStream, error) {
+// executeStreamWithAuth handles streaming requests with authentication
+func (p *QwenProvider) executeStreamWithAuth(ctx context.Context, options types.GenerateOptions) (types.ChatCompletionStream, error) {
 	providerConfig := p.GetConfig()
 
 	baseURL := providerConfig.BaseURL
@@ -626,46 +621,57 @@ func (p *QwenProvider) executeStreamWithOAuth(ctx context.Context, options types
 	request := p.buildQwenRequest(options)
 	request.Stream = true
 
-	// Use auth helper OAuth manager for automatic failover
-	var lastErr error
+	// Check for context-injected OAuth token first
+	if contextToken := auth.GetOAuthToken(ctx); contextToken != "" {
+		log.Printf("🟢 [Qwen] Using context-injected OAuth token for streaming")
+		return p.makeStreamingAPICall(ctx, baseURL+"/chat/completions", request, contextToken)
+	}
+
+	// Try OAuth credentials first
 	if p.authHelper.OAuthManager != nil {
 		creds := p.authHelper.OAuthManager.GetCredentials()
+		var lastErr error
 		for _, cred := range creds {
 			stream, err := p.makeStreamingAPICall(ctx, baseURL+"/chat/completions", request, cred.AccessToken)
-			if err != nil {
-				lastErr = err
-				continue
+			if err == nil {
+				return stream, nil
 			}
-			return stream, nil
+			// Log OAuth failure for debugging
+			log.Printf("Qwen OAuth streaming failed for credential %s: %v", cred.ID, err)
+			lastErr = err
 		}
-	}
-	return nil, lastErr
-}
-
-// executeStreamWithAPIKey executes a streaming request using API key authentication
-func (p *QwenProvider) executeStreamWithAPIKey(ctx context.Context, options types.GenerateOptions) (types.ChatCompletionStream, error) {
-	providerConfig := p.GetConfig()
-
-	var authToken string
-	switch {
-	case p.authHelper.KeyManager != nil && len(p.authHelper.KeyManager.GetKeys()) > 0:
-		authToken = p.authHelper.KeyManager.GetKeys()[0]
-	case providerConfig.APIKey != "":
-		authToken = providerConfig.APIKey
-	default:
-		return nil, fmt.Errorf("no API key configured for qwen")
+		// If OAuth was configured, don't fall back to API keys - return the OAuth error
+		return nil, types.NewAuthError(types.ProviderTypeQwen, fmt.Sprintf("OAuth authentication failed (all %d credentials tried)", len(creds))).
+			WithOperation("executeStreamWithAuth").
+			WithOriginalErr(lastErr)
 	}
 
-	baseURL := providerConfig.BaseURL
-	if baseURL == "" {
-		baseURL = "https://portal.qwen.ai/v1"
+	// Try API keys
+	if p.authHelper.KeyManager != nil {
+		keys := p.authHelper.KeyManager.GetKeys()
+		var lastErr error
+		for _, apiKey := range keys {
+			stream, err := p.makeStreamingAPICall(ctx, baseURL+"/chat/completions", request, apiKey)
+			if err == nil {
+				return stream, nil
+			}
+			lastErr = err
+		}
+		// Fall back to configured API key if available
+		if providerConfig.APIKey != "" {
+			stream, err := p.makeStreamingAPICall(ctx, baseURL+"/chat/completions", request, providerConfig.APIKey)
+			if err == nil {
+				return stream, nil
+			}
+			lastErr = err
+		}
+		return nil, types.NewAuthError(types.ProviderTypeQwen, "no valid API key available for streaming").
+			WithOperation("executeStreamWithAuth").
+			WithOriginalErr(lastErr)
 	}
 
-	// Build request using the new helper
-	request := p.buildQwenRequest(options)
-	request.Stream = true
-
-	return p.makeStreamingAPICall(ctx, baseURL+"/chat/completions", request, authToken)
+	return nil, types.NewAuthError(types.ProviderTypeQwen, "no authentication method configured for streaming").
+		WithOperation("executeStreamWithAuth")
 }
 
 // makeStreamingAPICall makes a streaming API call to Qwen
@@ -802,7 +808,7 @@ func (s *QwenRealStream) Close() error {
 // Qwen uses OpenAI-compatible format, so we use the shared implementation
 func convertToQwenTools(tools []types.Tool) []QwenTool {
 	// Convert using shared OpenAI-compatible converter
-	compatibleTools := common.ConvertToOpenAICompatibleTools(tools)
+	compatibleTools := streaming.ConvertToOpenAICompatibleTools(tools)
 
 	// Convert to Qwen-specific types (same structure, different type names)
 	qwenTools := make([]QwenTool, len(compatibleTools))
@@ -823,7 +829,7 @@ func convertToQwenTools(tools []types.Tool) []QwenTool {
 // Qwen uses OpenAI-compatible format, so we use the shared implementation
 func convertToQwenToolCalls(toolCalls []types.ToolCall) []QwenToolCall {
 	// Convert using shared OpenAI-compatible converter
-	compatibleCalls := common.ConvertToOpenAICompatibleToolCalls(toolCalls)
+	compatibleCalls := streaming.ConvertToOpenAICompatibleToolCalls(toolCalls)
 
 	// Convert to Qwen-specific types (same structure, different type names)
 	qwenToolCalls := make([]QwenToolCall, len(compatibleCalls))
@@ -844,12 +850,12 @@ func convertToQwenToolCalls(toolCalls []types.ToolCall) []QwenToolCall {
 // Qwen uses OpenAI-compatible format, so we use the shared implementation
 func convertQwenToolCallsToUniversal(toolCalls []QwenToolCall) []types.ToolCall {
 	// Convert to OpenAI-compatible format
-	compatibleCalls := make([]common.OpenAICompatibleToolCall, len(toolCalls))
+	compatibleCalls := make([]streaming.OpenAICompatibleToolCall, len(toolCalls))
 	for i, tc := range toolCalls {
-		compatibleCalls[i] = common.OpenAICompatibleToolCall{
+		compatibleCalls[i] = streaming.OpenAICompatibleToolCall{
 			ID:   tc.ID,
 			Type: tc.Type,
-			Function: common.OpenAICompatibleToolCallFunction{
+			Function: streaming.OpenAICompatibleToolCallFunction{
 				Name:      tc.Function.Name,
 				Arguments: tc.Function.Arguments,
 			},
@@ -857,5 +863,5 @@ func convertQwenToolCallsToUniversal(toolCalls []QwenToolCall) []types.ToolCall 
 	}
 
 	// Convert using shared converter
-	return common.ConvertOpenAICompatibleToolCallsToUniversal(compatibleCalls)
+	return streaming.ConvertOpenAICompatibleToolCallsToUniversal(compatibleCalls)
 }
