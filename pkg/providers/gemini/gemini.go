@@ -166,17 +166,31 @@ func (p *GeminiProvider) GenerateChatCompletion(
 
 	// Check if streaming is requested
 	if options.Stream {
-		// Handle streaming with authentication method selection
+		// Determine model for streaming
+		model := options.Model
+		if model == "" {
+			model = p.config.Model
+			if model == "" {
+				model = geminiDefaultModel
+			}
+		}
+
 		var stream types.ChatCompletionStream
 		var err error
 
-		switch {
-		case p.authHelper.OAuthManager != nil:
-			stream, err = p.executeStreamWithOAuth(ctx, options)
-		case p.authHelper.KeyManager != nil && len(p.authHelper.KeyManager.GetKeys()) > 0:
-			stream, err = p.executeStreamWithAPIKey(ctx, options)
-		default:
-			err = fmt.Errorf("no authentication configured (neither OAuth nor API key)")
+		// Check for context-injected OAuth token first
+		if contextToken := common.GetOAuthToken(ctx); contextToken != "" {
+			stream, err = p.makeStreamingAPICallWithToken(ctx, options, model, contextToken)
+		} else {
+			// Fall back to configured auth methods
+			switch {
+			case p.authHelper.OAuthManager != nil:
+				stream, err = p.executeStreamWithOAuth(ctx, options)
+			case p.authHelper.KeyManager != nil && len(p.authHelper.KeyManager.GetKeys()) > 0:
+				stream, err = p.executeStreamWithAPIKey(ctx, options)
+			default:
+				err = fmt.Errorf("no authentication configured (neither OAuth nor API key)")
+			}
 		}
 
 		if err != nil {

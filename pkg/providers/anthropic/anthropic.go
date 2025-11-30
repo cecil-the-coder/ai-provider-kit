@@ -486,7 +486,13 @@ func (p *AnthropicProvider) executeStreamWithAuth(ctx context.Context, options t
 	requestData := p.prepareRequest(options, model)
 	requestData.Stream = true
 
-	// Try OAuth first
+	// Check for context-injected OAuth token first
+	if contextToken := common.GetOAuthToken(ctx); contextToken != "" {
+		log.Printf("🟣 [Anthropic] Using context-injected OAuth token for streaming")
+		return p.makeStreamingAPICallWithOAuth(ctx, requestData, contextToken)
+	}
+
+	// Try OAuth credentials
 	if p.authHelper.OAuthManager != nil {
 		creds := p.authHelper.OAuthManager.GetCredentials()
 		var lastErr error
