@@ -48,7 +48,6 @@ type GeminiProvider struct {
 	config            GeminiConfig
 	projectID         string
 	displayName       string
-	modelCache        *common.ModelCache
 	rateLimitHelper   *common.RateLimitHelper
 	rateLimitMutex    sync.RWMutex
 	clientSideLimiter *rate.Limiter
@@ -108,7 +107,6 @@ func NewGeminiProvider(config types.ProviderConfig) *GeminiProvider {
 		client:          client,
 		config:          geminiConfig,
 		displayName:     geminiConfig.DisplayName,
-		modelCache:      common.NewModelCache(common.GetModelCacheTTL(types.ProviderTypeGemini)),
 		rateLimitHelper: common.NewRateLimitHelper(ratelimit.NewGeminiParser()),
 		// Client-side limits (free tier: 15 RPM, pay-as-you-go: 360 RPM)
 		// Default to free tier - can be updated with UpdateRateLimitTier
@@ -139,122 +137,16 @@ func (p *GeminiProvider) Description() string {
 }
 
 func (p *GeminiProvider) GetModels(ctx context.Context) ([]types.Model, error) {
-	// Use the shared model cache utility
-	return p.modelCache.GetModels(
-		func() ([]types.Model, error) {
-			// Fetch from API
-			models, err := p.fetchModelsFromAPI(ctx)
-			if err != nil {
-				log.Printf("Gemini: Failed to fetch models from API: %v", err)
-				return nil, err
-			}
-			// Enrich with provider-specific metadata
-			return p.enrichModels(models), nil
-		},
-		func() []types.Model {
-			// Fallback to static list
-			return p.getStaticFallback()
-		},
-	)
-}
-
-// fetchModelsFromAPI fetches models from Gemini API
-func (p *GeminiProvider) fetchModelsFromAPI(ctx context.Context) ([]types.Model, error) {
-	// Use auth helper to check for API key authentication
-	if p.authHelper.KeyManager == nil || len(p.authHelper.KeyManager.GetKeys()) == 0 {
-		return nil, fmt.Errorf("no Gemini API key configured")
-	}
-
-	baseURL := standardGeminiBaseURL
-	url := baseURL + "/models"
-
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-
-	// Use auth helper to set headers
-	keys := p.authHelper.KeyManager.GetKeys()
-	p.authHelper.SetAuthHeaders(req, keys[0], "api_key")
-
-	resp, err := p.client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch models: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }() //nolint:staticcheck // Empty branch is intentional - we ignore close errors //nolint:staticcheck // Empty branch is intentional - we ignore close errors
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("failed to fetch models: HTTP %d - %s", resp.StatusCode, string(body))
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response: %w", err)
-	}
-
-	var modelsResp GeminiModelsResponse
-	if err := json.Unmarshal(body, &modelsResp); err != nil {
-		return nil, fmt.Errorf("failed to parse models response: %w", err)
-	}
-
-	// Convert to internal Model format
-	models := make([]types.Model, 0, len(modelsResp.Models))
-	for _, model := range modelsResp.Models {
-		// Use baseModelId as the model ID (e.g., "gemini-1.5-pro" instead of "models/gemini-1.5-pro")
-		modelID := model.BaseModelID
-		if modelID == "" {
-			// Fallback to extracting from name (e.g., "models/gemini-1.5-pro" -> "gemini-1.5-pro")
-			parts := strings.Split(model.Name, "/")
-			if len(parts) > 1 {
-				modelID = parts[len(parts)-1]
-			} else {
-				modelID = model.Name
-			}
-		}
-
-		models = append(models, types.Model{
-			ID:          modelID,
-			Name:        model.DisplayName,
-			Provider:    p.Type(),
-			Description: model.Description,
-			MaxTokens:   model.InputTokenLimit,
-		})
-	}
-
-	return models, nil
-}
-
-// enrichModels adds metadata to models
-func (p *GeminiProvider) enrichModels(models []types.Model) []types.Model {
-	enriched := make([]types.Model, len(models))
-	for i, model := range models {
-		enriched[i] = model
-		enriched[i].SupportsStreaming = true
-		enriched[i].SupportsToolCalling = true
-	}
-	return enriched
-}
-
-// getStaticFallback returns static model list
-func (p *GeminiProvider) getStaticFallback() []types.Model {
 	return []types.Model{
-		// Gemini 3 Series (Latest - Preview)
-		{ID: "gemini-3-pro-preview", Name: "Gemini 3 Pro (Preview)", Provider: p.Type(), MaxTokens: 2097152, SupportsStreaming: true, SupportsToolCalling: true, Description: "Google's latest Gemini 3 Pro model with advanced capabilities"},
-		{ID: "gemini-3-pro-image-preview", Name: "Gemini 3 Pro Image (Preview)", Provider: p.Type(), MaxTokens: 2097152, SupportsStreaming: true, SupportsToolCalling: true, Description: "Gemini 3 Pro with enhanced image understanding"},
+		// Gemini 2.5 Series
+		{ID: "gemini-2.5-pro", Name: "Gemini 2.5 Pro", Provider: p.Type(), MaxTokens: 2097152, SupportsStreaming: true, SupportsToolCalling: true, Description: "State-of-the-art thinking model for complex problems with 2M context"},
+		{ID: "gemini-2.5-flash", Name: "Gemini 2.5 Flash", Provider: p.Type(), MaxTokens: 1048576, SupportsStreaming: true, SupportsToolCalling: true, Description: "Best price-performance for high-volume tasks and agentic use cases"},
+		{ID: "gemini-2.5-flash-lite", Name: "Gemini 2.5 Flash Lite", Provider: p.Type(), MaxTokens: 524288, SupportsStreaming: true, SupportsToolCalling: true, Description: "Built for massive scale, optimized for efficiency"},
 
-		// Gemini 2.5 Series (Stable)
-		{ID: "gemini-2.5-pro", Name: "Gemini 2.5 Pro", Provider: p.Type(), MaxTokens: 2097152, SupportsStreaming: true, SupportsToolCalling: true, Description: "Stable Gemini 2.5 Pro model with 2M token context"},
-		{ID: "gemini-2.5-flash", Name: "Gemini 2.5 Flash", Provider: p.Type(), MaxTokens: 1048576, SupportsStreaming: true, SupportsToolCalling: true, Description: "Fast and efficient Gemini 2.5 Flash model"},
-		{ID: "gemini-2.5-flash-image", Name: "Gemini 2.5 Flash Image", Provider: p.Type(), MaxTokens: 1048576, SupportsStreaming: true, SupportsToolCalling: true, Description: "Gemini 2.5 Flash optimized for image tasks"},
-		{ID: "gemini-2.5-flash-lite", Name: "Gemini 2.5 Flash Lite", Provider: p.Type(), MaxTokens: 524288, SupportsStreaming: true, SupportsToolCalling: true, Description: "Lightweight version of Gemini 2.5 Flash"},
-
-		// Gemini 2.0 Series (Stable)
-		{ID: "gemini-2.0-flash", Name: "Gemini 2.0 Flash", Provider: p.Type(), MaxTokens: 1048576, SupportsStreaming: true, SupportsToolCalling: true, Description: "Stable Gemini 2.0 Flash model"},
-		{ID: "gemini-2.0-flash-001", Name: "Gemini 2.0 Flash 001", Provider: p.Type(), MaxTokens: 1048576, SupportsStreaming: true, SupportsToolCalling: true, Description: "Gemini 2.0 Flash version 001"},
-		{ID: "gemini-2.0-flash-lite", Name: "Gemini 2.0 Flash Lite", Provider: p.Type(), MaxTokens: 524288, SupportsStreaming: true, SupportsToolCalling: true, Description: "Lightweight Gemini 2.0 Flash model"},
-		{ID: "gemini-2.0-flash-lite-001", Name: "Gemini 2.0 Flash Lite 001", Provider: p.Type(), MaxTokens: 524288, SupportsStreaming: true, SupportsToolCalling: true, Description: "Gemini 2.0 Flash Lite version 001"},
-	}
+		// Gemini 2.0 Series
+		{ID: "gemini-2.0-flash", Name: "Gemini 2.0 Flash", Provider: p.Type(), MaxTokens: 1048576, SupportsStreaming: true, SupportsToolCalling: true, Description: "Multimodal model for general-purpose tasks"},
+		{ID: "gemini-2.0-flash-lite", Name: "Gemini 2.0 Flash Lite", Provider: p.Type(), MaxTokens: 524288, SupportsStreaming: true, SupportsToolCalling: true, Description: "Ultra-efficient for simple, high-frequency tasks"},
+	}, nil
 }
 
 func (p *GeminiProvider) GetDefaultModel() string {

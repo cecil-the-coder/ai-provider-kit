@@ -1104,48 +1104,31 @@ func TestGeminiStream_NextWithData(t *testing.T) {
 	}
 }
 
-func TestEnrichModels(t *testing.T) {
+func TestGetModelsReturnsStaticList(t *testing.T) {
 	provider := NewGeminiProvider(types.ProviderConfig{Type: types.ProviderTypeGemini})
 
-	models := []types.Model{
-		{
-			ID:       "test-model",
-			Name:     "Test Model",
-			Provider: types.ProviderTypeGemini,
-		},
+	models, err := provider.GetModels(context.Background())
+	if err != nil {
+		t.Fatalf("GetModels failed: %v", err)
 	}
-
-	enriched := provider.enrichModels(models)
-
-	if len(enriched) != 1 {
-		t.Fatalf("Expected 1 enriched model, got %d", len(enriched))
-	}
-
-	if !enriched[0].SupportsStreaming {
-		t.Error("Expected enriched model to support streaming")
-	}
-
-	if !enriched[0].SupportsToolCalling {
-		t.Error("Expected enriched model to support tool calling")
-	}
-}
-
-func TestGetStaticFallback(t *testing.T) {
-	provider := NewGeminiProvider(types.ProviderConfig{Type: types.ProviderTypeGemini})
-
-	models := provider.getStaticFallback()
 
 	if len(models) == 0 {
-		t.Error("Expected static fallback to return models")
+		t.Error("Expected GetModels to return models")
 	}
 
-	// All models should have provider set
+	// All models should have correct provider and capabilities
 	for _, model := range models {
 		if model.Provider != types.ProviderTypeGemini {
 			t.Errorf("Expected provider %s, got %s", types.ProviderTypeGemini, model.Provider)
 		}
 		if model.MaxTokens == 0 {
 			t.Errorf("Model %s should have MaxTokens set", model.ID)
+		}
+		if !model.SupportsStreaming {
+			t.Errorf("Model %s should support streaming", model.ID)
+		}
+		if !model.SupportsToolCalling {
+			t.Errorf("Model %s should support tool calling", model.ID)
 		}
 	}
 }
