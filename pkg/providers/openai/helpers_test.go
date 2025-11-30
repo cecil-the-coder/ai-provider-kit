@@ -12,47 +12,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestIsChatModel tests the isChatModel helper function
-func TestIsChatModel(t *testing.T) {
-	config := types.ProviderConfig{
-		Type:   types.ProviderTypeOpenAI,
-		APIKey: "sk-test-key",
-	}
-	provider := NewOpenAIProvider(config)
-
-	tests := []struct {
-		name     string
-		modelID  string
-		expected bool
-	}{
-		{"GPT-4", "gpt-4", true},
-		{"GPT-4-0613", "gpt-4-0613", true},
-		{"GPT-4-32k", "gpt-4-32k", true},
-		{"GPT-4-32k-0613", "gpt-4-32k-0613", true},
-		{"GPT-4-Turbo", "gpt-4-turbo", true},
-		{"GPT-4-Turbo-Preview", "gpt-4-turbo-preview", true},
-		{"GPT-3.5-Turbo", "gpt-3.5-turbo", true},
-		{"GPT-3.5-Turbo-16k", "gpt-3.5-turbo-16k", true},
-		{"GPT-3.5-Turbo-0613", "gpt-3.5-turbo-0613", true},
-		{"GPT-4o", "gpt-4o", true},
-		{"GPT-4o-Mini", "gpt-4o-mini", true},
-		{"GPT-4o-2024-05-13", "gpt-4o-2024-05-13", true},
-		{"Non-Chat Model", "text-davinci-003", false},
-		{"Random Model", "random-model", false},
-		{"Empty String", "", false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := provider.isChatModel(tt.modelID)
-			assert.Equal(t, tt.expected, result)
-		})
-	}
-}
-
-// Note: getDisplayName, getMaxTokens, supportsToolCalling, and getDescription
+// Note: isChatModel, getDisplayName, getMaxTokens, supportsToolCalling, and getDescription
 // tests have been removed as these functions are now handled by the
 // centralized ModelMetadataRegistry in pkg/providers/common/model_registry.go
+// The isChatModel filter was removed entirely to support OpenAI-compatible providers like Groq
 
 // TestEnrichModels tests the enrichModels helper function
 func TestEnrichModels(t *testing.T) {
@@ -173,10 +136,11 @@ func TestFetchModelsFromAPI(t *testing.T) {
 		models, err := provider.fetchModelsFromAPI(context.Background())
 		require.NoError(t, err)
 
-		// Should only include chat models
-		assert.Len(t, models, 2)
+		// Should include all models (no filtering - supports OpenAI-compatible providers)
+		assert.Len(t, models, 3)
 		assert.Equal(t, "gpt-4o", models[0].ID)
 		assert.Equal(t, "gpt-3.5-turbo", models[1].ID)
+		assert.Equal(t, "text-davinci-003", models[2].ID)
 	})
 
 	t.Run("NoAPIKey", func(t *testing.T) {

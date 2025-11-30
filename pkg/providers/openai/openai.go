@@ -10,7 +10,6 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/base"
@@ -223,24 +222,6 @@ func (p *OpenAIProvider) Description() string {
 	return "OpenAI - GPT models with native API access"
 }
 
-// Helper functions for model metadata
-
-// isChatModel checks if a model ID is a chat model
-func (p *OpenAIProvider) isChatModel(modelID string) bool {
-	chatModels := []string{
-		"gpt-4", "gpt-4-32k", "gpt-4-0613", "gpt-4-32k-0613",
-		"gpt-4-turbo", "gpt-4-turbo-preview",
-		"gpt-3.5-turbo", "gpt-3.5-turbo-16k", "gpt-3.5-turbo-0613",
-		"gpt-4o", "gpt-4o-mini",
-	}
-	for _, model := range chatModels {
-		if strings.HasPrefix(modelID, model) {
-			return true
-		}
-	}
-	return false
-}
-
 func (p *OpenAIProvider) GetModels(ctx context.Context) ([]types.Model, error) {
 	// Use the shared model cache utility
 	return p.modelCache.GetModels(
@@ -304,16 +285,13 @@ func (p *OpenAIProvider) fetchModelsFromAPI(ctx context.Context) ([]types.Model,
 		return nil, fmt.Errorf("failed to parse models response: %w", err)
 	}
 
-	// Convert to internal Model format
-	var models []types.Model
+	// Convert to internal Model format - no filtering to support OpenAI-compatible providers
+	models := make([]types.Model, 0, len(modelsResp.Data))
 	for _, model := range modelsResp.Data {
-		// Filter for chat models only
-		if p.isChatModel(model.ID) {
-			models = append(models, types.Model{
-				ID:       model.ID,
-				Provider: p.Type(),
-			})
-		}
+		models = append(models, types.Model{
+			ID:       model.ID,
+			Provider: p.Type(),
+		})
 	}
 
 	return models, nil
