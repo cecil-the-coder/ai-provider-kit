@@ -1,3 +1,5 @@
+// Package models provides model metadata, caching, and registry functionality
+// for AI providers, including capability tracking and discovery.
 package models
 
 import (

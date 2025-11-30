@@ -7,6 +7,82 @@ import (
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 )
 
+// toolCallFields represents the common fields between different tool call types
+type toolCallFields struct {
+	ID        string
+	Type      string
+	Name      string
+	Arguments string
+}
+
+// assertToolCallsEqual validates that two slices of tool calls are equal using field comparison
+func assertToolCallsEqual(t *testing.T, actualLength int, expectedLength int, getField func(int) toolCallFields) {
+	if actualLength != expectedLength {
+		t.Errorf("Expected %d tool calls, got %d", expectedLength, actualLength)
+		return
+	}
+
+	for i := 0; i < actualLength; i++ {
+		actual := getField(i)
+		expected := getField(i + expectedLength) // Expected fields come after actual fields
+
+		if actual.ID != expected.ID {
+			t.Errorf("ToolCall %d: expected ID %s, got %s", i, expected.ID, actual.ID)
+		}
+		if actual.Type != expected.Type {
+			t.Errorf("ToolCall %d: expected type %s, got %s", i, expected.Type, actual.Type)
+		}
+		if actual.Name != expected.Name {
+			t.Errorf("ToolCall %d: expected name %s, got %s", i, expected.Name, actual.Name)
+		}
+		if actual.Arguments != expected.Arguments {
+			t.Errorf("ToolCall %d: expected arguments %s, got %s", i, expected.Arguments, actual.Arguments)
+		}
+	}
+}
+
+// assertUniversalToolCallsEqual validates that two slices of universal tool calls are equal
+func assertUniversalToolCallsEqual(t *testing.T, result []types.ToolCall, expected []types.ToolCall) {
+	getField := func(index int) toolCallFields {
+		if index < len(result) {
+			return toolCallFields{
+				ID:        result[index].ID,
+				Type:      result[index].Type,
+				Name:      result[index].Function.Name,
+				Arguments: result[index].Function.Arguments,
+			}
+		}
+		return toolCallFields{
+			ID:        expected[index-len(result)].ID,
+			Type:      expected[index-len(result)].Type,
+			Name:      expected[index-len(result)].Function.Name,
+			Arguments: expected[index-len(result)].Function.Arguments,
+		}
+	}
+	assertToolCallsEqual(t, len(result), len(expected), getField)
+}
+
+// assertOpenAIToolCallsEqual validates that two slices of OpenAI-compatible tool calls are equal
+func assertOpenAIToolCallsEqual(t *testing.T, result []OpenAICompatibleToolCall, expected []OpenAICompatibleToolCall) {
+	getField := func(index int) toolCallFields {
+		if index < len(result) {
+			return toolCallFields{
+				ID:        result[index].ID,
+				Type:      result[index].Type,
+				Name:      result[index].Function.Name,
+				Arguments: result[index].Function.Arguments,
+			}
+		}
+		return toolCallFields{
+			ID:        expected[index-len(result)].ID,
+			Type:      expected[index-len(result)].Type,
+			Name:      expected[index-len(result)].Function.Name,
+			Arguments: expected[index-len(result)].Function.Arguments,
+		}
+	}
+	assertToolCallsEqual(t, len(result), len(expected), getField)
+}
+
 func TestConvertToOpenAICompatibleTools(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -221,26 +297,7 @@ func TestConvertToOpenAICompatibleToolCalls(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := ConvertToOpenAICompatibleToolCalls(tt.input)
-
-			if len(result) != len(tt.expected) {
-				t.Errorf("Expected %d tool calls, got %d", len(tt.expected), len(result))
-				return
-			}
-
-			for i := range result {
-				if result[i].ID != tt.expected[i].ID {
-					t.Errorf("ToolCall %d: expected ID %s, got %s", i, tt.expected[i].ID, result[i].ID)
-				}
-				if result[i].Type != tt.expected[i].Type {
-					t.Errorf("ToolCall %d: expected type %s, got %s", i, tt.expected[i].Type, result[i].Type)
-				}
-				if result[i].Function.Name != tt.expected[i].Function.Name {
-					t.Errorf("ToolCall %d: expected name %s, got %s", i, tt.expected[i].Function.Name, result[i].Function.Name)
-				}
-				if result[i].Function.Arguments != tt.expected[i].Function.Arguments {
-					t.Errorf("ToolCall %d: expected arguments %s, got %s", i, tt.expected[i].Function.Arguments, result[i].Function.Arguments)
-				}
-			}
+			assertOpenAIToolCallsEqual(t, result, tt.expected)
 		})
 	}
 }
@@ -323,26 +380,7 @@ func TestConvertOpenAICompatibleToolCallsToUniversal(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := ConvertOpenAICompatibleToolCallsToUniversal(tt.input)
-
-			if len(result) != len(tt.expected) {
-				t.Errorf("Expected %d tool calls, got %d", len(tt.expected), len(result))
-				return
-			}
-
-			for i := range result {
-				if result[i].ID != tt.expected[i].ID {
-					t.Errorf("ToolCall %d: expected ID %s, got %s", i, tt.expected[i].ID, result[i].ID)
-				}
-				if result[i].Type != tt.expected[i].Type {
-					t.Errorf("ToolCall %d: expected type %s, got %s", i, tt.expected[i].Type, result[i].Type)
-				}
-				if result[i].Function.Name != tt.expected[i].Function.Name {
-					t.Errorf("ToolCall %d: expected name %s, got %s", i, tt.expected[i].Function.Name, result[i].Function.Name)
-				}
-				if result[i].Function.Arguments != tt.expected[i].Function.Arguments {
-					t.Errorf("ToolCall %d: expected arguments %s, got %s", i, tt.expected[i].Function.Arguments, result[i].Function.Arguments)
-				}
-			}
+			assertUniversalToolCallsEqual(t, result, tt.expected)
 		})
 	}
 }

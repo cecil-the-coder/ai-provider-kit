@@ -7,7 +7,7 @@ import "github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 // OpenAICompatibleTool represents a tool in OpenAI-compatible API format
 // Used by OpenAI, Qwen, and other OpenAI-compatible providers
 type OpenAICompatibleTool struct {
-	Type     string                        `json:"type"` // Always "function"
+	Type     string                      `json:"type"` // Always "function"
 	Function OpenAICompatibleFunctionDef `json:"function"`
 }
 
@@ -20,8 +20,8 @@ type OpenAICompatibleFunctionDef struct {
 
 // OpenAICompatibleToolCall represents a tool call in OpenAI-compatible format
 type OpenAICompatibleToolCall struct {
-	ID       string                              `json:"id"`
-	Type     string                              `json:"type"` // "function"
+	ID       string                           `json:"id"`
+	Type     string                           `json:"type"` // "function"
 	Function OpenAICompatibleToolCallFunction `json:"function"`
 }
 

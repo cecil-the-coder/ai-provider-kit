@@ -538,7 +538,7 @@ func (p *AnthropicProvider) executeStreamWithAuth(ctx context.Context, options t
 	}
 
 	return nil, types.NewAuthError(types.ProviderTypeAnthropic, "no valid authentication available for streaming").
-			WithOperation("executeStreamWithAuth")
+		WithOperation("executeStreamWithAuth")
 }
 
 // prepareRequest prepares the API request payload

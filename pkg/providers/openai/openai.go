@@ -449,7 +449,7 @@ func (p *OpenAIProvider) executeStreamWithAuth(ctx context.Context, requestData 
 	}
 
 	return nil, types.NewAuthError(types.ProviderTypeOpenAI, "no valid API key available for streaming").
-			WithOperation("executeStreamWithAuth")
+		WithOperation("executeStreamWithAuth")
 }
 
 // buildOpenAIRequest builds the OpenAI API request from options
@@ -719,7 +719,7 @@ func (p *OpenAIProvider) InvokeServerTool(
 	params interface{},
 ) (interface{}, error) {
 	return nil, types.NewInvalidRequestError(types.ProviderTypeOpenAI, "tool invocation not yet implemented for OpenAI provider").
-			WithOperation("InvokeTool")
+		WithOperation("InvokeTool")
 }
 
 func (p *OpenAIProvider) Authenticate(ctx context.Context, authConfig types.AuthConfig) error {
