@@ -1,0 +1,91 @@
+# Example configuration for the Racing provider with virtual models support
+# This demonstrates how to configure virtual models with different strategies and timeouts
+
+# Default racing settings (used when virtual model doesn't specify)
+timeout_ms: 5000
+grace_period_ms: 1000
+strategy: first_wins
+
+# Default virtual model when none specified in GenerateChatCompletion
+default_virtual_model: multi
+
+# Virtual models exposed by this racing provider
+virtual_models:
+  # Multi-provider racing with weighted strategy
+  multi:
+    display_name: "Multi-Provider Racing"
+    description: "Races OpenAI GPT-4 and Anthropic Claude with weighted strategy for balanced performance"
+    providers:
+      - name: openai
+        model: gpt-4
+        priority: 1
+      - name: anthropic
+        model: claude-3-5-sonnet-20241022
+        priority: 2
+    strategy: weighted
+    timeout_ms: 3000
+
+  # Fast response model optimized for speed
+  fast:
+    display_name: "Fast Response"
+    description: "First wins strategy for fastest response using lightweight models"
+    providers:
+      - name: openai
+        model: gpt-3.5-turbo
+        priority: 1
+      - name: qwen
+        model: qwen-turbo
+        priority: 2
+    strategy: first_wins
+    timeout_ms: 2000
+
+  # High-quality model focused on best results
+  quality:
+    display_name: "High Quality"
+    description: "Quality-focused racing using premium models with weighted selection"
+    providers:
+      - name: anthropic
+        model: claude-3-5-sonnet-20241022
+        priority: 1
+        config:
+          temperature: 0.1
+          max_tokens: 4000
+      - name: openai
+        model: gpt-4
+        priority: 2
+        config:
+          temperature: 0.1
+          max_tokens: 4000
+    strategy: quality
+    timeout_ms: 8000
+
+  # Cost-effective model for budget-conscious usage
+  economy:
+    display_name: "Economy Mode"
+    description: "Cost-effective racing using more affordable model options"
+    providers:
+      - name: qwen
+        model: qwen-plus
+        priority: 1
+      - name: openai
+        model: gpt-3.5-turbo
+        priority: 2
+    strategy: first_wins
+    timeout_ms: 3000
+
+  # Fallback model with multiple provider options
+  fallback:
+    display_name: "Multi-Provider Fallback"
+    description: "Robust fallback with multiple providers including Google Gemini"
+    providers:
+      - name: openrouter
+        model: anthropic/claude-3.5-sonnet
+        priority: 1
+      - name: gemini
+        model: gemini-pro
+        priority: 2
+      - name: cerebras
+        model: llama3.1-70b
+        priority: 3
+    strategy: weighted
+    timeout_ms: 6000

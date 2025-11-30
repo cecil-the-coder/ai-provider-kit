@@ -748,7 +748,7 @@ func TestPickBestCandidate_EmptyCandidates(t *testing.T) {
 	})
 
 	ctx := context.Background()
-	_, err := rp.pickBestCandidate(ctx, []*raceResult{}, []string{}, make(map[string]time.Duration), "test-model")
+	_, err := rp.pickBestCandidate(ctx, []*raceResult{}, []string{}, make(map[string]time.Duration), "test-model", nil)
 
 	if err == nil {
 		t.Fatal("expected error for empty candidates")
@@ -774,7 +774,7 @@ func TestPickBestCandidate_SingleCandidate(t *testing.T) {
 
 	ctx := context.Background()
 	raceLatencies := map[string]time.Duration{"only-provider": 100 * time.Millisecond}
-	stream, err := rp.pickBestCandidate(ctx, candidates, []string{"only-provider"}, raceLatencies, "test-model")
+	stream, err := rp.pickBestCandidate(ctx, candidates, []string{"only-provider"}, raceLatencies, "test-model", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -899,28 +899,135 @@ func TestGetPerformanceStats(t *testing.T) {
 // Stub Method Tests
 // ============================================================================
 
-func TestRacingProvider_GetModels(t *testing.T) {
+func TestRacingProvider_GetModels_NoVirtualModels(t *testing.T) {
 	rp := NewRacingProvider("test", &Config{})
 	ctx := context.Background()
 
-	_, err := rp.GetModels(ctx)
+	models, err := rp.GetModels(ctx)
 
-	if err == nil {
-		t.Fatal("expected error from GetModels")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if err.Error() != "GetModels not supported for virtual racing provider" {
-		t.Errorf("unexpected error message: %v", err)
+	if len(models) != 0 {
+		t.Errorf("expected 0 models, got %d", len(models))
 	}
 }
 
-func TestRacingProvider_GetDefaultModel(t *testing.T) {
+func TestRacingProvider_GetModels_MultipleVirtualModels(t *testing.T) {
+	config := &Config{
+		VirtualModels: map[string]VirtualModelConfig{
+			"fast-model": {
+				DisplayName: "Fast Racing Model",
+				Description: "The fastest virtual model",
+			},
+			"quality-model": {
+				DisplayName: "Quality Racing Model",
+				Description: "The highest quality virtual model",
+			},
+			"balanced-model": {
+				DisplayName: "Balanced Racing Model",
+				Description: "Balanced speed and quality",
+			},
+		},
+	}
+
+	rp := NewRacingProvider("test", config)
+	ctx := context.Background()
+
+	models, err := rp.GetModels(ctx)
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(models) != 3 {
+		t.Errorf("expected 3 models, got %d", len(models))
+	}
+
+	// Check that model IDs match virtual model names (alphabetical order)
+	expectedIDs := []string{"balanced-model", "fast-model", "quality-model"}
+	for i, expectedID := range expectedIDs {
+		if i >= len(models) {
+			t.Fatalf("not enough models returned")
+		}
+		if models[i].ID != expectedID {
+			t.Errorf("expected model ID '%s', got '%s'", expectedID, models[i].ID)
+		}
+	}
+
+	// Verify DisplayName and Description are properly populated
+	for _, model := range models {
+		config, exists := config.VirtualModels[model.ID]
+		if !exists {
+			t.Errorf("model ID '%s' not found in config", model.ID)
+		}
+
+		if model.Name != config.DisplayName {
+			t.Errorf("expected display name '%s', got '%s'", config.DisplayName, model.Name)
+		}
+
+		if model.Description != config.Description {
+			t.Errorf("expected description '%s', got '%s'", config.Description, model.Description)
+		}
+
+		if model.Provider != "racing" {
+			t.Errorf("expected provider 'racing', got '%s'", model.Provider)
+		}
+	}
+}
+
+func TestRacingProvider_GetDefaultModel_ExplicitDefault(t *testing.T) {
+	config := &Config{
+		DefaultVirtualModel: "quality-model",
+		VirtualModels: map[string]VirtualModelConfig{
+			"fast-model": {
+				DisplayName: "Fast Racing Model",
+				Description: "The fastest virtual model",
+			},
+			"quality-model": {
+				DisplayName: "Quality Racing Model",
+				Description: "The highest quality virtual model",
+			},
+		},
+	}
+
+	rp := NewRacingProvider("test", config)
+
+	defaultModel := rp.GetDefaultModel()
+
+	if defaultModel != "quality-model" {
+		t.Errorf("expected default model 'quality-model', got '%s'", defaultModel)
+	}
+}
+
+func TestRacingProvider_GetDefaultModel_NoExplicitDefault(t *testing.T) {
+	config := &Config{
+		VirtualModels: map[string]VirtualModelConfig{
+			"test-model": {
+				DisplayName: "Test Model",
+				Description: "A test virtual model",
+			},
+		},
+	}
+
+	rp := NewRacingProvider("test", config)
+
+	defaultModel := rp.GetDefaultModel()
+
+	// Should return the only virtual model available
+	if defaultModel != "test-model" {
+		t.Errorf("expected default model 'test-model', got '%s'", defaultModel)
+	}
+}
+
+func TestRacingProvider_GetDefaultModel_NoVirtualModels(t *testing.T) {
 	rp := NewRacingProvider("test", &Config{})
 
-	model := rp.GetDefaultModel()
+	defaultModel := rp.GetDefaultModel()
 
-	if model != "" {
-		t.Errorf("expected empty string, got '%s'", model)
+	if defaultModel != "" {
+		t.Errorf("expected empty string, got '%s'", defaultModel)
 	}
 }
 
@@ -1280,5 +1387,1536 @@ func TestWeightedStrategy_GracePeriodExpires(t *testing.T) {
 	// First provider should win because grace period expires before second arrives
 	if winner != "first-provider" {
 		t.Errorf("expected 'first-provider' to win, got '%s'", winner)
+	}
+}
+
+// ============================================================================
+// Enhanced Virtual Models Tests
+// ============================================================================
+
+func TestVirtualModels_GetModels_EmptyConfig(t *testing.T) {
+	config := &Config{} // No virtual models configured
+	rp := NewRacingProvider("test", config)
+	ctx := context.Background()
+
+	models, err := rp.GetModels(ctx)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(models) != 0 {
+		t.Errorf("expected 0 models, got %d", len(models))
+	}
+
+	defaultModel := rp.GetDefaultModel()
+	if defaultModel != "" {
+		t.Errorf("expected empty default model, got '%s'", defaultModel)
+	}
+}
+
+func TestVirtualModels_GetModels_WithValidation(t *testing.T) {
+	tests := []struct {
+		name           string
+		config         *Config
+		expectedModels int
+		expectedDefault string
+		shouldErr      bool
+	}{
+		{
+			name: "single virtual model",
+			config: &Config{
+				VirtualModels: map[string]VirtualModelConfig{
+					"fast-model": {
+						DisplayName: "Fast Racing Model",
+						Description: "The fastest virtual model",
+						Providers: []ProviderReference{
+							{Name: "provider1"},
+							{Name: "provider2"},
+						},
+					},
+				},
+			},
+			expectedModels: 1,
+			expectedDefault: "fast-model",
+		},
+		{
+			name: "multiple virtual models with explicit default",
+			config: &Config{
+				DefaultVirtualModel: "quality-model",
+				VirtualModels: map[string]VirtualModelConfig{
+					"fast-model": {
+						DisplayName: "Fast Racing Model",
+						Description: "The fastest virtual model",
+					},
+					"quality-model": {
+						DisplayName: "Quality Racing Model",
+						Description: "The highest quality virtual model",
+					},
+					"balanced-model": {
+						DisplayName: "Balanced Racing Model",
+						Description: "Balanced speed and quality",
+					},
+				},
+			},
+			expectedModels: 3,
+			expectedDefault: "quality-model",
+		},
+		{
+			name: "invalid default model",
+			config: &Config{
+				DefaultVirtualModel: "nonexistent",
+				VirtualModels: map[string]VirtualModelConfig{
+					"fast-model": {
+						DisplayName: "Fast Racing Model",
+						Description: "The fastest virtual model",
+					},
+				},
+			},
+			expectedModels: 1,
+			expectedDefault: "fast-model", // Should fall back to first available
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rp := NewRacingProvider("test", tt.config)
+			ctx := context.Background()
+
+			models, err := rp.GetModels(ctx)
+			if tt.shouldErr && err == nil {
+				t.Fatal("expected error but got none")
+			}
+			if !tt.shouldErr && err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			if len(models) != tt.expectedModels {
+				t.Errorf("expected %d models, got %d", tt.expectedModels, len(models))
+			}
+
+			defaultModel := rp.GetDefaultModel()
+			if defaultModel != tt.expectedDefault {
+				t.Errorf("expected default model '%s', got '%s'", tt.expectedDefault, defaultModel)
+			}
+
+			// Validate model properties
+			for _, model := range models {
+				if model.Provider != "racing" {
+					t.Errorf("expected provider 'racing', got '%s'", model.Provider)
+				}
+				if model.ID == "" {
+					t.Error("expected non-empty model ID")
+				}
+				if model.Name == "" {
+					t.Error("expected non-empty model name")
+				}
+			}
+		})
+	}
+}
+
+func TestVirtualModels_ModelValidation(t *testing.T) {
+	tests := []struct {
+		name        string
+		config      *Config
+		shouldErr   bool
+		errContains string
+	}{
+		{
+			name: "valid config",
+			config: &Config{
+				TimeoutMS:           5000,
+				DefaultVirtualModel: "default",
+				VirtualModels: map[string]VirtualModelConfig{
+					"default": {
+						DisplayName: "Default Model",
+						Description: "A valid virtual model",
+						Providers: []ProviderReference{
+							{Name: "provider1", Model: "model1"},
+						},
+					},
+				},
+			},
+			shouldErr: false,
+		},
+		{
+			name: "missing default virtual model",
+			config: &Config{
+				TimeoutMS: 5000,
+				VirtualModels: map[string]VirtualModelConfig{
+					"model1": {
+						DisplayName: "Model 1",
+						Providers:   []ProviderReference{{Name: "provider1"}},
+					},
+				},
+			},
+			shouldErr:   true,
+			errContains: "default_virtual_model",
+		},
+		{
+			name: "no virtual models",
+			config: &Config{
+				TimeoutMS:           5000,
+				DefaultVirtualModel: "default",
+				VirtualModels:      map[string]VirtualModelConfig{},
+			},
+			shouldErr:   true,
+			errContains: "at least one virtual model",
+		},
+		{
+			name: "virtual model with no providers",
+			config: &Config{
+				TimeoutMS:           5000,
+				DefaultVirtualModel: "default",
+				VirtualModels: map[string]VirtualModelConfig{
+					"default": {
+						DisplayName: "Default Model",
+						Providers:   []ProviderReference{}, // Empty providers
+					},
+				},
+			},
+			shouldErr:   true,
+			errContains: "must have at least one provider",
+		},
+		{
+			name: "provider with empty name",
+			config: &Config{
+				TimeoutMS:           5000,
+				DefaultVirtualModel: "default",
+				VirtualModels: map[string]VirtualModelConfig{
+					"default": {
+						DisplayName: "Default Model",
+						Providers: []ProviderReference{
+							{Name: ""}, // Empty provider name
+						},
+					},
+				},
+			},
+			shouldErr:   true,
+			errContains: "provider name cannot be empty",
+		},
+		{
+			name: "negative timeout",
+			config: &Config{
+				TimeoutMS:           5000,
+				DefaultVirtualModel: "default",
+				VirtualModels: map[string]VirtualModelConfig{
+					"default": {
+						DisplayName: "Default Model",
+						Providers:   []ProviderReference{{Name: "provider1"}},
+						TimeoutMS:   -100, // Negative timeout
+					},
+				},
+			},
+			shouldErr:   true,
+			errContains: "must be non-negative",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.config.Validate()
+			if tt.shouldErr {
+				if err == nil {
+					t.Fatal("expected validation error but got none")
+				}
+				if tt.errContains != "" && !containsString(err.Error(), tt.errContains) {
+					t.Errorf("expected error to contain '%s', got: %v", tt.errContains, err)
+				}
+			} else {
+				if err != nil {
+					t.Errorf("unexpected validation error: %v", err)
+				}
+			}
+		})
+	}
+}
+
+// Helper function to check if string contains substring
+func containsString(s, substr string) bool {
+	return len(s) >= len(substr) && (s == substr || len(substr) == 0 ||
+		(len(s) > len(substr) && findSubstring(s, substr)))
+}
+
+func findSubstring(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
+}
+
+// ============================================================================
+// Per-Virtual-Model Racing Tests
+// ============================================================================
+
+func TestVirtualModel_DifferentStrategies(t *testing.T) {
+	tests := []struct {
+		name             string
+		virtualModel     string
+		expectedStrategy Strategy
+		expectedWinner   string
+		providers        []types.Provider
+	}{
+		{
+			name:     "first_wins strategy",
+			virtualModel: "fast-model",
+			expectedStrategy: StrategyFirstWins,
+			expectedWinner: "fast-provider",
+			providers: []types.Provider{
+				&mockChatProvider{
+					name:     "slow-provider",
+					delay:    200 * time.Millisecond,
+					response: "slow response",
+				},
+				&mockChatProvider{
+					name:     "fast-provider",
+					delay:    10 * time.Millisecond,
+					response: "fast response",
+				},
+			},
+		},
+		{
+			name:     "weighted strategy with history",
+			virtualModel: "quality-model",
+			expectedStrategy: StrategyWeighted,
+			expectedWinner: "quality-provider", // Should win due to performance history
+			providers: []types.Provider{
+				&mockChatProvider{
+					name:     "fast-provider",
+					delay:    10 * time.Millisecond,
+					response: "fast response",
+				},
+				&mockChatProvider{
+					name:     "quality-provider",
+					delay:    50 * time.Millisecond,
+					response: "quality response",
+				},
+			},
+		},
+		{
+			name:     "quality strategy",
+			virtualModel: "balanced-model",
+			expectedStrategy: StrategyQuality,
+			expectedWinner: "fast-provider", // Should pick based on adjusted score
+			providers: []types.Provider{
+				&mockChatProvider{
+					name:     "fast-provider",
+					delay:    10 * time.Millisecond,
+					response: "fast response",
+				},
+				&mockChatProvider{
+					name:     "slow-provider",
+					delay:    100 * time.Millisecond,
+					response: "slow response",
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			config := &Config{
+				DefaultVirtualModel: "fast-model",
+				TimeoutMS:           5000,
+				GracePeriodMS:       100,
+				Strategy:            StrategyFirstWins, // Default strategy
+				VirtualModels: map[string]VirtualModelConfig{
+					"fast-model": {
+						DisplayName: "Fast Model",
+						Description: "Fast virtual model",
+						Strategy:    StrategyFirstWins,
+						TimeoutMS:   5000,
+						Providers: []ProviderReference{
+							{Name: "slow-provider"},
+							{Name: "fast-provider"},
+						},
+					},
+					"quality-model": {
+						DisplayName: "Quality Model",
+						Description: "Quality virtual model",
+						Strategy:    StrategyWeighted,
+						TimeoutMS:   5000,
+						Providers: []ProviderReference{
+							{Name: "fast-provider"},
+							{Name: "quality-provider"},
+						},
+					},
+					"balanced-model": {
+						DisplayName: "Balanced Model",
+						Description: "Balanced virtual model",
+						Strategy:    StrategyQuality,
+						TimeoutMS:   5000,
+						Providers: []ProviderReference{
+							{Name: "fast-provider"},
+							{Name: "slow-provider"},
+						},
+					},
+				},
+			}
+
+			rp := NewRacingProvider("test", config)
+			rp.SetProviders(tt.providers)
+
+			// Pre-seed performance history for weighted strategy test
+			if tt.expectedStrategy == StrategyWeighted {
+				rp.performance.RecordWin("quality-provider", 50*time.Millisecond)
+				rp.performance.RecordWin("quality-provider", 60*time.Millisecond)
+				rp.performance.RecordLoss("fast-provider", 10*time.Millisecond)
+			}
+
+			ctx := context.Background()
+			opts := types.GenerateOptions{
+				Model: tt.virtualModel,
+				Prompt: "test",
+			}
+
+			stream, err := rp.GenerateChatCompletion(ctx, opts)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			defer func() { _ = stream.Close() }()
+
+			chunk, err := stream.Next()
+			if err != nil && err != io.EOF {
+				t.Fatalf("unexpected error reading chunk: %v", err)
+			}
+
+			winner, ok := chunk.Metadata["racing_winner"].(string)
+			if !ok {
+				t.Fatal("expected racing_winner in metadata")
+			}
+
+			if winner != tt.expectedWinner {
+				t.Errorf("expected winner '%s', got '%s'", tt.expectedWinner, winner)
+			}
+
+			// Note: Virtual model metadata is only sent to metrics collector, not included in response metadata
+			// Only racing metadata should be in the response
+		})
+	}
+}
+
+func TestVirtualModel_PerVirtualModelTimeouts(t *testing.T) {
+	tests := []struct {
+		name         string
+		virtualModel string
+		timeoutMS    int
+		shouldTimeout bool
+		providerDelay time.Duration
+	}{
+		{
+			name:         "short timeout should fail",
+			virtualModel: "fast-model",
+			timeoutMS:    100, // Very short timeout
+			shouldTimeout: true,
+			providerDelay: 500 * time.Millisecond,
+		},
+		{
+			name:         "long timeout should succeed",
+			virtualModel: "slow-model",
+			timeoutMS:    2000, // Longer timeout
+			shouldTimeout: false,
+			providerDelay: 100 * time.Millisecond,
+		},
+		{
+			name:         "default timeout fallback",
+			virtualModel: "default-model",
+			timeoutMS:    0, // Use default
+			shouldTimeout: false,
+			providerDelay: 100 * time.Millisecond,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			config := &Config{
+				DefaultVirtualModel: "default-model",
+				TimeoutMS:           1000, // Default timeout
+				Strategy:            StrategyFirstWins,
+				VirtualModels: map[string]VirtualModelConfig{
+					"fast-model": {
+						DisplayName: "Fast Model",
+						TimeoutMS:   tt.timeoutMS,
+						Providers: []ProviderReference{
+							{Name: "provider1"},
+						},
+					},
+					"slow-model": {
+						DisplayName: "Slow Model",
+						TimeoutMS:   tt.timeoutMS,
+						Providers: []ProviderReference{
+							{Name: "provider1"},
+						},
+					},
+					"default-model": {
+						DisplayName: "Default Model",
+						// No timeout specified, should use default
+						Providers: []ProviderReference{
+							{Name: "provider1"},
+						},
+					},
+				},
+			}
+
+			providers := []types.Provider{
+				&mockChatProvider{
+					name:     "provider1",
+					delay:    tt.providerDelay,
+					response: "response",
+				},
+			}
+
+			rp := NewRacingProvider("test", config)
+			rp.SetProviders(providers)
+
+			ctx := context.Background()
+			opts := types.GenerateOptions{
+				Model: tt.virtualModel,
+				Prompt: "test",
+			}
+
+			start := time.Now()
+			stream, err := rp.GenerateChatCompletion(ctx, opts)
+			elapsed := time.Since(start)
+
+			if tt.shouldTimeout {
+				if err == nil {
+					t.Fatal("expected timeout error but got none")
+				}
+				if elapsed > 500*time.Millisecond {
+					t.Errorf("timeout took too long: %v", elapsed)
+				}
+			} else {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				if stream != nil {
+					_ = stream.Close()
+				}
+			}
+		})
+	}
+}
+
+func TestVirtualModel_ProviderReferences(t *testing.T) {
+	tests := []struct {
+		name         string
+		virtualModel string
+		providers    []ProviderReference
+		expectedProviders []string
+		shouldErr     bool
+		errContains   string
+	}{
+		{
+			name:         "valid provider references",
+			virtualModel: "multi-provider",
+			providers: []ProviderReference{
+				{Name: "provider1", Model: "model1", Priority: 1},
+				{Name: "provider2", Model: "model2", Priority: 2},
+				{Name: "provider3", Model: "model3"}, // No priority
+			},
+			expectedProviders: []string{"provider1", "provider2", "provider3"},
+		},
+		{
+			name:         "missing provider",
+			virtualModel: "missing-provider",
+			providers: []ProviderReference{
+				{Name: "nonexistent-provider", Model: "model1"},
+			},
+			shouldErr:   true,
+			errContains: "provider not found",
+		},
+		{
+			name:         "empty provider list",
+			virtualModel: "empty-providers",
+			providers:    []ProviderReference{},
+			shouldErr:   true,
+			errContains: "no providers configured",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			config := &Config{
+				DefaultVirtualModel: "multi-provider",
+				TimeoutMS:           5000,
+				Strategy:            StrategyFirstWins,
+				VirtualModels: map[string]VirtualModelConfig{
+					"multi-provider": {
+						DisplayName: "Multi Provider Model",
+						Providers: []ProviderReference{
+							{Name: "provider1", Model: "model1", Priority: 1},
+							{Name: "provider2", Model: "model2", Priority: 2},
+							{Name: "provider3", Model: "model3"},
+						},
+					},
+					"missing-provider": {
+						DisplayName: "Missing Provider Model",
+						Providers: []ProviderReference{
+							{Name: "nonexistent-provider", Model: "model1"},
+						},
+					},
+					"empty-providers": {
+						DisplayName: "Empty Providers Model",
+						Providers:   []ProviderReference{},
+					},
+				},
+			}
+
+			// Set up available providers
+			availableProviders := []types.Provider{
+				&mockChatProvider{name: "provider1", response: "response1"},
+				&mockChatProvider{name: "provider2", response: "response2"},
+				&mockChatProvider{name: "provider3", response: "response3"},
+			}
+
+			rp := NewRacingProvider("test", config)
+			rp.SetProviders(availableProviders)
+
+			ctx := context.Background()
+			opts := types.GenerateOptions{
+				Model: tt.virtualModel,
+				Prompt: "test",
+			}
+
+			stream, err := rp.GenerateChatCompletion(ctx, opts)
+
+			if tt.shouldErr {
+				if err == nil {
+					t.Fatal("expected error but got none")
+				}
+				if tt.errContains != "" && !containsString(err.Error(), tt.errContains) {
+					t.Errorf("expected error to contain '%s', got: %v", tt.errContains, err)
+				}
+			} else {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				if stream != nil {
+					_ = stream.Close()
+				}
+			}
+		})
+	}
+}
+
+func TestVirtualModel_FallbackToDefaults(t *testing.T) {
+	config := &Config{
+		DefaultVirtualModel: "default",
+		TimeoutMS:           5000,
+		GracePeriodMS:       1000,
+		Strategy:            StrategyWeighted, // Default strategy
+		VirtualModels: map[string]VirtualModelConfig{
+			"default": {
+				DisplayName: "Default Model",
+				Description: "Uses default configuration",
+				// No strategy or timeout specified, should use defaults
+				Providers: []ProviderReference{
+					{Name: "provider1"},
+					{Name: "provider2"},
+				},
+			},
+			"custom": {
+				DisplayName: "Custom Model",
+				Description: "Custom configuration",
+				Strategy:    StrategyFirstWins, // Override default
+				TimeoutMS:   2000,             // Override default
+				Providers: []ProviderReference{
+					{Name: "provider1"},
+					{Name: "provider2"},
+				},
+			},
+		},
+	}
+
+	providers := []types.Provider{
+		&mockChatProvider{
+			name:     "provider1",
+			delay:    10 * time.Millisecond,
+			response: "response from provider1",
+		},
+		&mockChatProvider{
+			name:     "provider2",
+			delay:    50 * time.Millisecond,
+			response: "response from provider2",
+		},
+	}
+
+	rp := NewRacingProvider("test", config)
+	rp.SetProviders(providers)
+
+	// Test default virtual model (should use default strategy)
+	t.Run("default model uses default strategy", func(t *testing.T) {
+		ctx := context.Background()
+		opts := types.GenerateOptions{
+			Model: "default",
+			Prompt: "test",
+		}
+
+		stream, err := rp.GenerateChatCompletion(ctx, opts)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		defer func() { _ = stream.Close() }()
+
+		chunk, _ := stream.Next()
+		winner := chunk.Metadata["racing_winner"].(string)
+
+		// Should use weighted strategy (default)
+		if winner != "provider1" && winner != "provider2" {
+			t.Errorf("expected valid winner, got '%s'", winner)
+		}
+	})
+
+	// Test custom virtual model (should use custom strategy)
+	t.Run("custom model uses custom strategy", func(t *testing.T) {
+		ctx := context.Background()
+		opts := types.GenerateOptions{
+			Model: "custom",
+			Prompt: "test",
+		}
+
+		stream, err := rp.GenerateChatCompletion(ctx, opts)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		defer func() { _ = stream.Close() }()
+
+		chunk, _ := stream.Next()
+		winner := chunk.Metadata["racing_winner"].(string)
+
+		// Should use first_wins strategy, so provider1 should win
+		if winner != "provider1" {
+			t.Errorf("expected provider1 to win with first_wins strategy, got '%s'", winner)
+		}
+	})
+}
+
+func TestVirtualModel_ConfigurationValidation(t *testing.T) {
+	tests := []struct {
+		name        string
+		configFunc  func() *Config
+		shouldErr   bool
+		errContains string
+	}{
+		{
+			name: "valid complete configuration",
+			configFunc: func() *Config {
+				return &Config{
+					TimeoutMS:           5000,
+					DefaultVirtualModel: "complete",
+					VirtualModels: map[string]VirtualModelConfig{
+						"complete": {
+							DisplayName: "Complete Model",
+							Description: "Fully configured virtual model",
+							Strategy:    StrategyWeighted,
+							TimeoutMS:   3000,
+							Providers: []ProviderReference{
+								{Name: "provider1", Model: "model1", Priority: 1},
+								{Name: "provider2", Model: "model2", Priority: 2},
+							},
+						},
+					},
+				}
+			},
+			shouldErr: false,
+		},
+		{
+			name: "minimal valid configuration",
+			configFunc: func() *Config {
+				return &Config{
+					TimeoutMS:           5000,
+					DefaultVirtualModel: "minimal",
+					VirtualModels: map[string]VirtualModelConfig{
+						"minimal": {
+							DisplayName: "Minimal Model",
+							Providers: []ProviderReference{
+								{Name: "provider1"},
+							},
+						},
+					},
+				}
+			},
+			shouldErr: false,
+		},
+		{
+			name: "missing default virtual model reference",
+			configFunc: func() *Config {
+				return &Config{
+					TimeoutMS:           5000,
+					DefaultVirtualModel: "nonexistent",
+					VirtualModels: map[string]VirtualModelConfig{
+						"existing": {
+							DisplayName: "Existing Model",
+							Providers: []ProviderReference{
+								{Name: "provider1"},
+							},
+						},
+					},
+				}
+			},
+			shouldErr:   true,
+			errContains: "must reference an existing virtual model",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			config := tt.configFunc()
+			err := config.Validate()
+
+			if tt.shouldErr {
+				if err == nil {
+					t.Fatal("expected validation error but got none")
+				}
+				if tt.errContains != "" && !containsString(err.Error(), tt.errContains) {
+					t.Errorf("expected error to contain '%s', got: %v", tt.errContains, err)
+				}
+			} else {
+				if err != nil {
+					t.Errorf("unexpected validation error: %v", err)
+				}
+			}
+		})
+	}
+}
+
+// ============================================================================
+// Configuration Tests
+// ============================================================================
+
+
+func TestConfig_DefaultConfig(t *testing.T) {
+	config := DefaultConfig()
+
+	if config.TimeoutMS != 5000 {
+		t.Errorf("expected default timeout 5000, got %d", config.TimeoutMS)
+	}
+
+	if config.GracePeriodMS != 1000 {
+		t.Errorf("expected default grace period 1000, got %d", config.GracePeriodMS)
+	}
+
+	if config.Strategy != StrategyFirstWins {
+		t.Errorf("expected default strategy '%s', got '%s'", StrategyFirstWins, config.Strategy)
+	}
+
+	if config.DefaultVirtualModel != "default" {
+		t.Errorf("expected default virtual model 'default', got '%s'", config.DefaultVirtualModel)
+	}
+
+	if len(config.VirtualModels) != 1 {
+		t.Errorf("expected 1 virtual model, got %d", len(config.VirtualModels))
+	}
+
+	defaultVM, exists := config.VirtualModels["default"]
+	if !exists {
+		t.Fatal("expected default virtual model to exist")
+	}
+
+	if defaultVM.DisplayName != "Default Racing Model" {
+		t.Errorf("expected display name 'Default Racing Model', got '%s'", defaultVM.DisplayName)
+	}
+}
+
+func TestConfig_ResolveVirtualModelConfig(t *testing.T) {
+	baseConfig := &Config{
+		TimeoutMS: 5000,
+		Strategy:  StrategyFirstWins,
+		VirtualModels: map[string]VirtualModelConfig{
+			"partial": {
+				DisplayName: "Partial Model",
+				Strategy:    StrategyWeighted, // Override strategy
+				// No timeout, should use default
+				Providers: []ProviderReference{{Name: "provider1"}},
+			},
+			"complete": {
+				DisplayName: "Complete Model",
+				Strategy:    StrategyQuality,
+				TimeoutMS:   2000,
+				Providers:   []ProviderReference{{Name: "provider1"}},
+			},
+		},
+	}
+
+	tests := []struct {
+		name             string
+		modelID          string
+		expectedStrategy Strategy
+		expectedTimeout  int
+		shouldErr        bool
+	}{
+		{
+			name:             "partial config with strategy override",
+			modelID:          "partial",
+			expectedStrategy: StrategyWeighted,
+			expectedTimeout:  5000, // Should use default
+		},
+		{
+			name:             "complete config",
+			modelID:          "complete",
+			expectedStrategy: StrategyQuality,
+			expectedTimeout:  2000,
+		},
+		{
+			name:      "nonexistent model",
+			modelID:   "nonexistent",
+			shouldErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			vmConfig, err := baseConfig.resolveVirtualModelConfig(tt.modelID)
+
+			if tt.shouldErr {
+				if err == nil {
+					t.Fatal("expected error but got none")
+				}
+				return
+			}
+
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			if vmConfig.Strategy != tt.expectedStrategy {
+				t.Errorf("expected strategy '%s', got '%s'", tt.expectedStrategy, vmConfig.Strategy)
+			}
+
+			if vmConfig.TimeoutMS != tt.expectedTimeout {
+				t.Errorf("expected timeout %d, got %d", tt.expectedTimeout, vmConfig.TimeoutMS)
+			}
+
+			// Verify we get a copy, not a reference
+			vmConfig.Strategy = StrategyQuality
+			original, _ := baseConfig.resolveVirtualModelConfig(tt.modelID)
+			if original.Strategy == StrategyQuality && tt.expectedStrategy != StrategyQuality {
+				t.Error("resolveVirtualModelConfig should return a copy, not modify original")
+			}
+		})
+	}
+}
+
+// ============================================================================
+// Integration Tests
+// ============================================================================
+
+func TestRacingProvider_Integration_MetricsAggregation(t *testing.T) {
+	// Create mock providers with metrics
+	provider1 := &mockChatProvider{name: "provider1", response: "response1"}
+	provider2 := &mockChatProvider{name: "provider2", response: "response2"}
+
+	config := &Config{
+		DefaultVirtualModel: "test-model",
+		TimeoutMS:           5000,
+		Strategy:            StrategyFirstWins,
+		VirtualModels: map[string]VirtualModelConfig{
+			"test-model": {
+				DisplayName: "Test Model",
+				Providers: []ProviderReference{
+					{Name: "provider1"},
+					{Name: "provider2"},
+				},
+			},
+		},
+	}
+
+	rp := NewRacingProvider("test-racing", config)
+	rp.SetProviders([]types.Provider{provider1, provider2})
+
+	// Test metrics aggregation
+	metrics := rp.GetMetrics()
+
+	// Initially should be empty
+	if metrics.RequestCount != 0 {
+		t.Errorf("expected initial RequestCount 0, got %d", metrics.RequestCount)
+	}
+
+	// Make a request
+	ctx := context.Background()
+	opts := types.GenerateOptions{
+		Model: "test-model",
+		Prompt: "test",
+	}
+
+	stream, err := rp.GenerateChatCompletion(ctx, opts)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	_ = stream.Close()
+
+	// Check metrics after request
+	metrics = rp.GetMetrics()
+	if metrics.RequestCount == 0 {
+		t.Error("expected RequestCount to increase after request")
+	}
+}
+
+func TestRacingProvider_Integration_HealthCheckAcrossVirtualModels(t *testing.T) {
+	healthyProvider := &mockChatProvider{name: "healthy-provider"}
+	unhealthyProvider := &mockHealthCheckProvider{
+		mockChatProvider: &mockChatProvider{name: "unhealthy-provider"},
+		healthErr:        errors.New("health check failed"),
+	}
+
+	config := &Config{
+		DefaultVirtualModel: "healthy-model",
+		VirtualModels: map[string]VirtualModelConfig{
+			"healthy-model": {
+				DisplayName: "Healthy Model",
+				Providers: []ProviderReference{
+					{Name: "healthy-provider"},
+				},
+			},
+			"unhealthy-model": {
+				DisplayName: "Unhealthy Model",
+				Providers: []ProviderReference{
+					{Name: "unhealthy-provider"},
+				},
+			},
+			"mixed-model": {
+				DisplayName: "Mixed Model",
+				Providers: []ProviderReference{
+					{Name: "healthy-provider"},
+					{Name: "unhealthy-provider"},
+				},
+			},
+		},
+	}
+
+	rp := NewRacingProvider("test", config)
+	rp.SetProviders([]types.Provider{healthyProvider, unhealthyProvider})
+
+	ctx := context.Background()
+
+	// Test health check with healthy providers
+	err := rp.HealthCheck(ctx)
+	if err != nil {
+		t.Errorf("expected healthy check to pass, got error: %v", err)
+	}
+
+	// Test with only unhealthy providers by removing healthy one
+	rp.SetProviders([]types.Provider{unhealthyProvider})
+	err = rp.HealthCheck(ctx)
+	if err == nil {
+		t.Error("expected health check to fail with only unhealthy providers")
+	}
+}
+
+func TestRacingProvider_Integration_ConcurrentRequests(t *testing.T) {
+	providers := []types.Provider{
+		&mockChatProvider{
+			name:     "provider1",
+			delay:    50 * time.Millisecond,
+			response: "response1",
+		},
+		&mockChatProvider{
+			name:     "provider2",
+			delay:    30 * time.Millisecond,
+			response: "response2",
+		},
+	}
+
+	config := &Config{
+		DefaultVirtualModel: "concurrent-model",
+		TimeoutMS:           5000,
+		Strategy:            StrategyFirstWins,
+		VirtualModels: map[string]VirtualModelConfig{
+			"concurrent-model": {
+				DisplayName: "Concurrent Model",
+				Providers: []ProviderReference{
+					{Name: "provider1"},
+					{Name: "provider2"},
+				},
+			},
+		},
+	}
+
+	rp := NewRacingProvider("test", config)
+	rp.SetProviders(providers)
+
+	// Launch multiple concurrent requests
+	const numRequests = 10
+	results := make(chan error, numRequests)
+
+	for i := 0; i < numRequests; i++ {
+		go func() {
+			ctx := context.Background()
+			opts := types.GenerateOptions{
+				Model: "concurrent-model",
+				Prompt: "test",
+			}
+
+			stream, err := rp.GenerateChatCompletion(ctx, opts)
+			if err != nil {
+				results <- err
+				return
+			}
+			_ = stream.Close()
+			results <- nil
+		}()
+	}
+
+	// Collect results
+	successCount := 0
+	errorCount := 0
+	for i := 0; i < numRequests; i++ {
+		err := <-results
+		if err != nil {
+			errorCount++
+		} else {
+			successCount++
+		}
+	}
+
+	if successCount != numRequests {
+		t.Errorf("expected %d successful requests, got %d (errors: %d)", numRequests, successCount, errorCount)
+	}
+}
+
+func TestRacingProvider_Integration_MetadataEnrichment(t *testing.T) {
+	providers := []types.Provider{
+		&mockChatProvider{
+			name:     "provider1",
+			delay:    10 * time.Millisecond,
+			response: "test response",
+		},
+	}
+
+	config := &Config{
+		DefaultVirtualModel: "metadata-model",
+		TimeoutMS:           5000,
+		Strategy:            StrategyFirstWins,
+		VirtualModels: map[string]VirtualModelConfig{
+			"metadata-model": {
+				DisplayName: "Metadata Test Model",
+				Description: "Model for testing metadata enrichment",
+				Providers: []ProviderReference{
+					{Name: "provider1"},
+				},
+			},
+		},
+	}
+
+	rp := NewRacingProvider("test", config)
+	rp.SetProviders(providers)
+
+	ctx := context.Background()
+	opts := types.GenerateOptions{
+		Model: "metadata-model",
+		Prompt: "test",
+	}
+
+	stream, err := rp.GenerateChatCompletion(ctx, opts)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	defer func() { _ = stream.Close() }()
+
+	chunk, err := stream.Next()
+	if err != nil && err != io.EOF {
+		t.Fatalf("unexpected error reading chunk: %v", err)
+	}
+
+	// Check racing metadata
+	if chunk.Metadata == nil {
+		t.Fatal("expected metadata in chunk")
+	}
+
+	winner, ok := chunk.Metadata["racing_winner"].(string)
+	if !ok {
+		t.Fatal("expected racing_winner in metadata")
+	}
+
+	if winner != "provider1" {
+		t.Errorf("expected winner 'provider1', got '%s'", winner)
+	}
+
+	latency, ok := chunk.Metadata["racing_latency_ms"].(int64)
+	if !ok {
+		t.Fatal("expected racing_latency_ms in metadata")
+	}
+
+	if latency <= 0 {
+		t.Errorf("expected positive latency, got %d", latency)
+	}
+
+	// Note: Virtual model metadata is sent to metrics collector, not included in response metadata
+	// Only racing metadata should be present in response chunks
+	// Virtual model metadata would be available through metrics events
+}
+
+// ============================================================================
+// Backward Compatibility Tests
+// ============================================================================
+
+func TestBackwardCompatibility_OldConfigurationFormat(t *testing.T) {
+	// Test old format without virtual models
+	oldConfig := &Config{
+		TimeoutMS:     3000,
+		GracePeriodMS: 500,
+		Strategy:      StrategyFirstWins,
+		ProviderNames: []string{"provider1", "provider2"},
+		// No virtual models configured
+	}
+
+	rp := NewRacingProvider("old-format", oldConfig)
+
+	// Test that old configuration still works for basic functionality
+	if rp.config.TimeoutMS != 3000 {
+		t.Errorf("expected timeout 3000, got %d", rp.config.TimeoutMS)
+	}
+
+	if rp.config.Strategy != StrategyFirstWins {
+		t.Errorf("expected strategy FirstWins, got %s", rp.config.Strategy)
+	}
+
+	// Test GetModels with no virtual models
+	ctx := context.Background()
+	models, err := rp.GetModels(ctx)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(models) != 0 {
+		t.Errorf("expected 0 models for old format, got %d", len(models))
+	}
+
+	defaultModel := rp.GetDefaultModel()
+	if defaultModel != "" {
+		t.Errorf("expected empty default model for old format, got '%s'", defaultModel)
+	}
+}
+
+func TestBackwardCompatibility_ConfigMigration(t *testing.T) {
+	tests := []struct {
+		name     string
+		oldConfig *Config
+		expectedBehavior string
+	}{
+		{
+			name: "old config with provider names",
+			oldConfig: &Config{
+				TimeoutMS:     2000,
+				GracePeriodMS: 200,
+				Strategy:      StrategyWeighted,
+				ProviderNames: []string{"provider1", "provider2"},
+			},
+			expectedBehavior: "should preserve old settings",
+		},
+		{
+			name: "config with both old and new format",
+			oldConfig: &Config{
+				TimeoutMS:           2000,
+				Strategy:            StrategyFirstWins,
+				ProviderNames:       []string{"provider1"},
+				DefaultVirtualModel: "default",
+				VirtualModels: map[string]VirtualModelConfig{
+					"default": {
+						DisplayName: "Default Model",
+						Providers: []ProviderReference{
+							{Name: "provider1"},
+						},
+					},
+				},
+			},
+			expectedBehavior: "should use new virtual models",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rp := NewRacingProvider("migration-test", tt.oldConfig)
+
+			// Verify basic settings are preserved
+			if rp.config.TimeoutMS != tt.oldConfig.TimeoutMS {
+				t.Errorf("expected timeout %d, got %d", tt.oldConfig.TimeoutMS, rp.config.TimeoutMS)
+			}
+
+			if rp.config.Strategy != tt.oldConfig.Strategy {
+				t.Errorf("expected strategy %s, got %s", tt.oldConfig.Strategy, rp.config.Strategy)
+			}
+
+			// Test behavior based on configuration type
+			if len(tt.oldConfig.VirtualModels) > 0 {
+				// New format - should have virtual models
+				ctx := context.Background()
+				models, err := rp.GetModels(ctx)
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+
+				if len(models) == 0 {
+					t.Error("expected virtual models to be available")
+				}
+			} else {
+				// Old format - should not have virtual models
+				ctx := context.Background()
+				models, err := rp.GetModels(ctx)
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+
+				if len(models) != 0 {
+					t.Errorf("expected no virtual models for old format, got %d", len(models))
+				}
+			}
+		})
+	}
+}
+
+func TestBackwardCompatibility_ProviderSetters(t *testing.T) {
+	// Test that SetProviders still works with old configuration
+	config := &Config{
+		TimeoutMS: 5000,
+		Strategy:  StrategyFirstWins,
+		ProviderNames: []string{"provider1", "provider2"},
+	}
+
+	rp := NewRacingProvider("backward-compat", config)
+
+	providers := []types.Provider{
+		&mockChatProvider{name: "provider1", response: "response1"},
+		&mockChatProvider{name: "provider2", response: "response2"},
+	}
+
+	// This should still work even with old config format
+	rp.SetProviders(providers)
+
+	// Verify providers were set
+	if len(rp.providers) != 2 {
+		t.Errorf("expected 2 providers, got %d", len(rp.providers))
+	}
+
+	// Test that we can still make requests without virtual models (legacy mode)
+	ctx := context.Background()
+	opts := types.GenerateOptions{
+		// No model specified - old format behavior (legacy mode)
+		Prompt: "test",
+	}
+
+	// This should work in legacy mode when no virtual models are configured
+	stream, err := rp.GenerateChatCompletion(ctx, opts)
+	if err != nil {
+		t.Fatalf("unexpected error in legacy mode: %v", err)
+	}
+	defer func() { _ = stream.Close() }()
+
+	// Verify we get a response
+	chunk, err := stream.Next()
+	if err != nil && err != io.EOF {
+		t.Fatalf("unexpected error reading chunk: %v", err)
+	}
+
+	// Verify racing metadata is present
+	if chunk.Metadata["racing_winner"] == nil {
+		t.Error("expected racing_winner in metadata")
+	}
+
+	// Verify virtual model metadata shows legacy mode
+	if chunk.Metadata["virtual_model"] != "legacy_mode" {
+		t.Errorf("expected virtual_model to be 'legacy_mode', got %v", chunk.Metadata["virtual_model"])
+	}
+}
+
+func TestBackwardCompatibility_ConfigMethods(t *testing.T) {
+	config := &Config{
+		TimeoutMS:     3000,
+		GracePeriodMS: 300,
+		Strategy:      StrategyWeighted,
+		ProviderNames: []string{"provider1", "provider2"},
+	}
+
+	rp := NewRacingProvider("config-test", config)
+
+	// Test GetConfig with old format
+	providerConfig := rp.GetConfig()
+	if providerConfig.Type != "racing" {
+		t.Errorf("expected type 'racing', got '%s'", providerConfig.Type)
+	}
+
+	if providerConfig.Name != "config-test" {
+		t.Errorf("expected name 'config-test', got '%s'", providerConfig.Name)
+	}
+
+	// Test Configure with old format
+	newConfig := types.ProviderConfig{
+		Type: "racing",
+		Name: "config-test",
+		ProviderConfig: map[string]interface{}{
+			"timeout_ms":      4000,
+			"grace_period_ms": 400,
+			"strategy":        "first_wins",
+			"providers":       []string{"provider1", "provider2", "provider3"},
+		},
+	}
+
+	err := rp.Configure(newConfig)
+	if err != nil {
+		t.Fatalf("unexpected error configuring: %v", err)
+	}
+
+	// Verify configuration was updated
+	if rp.config.TimeoutMS != 4000 {
+		t.Errorf("expected updated timeout 4000, got %d", rp.config.TimeoutMS)
+	}
+
+	if rp.config.Strategy != StrategyFirstWins {
+		t.Errorf("expected updated strategy FirstWins, got %s", rp.config.Strategy)
+	}
+}
+
+func TestBackwardCompatibility_PerformanceTracking(t *testing.T) {
+	// Test that performance tracking still works as before
+	config := &Config{
+		TimeoutMS: 5000,
+		Strategy:  StrategyFirstWins,
+		ProviderNames: []string{"provider1", "provider2"},
+	}
+
+	rp := NewRacingProvider("perf-test", config)
+
+	// Performance tracking should be available
+	stats := rp.GetPerformanceStats()
+	if stats == nil {
+		t.Error("expected performance stats to be available")
+	}
+
+	// Should be able to record wins/losses
+	rp.performance.RecordWin("provider1", 100*time.Millisecond)
+	rp.performance.RecordLoss("provider2", 200*time.Millisecond)
+
+	stats = rp.GetPerformanceStats()
+	if stats["provider1"].Wins != 1 {
+		t.Errorf("expected provider1 to have 1 win, got %d", stats["provider1"].Wins)
+	}
+
+	if stats["provider2"].Losses != 1 {
+		t.Errorf("expected provider2 to have 1 loss, got %d", stats["provider2"].Losses)
+	}
+}
+
+func TestBackwardCompatibility_ErrorHandling(t *testing.T) {
+	config := &Config{
+		TimeoutMS: 1000,
+		Strategy:  StrategyFirstWins,
+		ProviderNames: []string{"provider1"},
+	}
+
+	rp := NewRacingProvider("error-test", config)
+	rp.SetProviders([]types.Provider{
+		&mockChatProvider{name: "provider1", err: errors.New("provider error")},
+	})
+
+	ctx := context.Background()
+	opts := types.GenerateOptions{
+		Model: "nonexistent-model", // Should use legacy mode when no virtual models configured
+		Prompt: "test",
+	}
+
+	// Should handle provider errors gracefully in legacy mode
+	_, err := rp.GenerateChatCompletion(ctx, opts)
+	if err == nil {
+		t.Fatal("expected error when provider fails")
+	}
+
+	// Error should be from the failing provider, not virtual model error
+	expectedError := "all providers failed"
+	if !containsString(err.Error(), expectedError) {
+		t.Errorf("expected error to contain '%s', got: %v", expectedError, err)
+	}
+}
+
+// TestBackwardCompatibility_MixedUsage tests scenarios where old and new configurations
+// might be mixed during migration
+func TestBackwardCompatibility_MixedUsage(t *testing.T) {
+	tests := []struct {
+		name        string
+		setupConfig func() *Config
+		testFunc    func(*RacingProvider)
+	}{
+		{
+			name: "old config with new virtual model added later",
+			setupConfig: func() *Config {
+				return &Config{
+					TimeoutMS:     3000,
+					GracePeriodMS: 300,
+					Strategy:      StrategyFirstWins,
+					ProviderNames: []string{"provider1"},
+				}
+			},
+			testFunc: func(rp *RacingProvider) {
+				// Add virtual model configuration at runtime
+				rp.config.VirtualModels = map[string]VirtualModelConfig{
+					"new-model": {
+						DisplayName: "New Virtual Model",
+						Providers: []ProviderReference{
+							{Name: "provider1"},
+						},
+					},
+				}
+				rp.config.DefaultVirtualModel = "new-model"
+
+				// Should now work with virtual models
+				ctx := context.Background()
+				models, err := rp.GetModels(ctx)
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+
+				if len(models) != 1 {
+					t.Errorf("expected 1 model after adding virtual model, got %d", len(models))
+				}
+			},
+		},
+		{
+			name: "new config used with old-style provider setting",
+			setupConfig: func() *Config {
+				return &Config{
+					DefaultVirtualModel: "modern",
+					VirtualModels: map[string]VirtualModelConfig{
+						"modern": {
+							DisplayName: "Modern Model",
+							Providers: []ProviderReference{
+								{Name: "provider1"},
+								{Name: "provider2"},
+							},
+						},
+					},
+				}
+			},
+			testFunc: func(rp *RacingProvider) {
+				// Use old SetProviders method
+				providers := []types.Provider{
+					&mockChatProvider{name: "provider1", response: "response1"},
+					&mockChatProvider{name: "provider2", response: "response2"},
+				}
+				rp.SetProviders(providers)
+
+				// Should work with new virtual model format
+				ctx := context.Background()
+				opts := types.GenerateOptions{
+					Model: "modern",
+					Prompt: "test",
+				}
+
+				stream, err := rp.GenerateChatCompletion(ctx, opts)
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				_ = stream.Close()
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			config := tt.setupConfig()
+			rp := NewRacingProvider("mixed-test", config)
+			tt.testFunc(rp)
+		})
 	}
 }

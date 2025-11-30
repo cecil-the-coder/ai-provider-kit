@@ -57,11 +57,21 @@ func RegisterDefaultProviders(factory *DefaultProviderFactory) {
 	// Register virtual providers
 	// Note: Virtual providers need SetProviders() called after creation to inject dependencies
 	factory.RegisterProvider(types.ProviderTypeRacing, func(config types.ProviderConfig) types.Provider {
-		// Extract racing-specific config from ProviderConfig
+		// Create racing config with sensible defaults
 		racingConfig := &racing.Config{
-			TimeoutMS:     5000, // default 5 seconds
-			GracePeriodMS: 100,  // default 100ms
-			Strategy:      racing.StrategyFirstWins,
+			TimeoutMS:          5000, // default 5 seconds
+			GracePeriodMS:      1000, // default 1 second
+			Strategy:           racing.StrategyFirstWins,
+			DefaultVirtualModel: "default",
+			VirtualModels: map[string]racing.VirtualModelConfig{
+				"default": {
+					DisplayName: "Default Racing Model",
+					Description: "Default virtual racing model",
+					Providers:   []racing.ProviderReference{},
+					Strategy:    racing.StrategyFirstWins,
+					TimeoutMS:   5000,
+				},
+			},
 		}
 
 		// Override defaults with config values if present
@@ -75,11 +85,55 @@ func RegisterDefaultProviders(factory *DefaultProviderFactory) {
 			if strategy, ok := config.ProviderConfig["strategy"].(string); ok {
 				racingConfig.Strategy = racing.Strategy(strategy)
 			}
-			if providers, ok := config.ProviderConfig["providers"].([]string); ok {
-				racingConfig.ProviderNames = providers
+			if defaultVM, ok := config.ProviderConfig["default_virtual_model"].(string); ok {
+				racingConfig.DefaultVirtualModel = defaultVM
 			}
-			if perfFile, ok := config.ProviderConfig["performance_file"].(string); ok {
-				racingConfig.PerformanceFile = perfFile
+			// Handle virtual models configuration if present
+			if virtualModels, ok := config.ProviderConfig["virtual_models"].(map[string]interface{}); ok {
+				processedVMs := make(map[string]racing.VirtualModelConfig)
+				for vmName, vmData := range virtualModels {
+					if vmMap, ok := vmData.(map[string]interface{}); ok {
+						vmConfig := racing.VirtualModelConfig{
+							DisplayName: "",
+							Description: "",
+							Providers:   []racing.ProviderReference{},
+							Strategy:    racingConfig.Strategy,
+							TimeoutMS:   racingConfig.TimeoutMS,
+						}
+
+						if displayName, ok := vmMap["display_name"].(string); ok {
+							vmConfig.DisplayName = displayName
+						}
+						if description, ok := vmMap["description"].(string); ok {
+							vmConfig.Description = description
+						}
+						if strategy, ok := vmMap["strategy"].(string); ok {
+							vmConfig.Strategy = racing.Strategy(strategy)
+						}
+						if timeout, ok := vmMap["timeout_ms"].(int); ok {
+							vmConfig.TimeoutMS = timeout
+						}
+
+						// Process providers list if present
+						if providers, ok := vmMap["providers"].([]interface{}); ok {
+							for _, providerData := range providers {
+								if providerMap, ok := providerData.(map[string]interface{}); ok {
+									providerRef := racing.ProviderReference{}
+									if name, ok := providerMap["name"].(string); ok {
+										providerRef.Name = name
+									}
+									if model, ok := providerMap["model"].(string); ok {
+										providerRef.Model = model
+									}
+									vmConfig.Providers = append(vmConfig.Providers, providerRef)
+								}
+							}
+						}
+
+						processedVMs[vmName] = vmConfig
+					}
+				}
+				racingConfig.VirtualModels = processedVMs
 			}
 		}
 
