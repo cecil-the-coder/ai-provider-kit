@@ -191,17 +191,30 @@ func (p *QwenProvider) GenerateChatCompletion(
 
 	// Check if streaming is requested
 	if options.Stream {
-		// Handle streaming with authentication method selection
+		providerConfig := p.GetConfig()
+		baseURL := providerConfig.BaseURL
+		if baseURL == "" {
+			baseURL = "https://portal.qwen.ai/v1"
+		}
+		request := p.buildQwenRequest(options)
+		request.Stream = true
+
 		var stream types.ChatCompletionStream
 		var err error
 
-		switch {
-		case p.authHelper.OAuthManager != nil:
-			stream, err = p.executeStreamWithOAuth(ctx, options)
-		case p.authHelper.KeyManager != nil:
-			stream, err = p.executeStreamWithAPIKey(ctx, options)
-		default:
-			err = fmt.Errorf("no authentication method configured")
+		// Check for context-injected OAuth token first
+		if contextToken := common.GetOAuthToken(ctx); contextToken != "" {
+			stream, err = p.makeStreamingAPICall(ctx, baseURL+"/chat/completions", request, contextToken)
+		} else {
+			// Fall back to configured auth methods
+			switch {
+			case p.authHelper.OAuthManager != nil:
+				stream, err = p.executeStreamWithOAuth(ctx, options)
+			case p.authHelper.KeyManager != nil:
+				stream, err = p.executeStreamWithAPIKey(ctx, options)
+			default:
+				err = fmt.Errorf("no authentication method configured")
+			}
 		}
 
 		if err != nil {
@@ -214,16 +227,21 @@ func (p *QwenProvider) GenerateChatCompletion(
 	}
 
 	// Non-streaming path - use ExecuteWithAuthMessage
+	providerConfig := p.GetConfig()
+	baseURL := providerConfig.BaseURL
+	if baseURL == "" {
+		baseURL = "https://portal.qwen.ai/v1"
+	}
+	request := p.buildQwenRequest(options)
+
 	responseMessage, usage, err := p.authHelper.ExecuteWithAuthMessage(ctx, options,
-		// OAuth operation
+		// OAuth operation - use the provided token directly
 		func(ctx context.Context, cred *types.OAuthCredentialSet) (types.ChatMessage, *types.Usage, error) {
-			msg, u, _, err := p.executeWithOAuthMessage(ctx, options)
-			return msg, u, err
+			return p.makeAPICallWithMessage(ctx, baseURL+"/chat/completions", request, cred.AccessToken)
 		},
-		// API key operation
+		// API key operation - use the provided key directly
 		func(ctx context.Context, apiKey string) (types.ChatMessage, *types.Usage, error) {
-			msg, u, _, err := p.executeWithAPIKeyMessage(ctx, options)
-			return msg, u, err
+			return p.makeAPICallWithMessage(ctx, baseURL+"/chat/completions", request, apiKey)
 		},
 	)
 
@@ -334,74 +352,6 @@ func (p *QwenProvider) buildQwenRequest(options types.GenerateOptions) QwenReque
 	}
 
 	return request
-}
-
-// executeWithOAuthMessage executes a request using OAuth authentication and returns full message
-func (p *QwenProvider) executeWithOAuthMessage(ctx context.Context, options types.GenerateOptions) (types.ChatMessage, *types.Usage, string, error) {
-	providerConfig := p.GetConfig()
-
-	// Get model and base URL
-	model := p.GetDefaultModel()
-	baseURL := providerConfig.BaseURL
-	if baseURL == "" {
-		baseURL = "https://portal.qwen.ai/v1"
-	}
-
-	// Build request using the new helper
-	request := p.buildQwenRequest(options)
-
-	// Use auth helper OAuth manager for automatic failover and refresh
-	var responseMessage types.ChatMessage
-	_, usage, err := p.authHelper.OAuthManager.ExecuteWithFailover(ctx,
-		func(ctx context.Context, cred *types.OAuthCredentialSet) (string, *types.Usage, error) {
-			// Make API call with this credential's access token
-			msg, u, err := p.makeAPICallWithMessage(ctx, baseURL+"/chat/completions", request, cred.AccessToken)
-			if err != nil {
-				return "", nil, err
-			}
-			responseMessage = msg
-			return msg.Content, u, nil
-		})
-
-	if err != nil {
-		return types.ChatMessage{}, nil, "", err
-	}
-
-	return responseMessage, usage, model, nil
-}
-
-// executeWithAPIKeyMessage executes a request using API key authentication and returns full message
-func (p *QwenProvider) executeWithAPIKeyMessage(ctx context.Context, options types.GenerateOptions) (types.ChatMessage, *types.Usage, string, error) {
-	providerConfig := p.GetConfig()
-
-	// Get model and base URL
-	model := p.GetDefaultModel()
-	baseURL := providerConfig.BaseURL
-	if baseURL == "" {
-		baseURL = "https://portal.qwen.ai/v1"
-	}
-
-	// Build request using the new helper
-	request := p.buildQwenRequest(options)
-
-	// Use KeyManager for automatic failover
-	var responseMessage types.ChatMessage
-	_, usage, err := p.authHelper.KeyManager.ExecuteWithFailover(ctx,
-		func(ctx context.Context, apiKey string) (string, *types.Usage, error) {
-			// Make API call with this API key
-			msg, u, err := p.makeAPICallWithMessage(ctx, baseURL+"/chat/completions", request, apiKey)
-			if err != nil {
-				return "", nil, err
-			}
-			responseMessage = msg
-			return msg.Content, u, nil
-		})
-
-	if err != nil {
-		return types.ChatMessage{}, nil, "", fmt.Errorf("qwen API call failed: %w", err)
-	}
-
-	return responseMessage, usage, model, nil
 }
 
 // makeAPICallWithMessage makes an API call to Qwen and returns a ChatMessage with tool call support
