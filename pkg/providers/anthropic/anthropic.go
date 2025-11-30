@@ -986,8 +986,112 @@ func convertAnthropicResponseToChunk(response *AnthropicResponse) types.ChatComp
 	return chunk
 }
 
+// convertContentPartToAnthropic converts a single ContentPart to Anthropic format
+func convertContentPartToAnthropic(part types.ContentPart) interface{} {
+	switch part.Type {
+	case types.ContentTypeText:
+		return AnthropicContentBlock{
+			Type: "text",
+			Text: part.Text,
+		}
+	case types.ContentTypeImage:
+		if part.Source == nil {
+			return nil
+		}
+		// Anthropic format needs source as a map, not using AnthropicContentBlock
+		// We'll return a map[string]interface{} instead
+		source := map[string]interface{}{
+			"type":       part.Source.Type,
+			"media_type": part.Source.MediaType,
+		}
+		if part.Source.Type == types.MediaSourceBase64 {
+			source["data"] = part.Source.Data
+		} else if part.Source.Type == types.MediaSourceURL {
+			source["url"] = part.Source.URL
+		}
+		return map[string]interface{}{
+			"type":   "image",
+			"source": source,
+		}
+	case types.ContentTypeDocument:
+		if part.Source == nil {
+			return nil
+		}
+		// Anthropic format needs source as a map, not using AnthropicContentBlock
+		source := map[string]interface{}{
+			"type":       part.Source.Type,
+			"media_type": part.Source.MediaType,
+		}
+		if part.Source.Type == types.MediaSourceBase64 {
+			source["data"] = part.Source.Data
+		} else if part.Source.Type == types.MediaSourceURL {
+			source["url"] = part.Source.URL
+		}
+		return map[string]interface{}{
+			"type":   "document",
+			"source": source,
+		}
+	case types.ContentTypeToolUse:
+		return AnthropicContentBlock{
+			Type:  "tool_use",
+			ID:    part.ID,
+			Name:  part.Name,
+			Input: part.Input,
+		}
+	case types.ContentTypeToolResult:
+		return AnthropicContentBlock{
+			Type:      "tool_result",
+			ToolUseID: part.ToolUseID,
+			Content:   part.Content,
+		}
+	case types.ContentTypeThinking:
+		return AnthropicContentBlock{
+			Type: "thinking",
+			Text: part.Thinking,
+		}
+	default:
+		return nil
+	}
+}
+
 // convertToAnthropicContent converts a universal chat message to Anthropic content blocks
 func convertToAnthropicContent(msg types.ChatMessage) interface{} {
+	// Check if message has multimodal Parts (explicit multimodal content)
+	if len(msg.Parts) > 0 {
+		// New multimodal path: convert Parts to Anthropic format
+		var content []interface{}
+
+		for _, part := range msg.Parts {
+			if converted := convertContentPartToAnthropic(part); converted != nil {
+				content = append(content, converted)
+			}
+		}
+
+		// Add tool calls if present (backwards compatibility)
+		for _, tc := range msg.ToolCalls {
+			var input map[string]interface{}
+			// Ignore JSON unmarshal errors - use empty map on failure
+			_ = json.Unmarshal([]byte(tc.Function.Arguments), &input)
+
+			content = append(content, AnthropicContentBlock{
+				Type:  "tool_use",
+				ID:    tc.ID,
+				Name:  tc.Function.Name,
+				Input: input,
+			})
+		}
+
+		// If only one text part and no tool calls, return as string for simplicity
+		if len(content) == 1 && len(msg.ToolCalls) == 0 {
+			if block, ok := content[0].(AnthropicContentBlock); ok && block.Type == "text" {
+				return block.Text
+			}
+		}
+
+		return content
+	}
+
+	// Legacy handling for messages using Content field (backwards compatibility)
 	switch {
 	case msg.Role == "tool":
 		// Tool result message - return as content array

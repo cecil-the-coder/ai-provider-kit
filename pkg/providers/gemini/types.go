@@ -19,8 +19,29 @@ type Content struct {
 
 // Part represents a part of content
 type Part struct {
-	Text         string              `json:"text,omitempty"`
-	FunctionCall *GeminiFunctionCall `json:"functionCall,omitempty"`
+	Text             string              `json:"text,omitempty"`
+	InlineData       *InlineData         `json:"inlineData,omitempty"`
+	FileData         *FileData           `json:"fileData,omitempty"`
+	FunctionCall     *GeminiFunctionCall `json:"functionCall,omitempty"`
+	FunctionResponse *FunctionResponse   `json:"functionResponse,omitempty"`
+}
+
+// InlineData represents inline media data (base64)
+type InlineData struct {
+	MimeType string `json:"mimeType"`
+	Data     string `json:"data"`
+}
+
+// FileData represents file data (URL/GCS URI)
+type FileData struct {
+	MimeType string `json:"mimeType"`
+	FileURI  string `json:"fileUri"`
+}
+
+// FunctionResponse represents a response to a function call
+type FunctionResponse struct {
+	Name     string                 `json:"name"`
+	Response map[string]interface{} `json:"response"`
 }
 
 // GenerationConfig represents generation configuration

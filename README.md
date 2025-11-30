@@ -16,6 +16,7 @@ A comprehensive Go library for creating and managing AI provider instances with 
 - **Interface Segregation**: Focused interfaces for specific capabilities
 - **Standardized Core API**: Consistent request/response patterns across providers
 - **Provider Extensions**: Preserve provider-specific capabilities while using standardized API
+- **Multimodal Content**: First-class support for images, documents, and audio with automatic provider translation
 - **Factory Pattern**: Dynamic provider creation and configuration
 - **Authentication Support**: API keys, OAuth 2.0, and custom authentication methods
 - **Health Monitoring**: Automatic health checks and metrics collection
@@ -185,6 +186,196 @@ for {
     fmt.Print(chunk.Content)
 }
 ```
+
+## Multimodal Content
+
+ai-provider-kit provides first-class support for multimodal content including images, documents, and audio. The library handles provider-specific format translations automatically while maintaining a clean, unified API.
+
+### Design Philosophy
+
+The multimodal system is built on **primitives, not patterns**. We provide the building blocks (`ContentPart`, `MediaSource`) that let you compose rich multimodal interactions without imposing high-level abstractions. This design enables you to build your own patterns - whether that's caching layers, agent delegation systems, or preprocessing pipelines.
+
+### Quick Example
+
+```go
+import "github.com/cecil-the-coder/ai-provider-kit/pkg/types"
+
+// Simple text message (backwards compatible)
+msg := types.ChatMessage{
+    Role:    "user",
+    Content: "Hello, world!",
+}
+
+// Image with text using Parts
+msg := types.ChatMessage{
+    Role: "user",
+    Parts: []types.ContentPart{
+        types.NewTextPart("What's in this image?"),
+        types.NewImagePart("image/png", base64Data),
+    },
+}
+
+// Image from URL
+msg := types.ChatMessage{
+    Role: "user",
+    Parts: []types.ContentPart{
+        types.NewTextPart("Describe this image"),
+        types.NewImageURLPart("image/jpeg", "https://example.com/image.jpg"),
+    },
+}
+
+// Document (PDF)
+msg := types.ChatMessage{
+    Role: "user",
+    Parts: []types.ContentPart{
+        types.NewTextPart("Summarize this document"),
+        types.NewDocumentPart("application/pdf", pdfBase64Data),
+    },
+}
+```
+
+### Supported Content Types
+
+The library supports the following content types through the `ContentPart` struct:
+
+- **text** - Plain text content
+- **image** - Images (PNG, JPEG, GIF, WebP)
+- **document** - Documents (PDF, etc.)
+- **audio** - Audio files (provider-dependent)
+- **tool_use** - Tool/function calls from the model
+- **tool_result** - Results returned from tool execution
+- **thinking** - Extended reasoning/thinking blocks
+
+### Media Sources
+
+Media content can be provided in two ways:
+
+```go
+// Base64-encoded data
+source := &types.MediaSource{
+    Type:      types.MediaSourceBase64,
+    MediaType: "image/png",
+    Data:      base64EncodedString,
+}
+
+// URL reference
+source := &types.MediaSource{
+    Type:      types.MediaSourceURL,
+    MediaType: "image/jpeg",
+    URL:       "https://example.com/image.jpg",
+}
+```
+
+### Helper Methods
+
+The `ChatMessage` type includes several helper methods for working with multimodal content:
+
+```go
+// Get unified content as []ContentPart (handles both Content string and Parts)
+parts := message.GetContentParts()
+
+// Extract all text content from message
+text := message.GetTextContent()
+
+// Check if message contains images
+if message.HasImages() {
+    // Handle image content
+}
+
+// Check if message contains any media (images, documents, audio)
+if message.HasMedia() {
+    // Handle media content
+}
+
+// Add content parts dynamically
+message.AddContentPart(types.NewTextPart("Additional text"))
+message.AddContentPart(types.NewImagePart("image/png", imageData))
+```
+
+### Provider Support
+
+Different providers support different content types. The library automatically handles format translation for each provider:
+
+| Content Type | Anthropic | OpenAI | Gemini |
+|-------------|-----------|--------|--------|
+| text | ✅ | ✅ | ✅ |
+| image (base64) | ✅ | ✅ (data URL) | ✅ (inlineData) |
+| image (url) | ✅ | ✅ | ✅ (fileData) |
+| document | ✅ | ❌ | ✅ |
+| audio | ❌ | ❌ | ✅ |
+| tool_use | ✅ | ✅ | ✅ |
+| tool_result | ✅ | ✅ | ✅ |
+
+**Provider-Specific Notes:**
+
+- **OpenAI**: Images are converted to data URLs (`data:image/png;base64,...`). Documents and audio are not supported in chat completions.
+- **Anthropic**: Native support for images and PDFs through content blocks. Images and documents use the `source` structure.
+- **Gemini**: Most comprehensive support including audio. Images/documents use `inlineData` for base64 and `fileData` for URLs.
+
+### Advanced Use Cases
+
+The primitive-based design enables sophisticated patterns:
+
+**Image Caching Layer**
+```go
+// Build your own caching system for frequently-used images
+type ImageCache struct {
+    cache map[string]string // URL -> base64
+}
+
+func (c *ImageCache) GetOrFetch(url string) types.ContentPart {
+    if data, exists := c.cache[url]; exists {
+        return types.NewImagePart("image/jpeg", data)
+    }
+    // Fetch and cache...
+}
+```
+
+**Agent-Based Delegation**
+```go
+// Route multimodal requests to specialized agents
+if message.HasImages() {
+    // Send to vision-specialized model
+    return visionAgent.Process(message)
+} else if message.HasMedia() {
+    // Send to multimodal-capable model
+    return multimodalAgent.Process(message)
+}
+```
+
+**Preprocessing Pipelines**
+```go
+// Transform content before sending to provider
+for i, part := range message.Parts {
+    if part.Type == types.ContentTypeImage {
+        // Resize, compress, or convert format
+        message.Parts[i] = preprocessImage(part)
+    }
+}
+```
+
+### Backwards Compatibility
+
+The multimodal system is fully backwards compatible. Existing code using `Content` string continues to work:
+
+```go
+// Legacy approach - still works
+msg := types.ChatMessage{
+    Role:    "user",
+    Content: "Hello!",
+}
+
+// Multimodal approach - new capability
+msg := types.ChatMessage{
+    Role: "user",
+    Parts: []types.ContentPart{
+        types.NewTextPart("Hello!"),
+        types.NewImagePart("image/png", data),
+    },
+}
+```
+
+Both approaches use the same `ChatMessage` type, and the library handles the translation automatically through `GetContentParts()`.
 
 ## Tool Calling
 

@@ -42,9 +42,13 @@ type CodeGenerationResult struct {
 }
 
 // ChatMessage represents a chat message
+// Supports both simple string content and multimodal content parts.
+// For backwards compatibility, Content can be a string (legacy usage).
+// For multimodal content (images, documents, etc.), use Parts field.
 type ChatMessage struct {
 	Role             string                 `json:"role"`
-	Content          string                 `json:"content"`
+	Content          string                 `json:"content"`                     // Simple text content (backwards compatible)
+	Parts            []ContentPart          `json:"parts,omitempty"`             // Multimodal content parts
 	Reasoning        string                 `json:"reasoning,omitempty"`         // Reasoning content (e.g., from GLM-4.6, OpenCode/Zen)
 	ReasoningContent string                 `json:"reasoning_content,omitempty"` // Alternative reasoning field (e.g., from vLLM/Synthetic)
 	ToolCalls        []ToolCall             `json:"tool_calls,omitempty"`

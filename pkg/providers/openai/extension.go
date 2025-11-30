@@ -118,10 +118,15 @@ func (e *OpenAIExtension) ProviderToStandard(response interface{}) (*types.Stand
 	// Convert choices
 	choices := make([]types.StandardChoice, len(openAIResp.Choices))
 	for i, choice := range openAIResp.Choices {
-		// Convert message
+		// Convert message content (handle both string and array formats)
+		content := ""
+		if contentStr, ok := choice.Message.Content.(string); ok {
+			content = contentStr
+		}
+
 		message := types.ChatMessage{
 			Role:    choice.Message.Role,
-			Content: choice.Message.Content,
+			Content: content,
 		}
 
 		// Convert tool calls if present

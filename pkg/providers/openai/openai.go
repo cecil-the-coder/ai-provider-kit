@@ -52,11 +52,24 @@ type OpenAIFunctionDef struct {
 // OpenAIMessage represents a message in the OpenAI API
 type OpenAIMessage struct {
 	Role             string           `json:"role"`
-	Content          string           `json:"content"`
+	Content          interface{}      `json:"content"`                     // string or []OpenAIContentPart
 	Reasoning        string           `json:"reasoning,omitempty"`         // Reasoning content (GLM-4.6, OpenCode/Zen)
 	ReasoningContent string           `json:"reasoning_content,omitempty"` // Alternative reasoning field (vLLM/Synthetic)
 	ToolCalls        []OpenAIToolCall `json:"tool_calls,omitempty"`
 	ToolCallID       string           `json:"tool_call_id,omitempty"`
+}
+
+// OpenAIContentPart represents a content part in OpenAI's multimodal format
+type OpenAIContentPart struct {
+	Type     string          `json:"type"`                // "text" or "image_url"
+	Text     string          `json:"text,omitempty"`      // Text content
+	ImageURL *OpenAIImageURL `json:"image_url,omitempty"` // Image URL content
+}
+
+// OpenAIImageURL represents an image URL in OpenAI format
+type OpenAIImageURL struct {
+	URL    string `json:"url"`              // URL or data URL
+	Detail string `json:"detail,omitempty"` // "auto", "low", "high"
 }
 
 // OpenAIToolCall represents a tool call in the OpenAI API
@@ -442,9 +455,18 @@ func (p *OpenAIProvider) buildOpenAIRequest(options types.GenerateOptions) OpenA
 		// Use provided messages directly
 		messages = make([]OpenAIMessage, len(options.Messages))
 		for i, msg := range options.Messages {
+			// Use GetContentParts() to get unified content access
+			parts := msg.GetContentParts()
+			var content interface{}
+			if len(parts) > 0 {
+				content = convertContentPartsToOpenAI(parts)
+			} else {
+				content = msg.Content
+			}
+
 			openaiMsg := OpenAIMessage{
 				Role:    msg.Role,
-				Content: msg.Content,
+				Content: content,
 			}
 
 			// Convert tool calls if present
@@ -568,7 +590,10 @@ func (p *OpenAIProvider) makeAPICall(ctx context.Context, requestData OpenAIRequ
 	openaiMsg := response.Choices[0].Message
 
 	// Determine effective content - fallback to reasoning fields if content is empty
-	effectiveContent := openaiMsg.Content
+	effectiveContent := ""
+	if contentStr, ok := openaiMsg.Content.(string); ok {
+		effectiveContent = contentStr
+	}
 	if effectiveContent == "" || effectiveContent == "\n" {
 		// Try reasoning_content first (vLLM/Synthetic style)
 		if openaiMsg.ReasoningContent != "" {
@@ -829,4 +854,52 @@ func convertToOpenAIToolChoice(toolChoice *types.ToolChoice) interface{} {
 	default:
 		return "auto" // Default to auto if mode is unknown
 	}
+}
+
+// convertContentPartsToOpenAI converts ContentParts to OpenAI format
+// Returns a string if there's only text, or []OpenAIContentPart if multimodal
+func convertContentPartsToOpenAI(parts []types.ContentPart) interface{} {
+	if len(parts) == 0 {
+		return ""
+	}
+
+	// If only one part and it's text, return as string for backwards compatibility
+	if len(parts) == 1 && parts[0].Type == types.ContentTypeText {
+		return parts[0].Text
+	}
+
+	// Otherwise, build multimodal content array
+	openaiParts := make([]OpenAIContentPart, 0, len(parts))
+	for _, part := range parts {
+		switch part.Type {
+		case types.ContentTypeText:
+			openaiParts = append(openaiParts, OpenAIContentPart{
+				Type: "text",
+				Text: part.Text,
+			})
+		case types.ContentTypeImage:
+			if part.Source != nil {
+				url := ""
+				if part.Source.Type == types.MediaSourceBase64 {
+					// Build data URL for base64
+					url = fmt.Sprintf("data:%s;base64,%s", part.Source.MediaType, part.Source.Data)
+				} else if part.Source.Type == types.MediaSourceURL {
+					url = part.Source.URL
+				}
+				if url != "" {
+					openaiParts = append(openaiParts, OpenAIContentPart{
+						Type: "image_url",
+						ImageURL: &OpenAIImageURL{
+							URL: url,
+						},
+					})
+				}
+			}
+			// Note: OpenAI doesn't have native support for documents/audio in chat completions
+			// These would need to be handled separately (e.g., via file uploads or transcription)
+			// For now, we skip them
+		}
+	}
+
+	return openaiParts
 }
