@@ -19,6 +19,14 @@ const (
 	ErrCodeNetwork        ErrorCode = "network"
 	ErrCodeContextLength  ErrorCode = "context_length"
 	ErrCodeContentFilter  ErrorCode = "content_filter"
+
+	// Aliases for TestResult status compatibility.
+	// These convenience constants make it easier to map between TestStatus values
+	// and ErrorCode constants when implementing health checks and provider testing.
+	// Example: if testResult.Status == TestStatusAuthFailed { return NewProviderError(..., ErrCodeAuthFailed, ...) }
+	ErrCodeAuthFailed         = ErrCodeAuthentication // Maps to TestStatusAuthFailed
+	ErrCodeConnectivityFailed = ErrCodeNetwork        // Maps to TestStatusConnectivityFailed
+	ErrCodeTimeoutFailed      = ErrCodeTimeout        // Maps to TestStatusTimeoutFailed
 )
 
 // ProviderError represents a standardized error from a provider

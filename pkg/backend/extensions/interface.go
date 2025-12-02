@@ -58,6 +58,13 @@ const (
 	PriorityCache     = 200 // Caching extensions
 	PriorityTransform = 500 // Transform and business logic (default)
 	PriorityLogging   = 900 // Logging and auditing extensions
+
+	// Convenience aliases for common priority patterns.
+	// These provide more intuitive names that match common middleware/extension
+	// patterns while maintaining backward compatibility with semantic naming.
+	PriorityHigh   = PrioritySecurity  // 100 - High priority (same as Security)
+	PriorityNormal = PriorityTransform // 500 - Normal/default priority
+	PriorityLow    = PriorityLogging   // 900 - Low priority (same as Logging)
 )
 
 // Extension defines the interface for backend extensions
