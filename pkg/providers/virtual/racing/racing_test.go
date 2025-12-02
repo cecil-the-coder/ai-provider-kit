@@ -2872,6 +2872,7 @@ func TestBackwardCompatibility_MixedUsage(t *testing.T) {
 			setupConfig: func() *Config {
 				return &Config{
 					DefaultVirtualModel: "modern",
+					TimeoutMS:           5000,
 					VirtualModels: map[string]VirtualModelConfig{
 						"modern": {
 							DisplayName: "Modern Model",
