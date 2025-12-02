@@ -21,6 +21,10 @@ import (
 //
 // Extensions can use GetExtensionConfig() or IsExtensionEnabled() to check their configuration.
 // By default, extensions are enabled unless explicitly disabled via {"enabled": false}.
+//
+// The Context field allows extensions to propagate request context (including auth credentials,
+// trace IDs, and other metadata) to providers. Extensions receive ctx in BeforeGenerate and can
+// set it here for provider use. This field is optional and excluded from JSON serialization.
 type GenerateRequest struct {
 	Provider    string                 `json:"provider,omitempty"`
 	Model       string                 `json:"model,omitempty"`
@@ -29,6 +33,7 @@ type GenerateRequest struct {
 	Temperature float64                `json:"temperature,omitempty"`
 	Stream      bool                   `json:"stream,omitempty"`
 	Metadata    map[string]interface{} `json:"metadata,omitempty"`
+	Context     context.Context        `json:"-"` // Optional: propagates context from extensions to providers (especially auth)
 }
 
 // GenerateResponse is a local type until backendtypes is ready

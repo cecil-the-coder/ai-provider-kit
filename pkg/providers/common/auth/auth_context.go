@@ -10,6 +10,10 @@ const (
 	//nolint:gosec // G101: This is a context key name, not a credential
 	ContextKeyOAuthToken contextKey = "oauth_token"
 
+	// ContextKeyAPIKey is the context key for injecting an API key
+	//nolint:gosec // G101: This is a context key name, not a credential
+	ContextKeyAPIKey contextKey = "api_key"
+
 	// ContextKeyAuthType is the context key for specifying auth type ("bearer", "api_key")
 	ContextKeyAuthType contextKey = "auth_type"
 )
@@ -38,4 +42,17 @@ func GetAuthType(ctx context.Context) string {
 		return authType
 	}
 	return "bearer"
+}
+
+// WithAPIKey returns a context with the API key set
+func WithAPIKey(ctx context.Context, apiKey string) context.Context {
+	return context.WithValue(ctx, ContextKeyAPIKey, apiKey)
+}
+
+// GetAPIKey extracts API key from context, returns empty string if not present
+func GetAPIKey(ctx context.Context) string {
+	if apiKey, ok := ctx.Value(ContextKeyAPIKey).(string); ok {
+		return apiKey
+	}
+	return ""
 }
