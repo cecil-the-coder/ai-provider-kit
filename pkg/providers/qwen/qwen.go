@@ -593,10 +593,10 @@ func (p *QwenProvider) TestConnectivity(ctx context.Context) error {
 	config := p.GetConfig()
 	baseURL := config.BaseURL
 	if baseURL == "" {
-		baseURL = "https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation"
+		baseURL = "https://portal.qwen.ai/v1"
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", baseURL, bytes.NewReader(jsonBody))
+	req, err := http.NewRequestWithContext(ctx, "POST", baseURL+"/chat/completions", bytes.NewReader(jsonBody))
 	if err != nil {
 		return types.NewNetworkError(types.ProviderTypeQwen, "failed to create connectivity test request").
 			WithOperation("test_connectivity").
