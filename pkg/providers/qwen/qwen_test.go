@@ -15,7 +15,7 @@ func TestNewQwenProvider(t *testing.T) {
 		Name:         "test-qwen",
 		APIKey:       "test-api-key",
 		BaseURL:      "https://test.qwen.ai",
-		DefaultModel: "qwen-turbo",
+		DefaultModel: "qwen3-coder-flash",
 	}
 
 	provider := NewQwenProvider(config)
@@ -32,8 +32,8 @@ func TestNewQwenProvider(t *testing.T) {
 		t.Errorf("Expected type %s, got %s", types.ProviderTypeQwen, provider.Type())
 	}
 
-	if provider.GetDefaultModel() != "qwen-turbo" {
-		t.Errorf("Expected default model 'qwen-turbo', got '%s'", provider.GetDefaultModel())
+	if provider.GetDefaultModel() != "qwen3-coder-flash" {
+		t.Errorf("Expected default model 'qwen3-coder-flash', got '%s'", provider.GetDefaultModel())
 	}
 }
 
@@ -56,11 +56,8 @@ func TestQwenProvider_GetModels(t *testing.T) {
 
 	// Check for known models
 	expectedModels := []string{
-		"qwen-turbo",
-		"qwen-plus",
-		"qwen-max",
-		"qwen-coder-turbo",
-		"qwen-coder-plus",
+		"qwen3-coder-flash",
+		"qwen3-coder-plus",
 	}
 
 	modelMap := make(map[string]bool)
@@ -191,7 +188,7 @@ func TestQwenProvider_GenerateChatCompletion_APIKey(t *testing.T) {
 			"id": "test-id",
 			"object": "chat.completion",
 			"created": 1234567890,
-			"model": "qwen-turbo",
+			"model": "qwen3-coder-flash",
 			"choices": [{
 				"index": 0,
 				"message": {
@@ -320,7 +317,7 @@ func TestQwenStream(t *testing.T) {
 	stream := &QwenStream{
 		content: "Test content",
 		usage:   usage,
-		model:   "qwen-turbo",
+		model:   "qwen3-coder-flash",
 		closed:  false,
 	}
 
@@ -334,8 +331,8 @@ func TestQwenStream(t *testing.T) {
 		t.Errorf("Expected content 'Test content', got '%s'", chunk.Content)
 	}
 
-	if chunk.Model != "qwen-turbo" {
-		t.Errorf("Expected model 'qwen-turbo', got '%s'", chunk.Model)
+	if chunk.Model != "qwen3-coder-flash" {
+		t.Errorf("Expected model 'qwen3-coder-flash', got '%s'", chunk.Model)
 	}
 
 	if chunk.Usage.PromptTokens != 10 {
@@ -377,7 +374,7 @@ func TestQwenProvider_Configure(t *testing.T) {
 		Name:         "test-qwen",
 		APIKey:       "new-api-key",
 		BaseURL:      "https://new.qwen.ai",
-		DefaultModel: "qwen-plus",
+		DefaultModel: "qwen3-coder-flash",
 	}
 
 	err := provider.Configure(config)
