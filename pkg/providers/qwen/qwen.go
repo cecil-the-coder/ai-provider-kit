@@ -28,7 +28,7 @@ import (
 
 // Constants for Qwen models
 const (
-	qwenDefaultModel = "qwen-turbo"  // Default model for chat completions and testing
+	qwenDefaultModel = "qwen-turbo" // Default model for chat completions and testing
 )
 
 // QwenOAuthToken represents an OAuth token for Qwen API

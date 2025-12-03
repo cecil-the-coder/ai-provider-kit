@@ -25,8 +25,8 @@ import (
 
 // Constants for Cerebras models
 const (
-	cerebrasDefaultModel = "zai-glm-4.6"  // Default model for chat completions
-	cerebrasTestModel    = "llama3.1-8b"  // Lightweight model for connectivity testing
+	cerebrasDefaultModel = "zai-glm-4.6" // Default model for chat completions
+	cerebrasTestModel    = "llama3.1-8b" // Lightweight model for connectivity testing
 )
 
 // CerebrasProvider implements Provider interface for Cerebras

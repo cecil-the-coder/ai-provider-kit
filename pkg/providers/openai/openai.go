@@ -24,8 +24,8 @@ import (
 
 // Constants for OpenAI models
 const (
-	openAIDefaultModel = "gpt-4o"           // Default model for chat completions
-	openAIFallbackModel = "gpt-3.5-turbo"   // Fallback model when no default specified
+	openAIDefaultModel  = "gpt-4o"        // Default model for chat completions
+	openAIFallbackModel = "gpt-3.5-turbo" // Fallback model when no default specified
 )
 
 // OpenAI API Request/Response Structures
@@ -176,15 +176,15 @@ type OpenAIModel struct {
 // OpenAIProvider implements the Provider interface for OpenAI
 type OpenAIProvider struct {
 	*base.BaseProvider
-	authHelper          *auth.AuthHelper
-	client              *http.Client
-	baseURL             string
-	useResponsesAPI     bool
-	rateLimitHelper     *common.RateLimitHelper
-	modelCache          *models.ModelCache
-	modelRegistry       *models.ModelMetadataRegistry
-	organizationID      string
-	connectivityCache   *common.ConnectivityCache
+	authHelper        *auth.AuthHelper
+	client            *http.Client
+	baseURL           string
+	useResponsesAPI   bool
+	rateLimitHelper   *common.RateLimitHelper
+	modelCache        *models.ModelCache
+	modelRegistry     *models.ModelMetadataRegistry
+	organizationID    string
+	connectivityCache *common.ConnectivityCache
 }
 
 // NewOpenAIProvider creates a new OpenAI provider

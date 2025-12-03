@@ -276,7 +276,7 @@ func TestConnectivityCache_GetCachedResult(t *testing.T) {
 		assert.NoError(t, err)
 
 		// Get cached result
-		cachedErr, timestamp, found := cache.GetCachedResult(types.ProviderTypeOpenAI)
+		timestamp, found, cachedErr := cache.GetCachedResult(types.ProviderTypeOpenAI)
 		assert.True(t, found)
 		assert.NoError(t, cachedErr)
 		assert.False(t, timestamp.IsZero())
@@ -300,7 +300,7 @@ func TestConnectivityCache_GetCachedResult(t *testing.T) {
 		time.Sleep(5 * time.Millisecond)
 
 		// Get cached result - should not be found
-		_, _, found := cache.GetCachedResult(types.ProviderTypeOpenAI)
+		_, found, _ := cache.GetCachedResult(types.ProviderTypeOpenAI)
 		assert.False(t, found)
 	})
 
@@ -308,7 +308,7 @@ func TestConnectivityCache_GetCachedResult(t *testing.T) {
 		cache := NewDefaultConnectivityCache()
 
 		// Get cached result without caching anything
-		_, _, found := cache.GetCachedResult(types.ProviderTypeOpenAI)
+		_, found, _ := cache.GetCachedResult(types.ProviderTypeOpenAI)
 		assert.False(t, found)
 	})
 
@@ -324,7 +324,7 @@ func TestConnectivityCache_GetCachedResult(t *testing.T) {
 		assert.Error(t, err)
 
 		// Get cached result
-		cachedErr, timestamp, found := cache.GetCachedResult(types.ProviderTypeOpenAI)
+		timestamp, found, cachedErr := cache.GetCachedResult(types.ProviderTypeOpenAI)
 		assert.True(t, found)
 		assert.Error(t, cachedErr)
 		assert.Equal(t, testError, cachedErr)

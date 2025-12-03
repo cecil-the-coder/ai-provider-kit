@@ -145,22 +145,22 @@ func (cc *ConnectivityCache) ClearAll() {
 }
 
 // GetCachedResult returns the cached result for a provider without performing a test
-// Returns the cached error, timestamp of the cache entry, and whether a valid (non-expired) entry exists
-func (cc *ConnectivityCache) GetCachedResult(providerType types.ProviderType) (error, time.Time, bool) {
+// Returns the timestamp of the cache entry, whether a valid (non-expired) entry exists, and the cached error
+func (cc *ConnectivityCache) GetCachedResult(providerType types.ProviderType) (time.Time, bool, error) {
 	cc.mu.RLock()
 	defer cc.mu.RUnlock()
 
 	entry, exists := cc.cache[providerType]
 	if !exists {
-		return nil, time.Time{}, false
+		return time.Time{}, false, nil
 	}
 
 	// Check if the entry has expired
 	if time.Since(entry.timestamp) > cc.config.TTL {
-		return nil, time.Time{}, false
+		return time.Time{}, false, nil
 	}
 
-	return entry.error, entry.timestamp, true
+	return entry.timestamp, true, entry.error
 }
 
 // GetConfig returns the current cache configuration
@@ -177,7 +177,7 @@ func (cc *ConnectivityCache) SetConfig(config ConnectivityCacheConfig) {
 	cc.config = config
 }
 
-// Stats represents statistics about the connectivity cache
+// ConnectivityCacheStats represents statistics about the connectivity cache
 type ConnectivityCacheStats struct {
 	// TotalEntries is the current number of cached entries
 	TotalEntries int

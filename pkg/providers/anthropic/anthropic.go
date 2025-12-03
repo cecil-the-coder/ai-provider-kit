@@ -25,8 +25,8 @@ import (
 
 // Constants for Anthropic models
 const (
-	anthropicDefaultModel      = "claude-sonnet-4-5"      // Default model for chat completions
-	anthropicTestModel         = "claude-3-haiku-20240307" // Lightweight model for connectivity testing
+	anthropicDefaultModel = "claude-sonnet-4-5"       // Default model for chat completions
+	anthropicTestModel    = "claude-3-haiku-20240307" // Lightweight model for connectivity testing
 )
 
 // AnthropicProvider implements the Provider interface for Anthropic Claude
