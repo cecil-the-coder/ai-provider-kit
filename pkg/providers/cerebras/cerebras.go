@@ -889,12 +889,18 @@ func (p *CerebrasProvider) performConnectivityTest(ctx context.Context) error {
 			WithStatusCode(resp.StatusCode)
 	}
 
-	// Try to parse a small portion of the response to ensure it's valid JSON
-	decoder := json.NewDecoder(io.LimitReader(resp.Body, 1024))
+	// Read entire response to support providers with many models
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return types.NewNetworkError(types.ProviderTypeCerebras, "failed to read response body").
+			WithOperation("test_connectivity").
+			WithOriginalErr(err)
+	}
+
 	var testResponse struct {
 		Data []interface{} `json:"data"`
 	}
-	if err := decoder.Decode(&testResponse); err != nil {
+	if err := json.Unmarshal(body, &testResponse); err != nil {
 		return types.NewInvalidRequestError(types.ProviderTypeCerebras, "invalid response from models endpoint").
 			WithOperation("test_connectivity").
 			WithOriginalErr(err)
