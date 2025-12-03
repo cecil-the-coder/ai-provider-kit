@@ -20,7 +20,7 @@ func TestQwenProvider_FactoryIntegration(t *testing.T) {
 		Name:         "test-qwen",
 		APIKey:       "test-api-key",
 		BaseURL:      "https://portal.qwen.ai/v1",
-		DefaultModel: "qwen-turbo",
+		DefaultModel: "qwen3-coder-flash",
 	}
 
 	// Create the provider using the factory
@@ -39,8 +39,8 @@ func TestQwenProvider_FactoryIntegration(t *testing.T) {
 		t.Errorf("Expected name 'Qwen', got '%s'", provider.Name())
 	}
 
-	if provider.GetDefaultModel() != "qwen-turbo" {
-		t.Errorf("Expected default model 'qwen-turbo', got '%s'", provider.GetDefaultModel())
+	if provider.GetDefaultModel() != "qwen3-coder-flash" {
+		t.Errorf("Expected default model 'qwen3-coder-flash', got '%s'", provider.GetDefaultModel())
 	}
 
 	// Test authentication

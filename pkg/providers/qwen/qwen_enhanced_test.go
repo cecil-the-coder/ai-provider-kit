@@ -671,8 +671,8 @@ func TestQwenProvider_GetDefaultModel_FallbackToDefault(t *testing.T) {
 	})
 
 	defaultModel := provider.GetDefaultModel()
-	if defaultModel != "qwen-turbo" {
-		t.Errorf("Expected default model 'qwen-turbo', got '%s'", defaultModel)
+	if defaultModel != "qwen3-coder-flash" {
+		t.Errorf("Expected default model 'qwen3-coder-flash', got '%s'", defaultModel)
 	}
 }
 
