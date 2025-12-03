@@ -1550,12 +1550,20 @@ func TestOpenAIProvider_TestConnectivity(t *testing.T) {
 		assert.Contains(t, err.Error(), "invalid response from models endpoint")
 	})
 
-	t.Run("UnexpectedResponseFormat", func(t *testing.T) {
-		// Create a mock server that returns unexpected response format
+	t.Run("OpenAICompatibleProvider", func(t *testing.T) {
+		// Test that OpenAI-compatible providers (Groq, xAI, etc.) work even if they
+		// don't return the standard "object": "list" field
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			response := map[string]interface{}{
-				"object": "not-a-list", // Wrong object type
-				"data":   []interface{}{},
+				// No "object" field - simulating OpenAI-compatible provider
+				"data": []interface{}{
+					map[string]interface{}{
+						"id":       "llama-3.1-70b",
+						"object":   "model",
+						"created":  1687882411,
+						"owned_by": "groq",
+					},
+				},
 			}
 
 			w.Header().Set("Content-Type", "application/json")
@@ -1571,8 +1579,7 @@ func TestOpenAIProvider_TestConnectivity(t *testing.T) {
 		provider := NewOpenAIProvider(config)
 
 		err := provider.TestConnectivity(context.Background())
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "unexpected response format from models endpoint")
+		assert.NoError(t, err) // Should succeed without Object field validation
 	})
 
 	t.Run("NetworkError", func(t *testing.T) {

@@ -892,8 +892,7 @@ func (p *CerebrasProvider) performConnectivityTest(ctx context.Context) error {
 	// Try to parse a small portion of the response to ensure it's valid JSON
 	decoder := json.NewDecoder(io.LimitReader(resp.Body, 1024))
 	var testResponse struct {
-		Object string        `json:"object"`
-		Data   []interface{} `json:"data"`
+		Data []interface{} `json:"data"`
 	}
 	if err := decoder.Decode(&testResponse); err != nil {
 		return types.NewInvalidRequestError(types.ProviderTypeCerebras, "invalid response from models endpoint").
@@ -901,12 +900,8 @@ func (p *CerebrasProvider) performConnectivityTest(ctx context.Context) error {
 			WithOriginalErr(err)
 	}
 
-	// Verify we got a valid models list response
-	if testResponse.Object != "list" {
-		return types.NewInvalidRequestError(types.ProviderTypeCerebras, "unexpected response format from models endpoint").
-			WithOperation("test_connectivity")
-	}
-
+	// Successfully parsed response - connectivity verified
+	// No Object field validation to support OpenAI-compatible providers
 	return nil
 }
 
