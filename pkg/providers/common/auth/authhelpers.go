@@ -567,3 +567,13 @@ func (h *AuthHelper) RefreshAllOAuthTokens(ctx context.Context) error {
 
 	return nil
 }
+
+// IsOAuthConfigured checks if OAuth credentials are configured and available
+func (h *AuthHelper) IsOAuthConfigured() bool {
+	return h.OAuthManager != nil && len(h.OAuthManager.GetCredentials()) > 0
+}
+
+// IsAPIKeyConfigured checks if API keys are configured and available
+func (h *AuthHelper) IsAPIKeyConfigured() bool {
+	return h.KeyManager != nil && len(h.KeyManager.GetKeys()) > 0
+}

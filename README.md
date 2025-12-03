@@ -533,6 +533,20 @@ docker build -t ai-provider-kit .
 docker run -p 8080:8080 ai-provider-kit
 ```
 
+## Documentation
+
+Comprehensive documentation is available in the [/docs](/docs) directory:
+
+- **[Getting Started](/docs/SDK_GETTING_STARTED.md)** - Quick start guide
+- **[API Reference](/docs/SDK_API_REFERENCE.md)** - Complete API documentation
+- **[Error Code Mapping](/docs/ERROR_CODE_MAPPING.md)** - Error handling and troubleshooting
+- **[Best Practices](/docs/SDK_BEST_PRACTICES.md)** - Recommended patterns
+- **[Provider Guides](/docs/SDK_PROVIDER_GUIDES.md)** - Provider-specific documentation
+- **[OAuth Manager](/docs/OAUTH_MANAGER.md)** - Enterprise credential management
+- **[Metrics](/docs/METRICS.md)** - Monitoring and observability
+
+See the [complete documentation index](/docs/README.md) for all available guides.
+
 ## Contributing
 
 Contributions are welcome! Please see our [Contributing Guidelines](CONTRIBUTING.md) for details.
@@ -559,6 +573,8 @@ For the full license text, see the [LICENSE](LICENSE) file.
 ## Changelog
 
 See [CHANGELOG.md](CHANGELOG.md) for a list of changes and version history.
+
+For detailed upgrade instructions between versions, including breaking changes and API modifications, see the [Version-Specific Migration Guide](docs/VERSION_MIGRATION_GUIDE.md).
 
 ## Support
 

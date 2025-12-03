@@ -456,6 +456,16 @@ func (p *GeminiProvider) IsAuthenticated() bool {
 	return p.authHelper.IsAuthenticated()
 }
 
+// IsOAuthConfigured checks if OAuth authentication is properly configured
+func (p *GeminiProvider) IsOAuthConfigured() bool {
+	return p.authHelper.IsOAuthConfigured()
+}
+
+// IsAPIKeyConfigured checks if API key authentication is properly configured
+func (p *GeminiProvider) IsAPIKeyConfigured() bool {
+	return p.authHelper.IsAPIKeyConfigured()
+}
+
 // GetAuthStatus provides detailed authentication status using shared helper
 func (p *GeminiProvider) GetAuthStatus() map[string]interface{} {
 	return p.authHelper.GetAuthStatus()
@@ -471,6 +481,184 @@ func (p *GeminiProvider) Logout(ctx context.Context) error {
 
 	newConfig := p.GetConfig()
 	return p.Configure(newConfig)
+}
+
+// TestConnectivity performs a lightweight connectivity test to verify the provider can reach its service
+func (p *GeminiProvider) TestConnectivity(ctx context.Context) error {
+	// Check if we have API keys configured
+	hasAPIKeys := p.authHelper.KeyManager != nil && len(p.authHelper.KeyManager.GetKeys()) > 0
+	hasOAuth := p.authHelper.OAuthManager != nil && len(p.authHelper.OAuthManager.GetCredentials()) > 0
+
+	if !hasAPIKeys && !hasOAuth {
+		return types.NewAuthError(types.ProviderTypeGemini, "no API keys or OAuth credentials configured").
+			WithOperation("test_connectivity")
+	}
+
+	// For API keys, make a minimal API call to test connectivity
+	if hasAPIKeys {
+		apiKey := p.authHelper.KeyManager.GetKeys()[0]
+		if err := p.testConnectivityWithAPIKey(ctx, apiKey); err == nil {
+			return nil
+		}
+	}
+
+	// For OAuth, try with OAuth credentials
+	if hasOAuth {
+		creds := p.authHelper.OAuthManager.GetCredentials()
+		return p.testConnectivityWithOAuth(ctx, creds[0].AccessToken)
+	}
+
+	return types.NewAuthError(types.ProviderTypeGemini, "no valid authentication credentials available").
+		WithOperation("test_connectivity")
+}
+
+// testConnectivityWithAPIKey tests connectivity using an API key
+func (p *GeminiProvider) testConnectivityWithAPIKey(ctx context.Context, apiKey string) error {
+	// Use a minimal generateContent request with the smallest model
+	baseURL := p.config.BaseURL
+	if baseURL == "" {
+		baseURL = standardGeminiBaseURL
+	}
+	url := fmt.Sprintf("%s/models/%s:generateContent?key=%s", baseURL, geminiDefaultModel, apiKey)
+
+	// Create a minimal request for connectivity testing
+	minimalRequest := map[string]interface{}{
+		"contents": []map[string]interface{}{
+			{
+				"parts": []map[string]string{
+					{"text": "Hi"},
+				},
+			},
+		},
+		"generationConfig": map[string]interface{}{
+			"maxOutputTokens": 1, // Minimal token usage
+		},
+	}
+
+	jsonBody, err := json.Marshal(minimalRequest)
+	if err != nil {
+		return types.NewInvalidRequestError(types.ProviderTypeGemini, "failed to marshal test request").
+			WithOperation("test_connectivity").
+			WithOriginalErr(err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(jsonBody))
+	if err != nil {
+		return types.NewNetworkError(types.ProviderTypeGemini, "failed to create connectivity test request").
+			WithOperation("test_connectivity").
+			WithOriginalErr(err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+
+	// Make the request with a shorter timeout for connectivity testing
+	client := &http.Client{
+		Timeout: 15 * time.Second,
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return types.NewNetworkError(types.ProviderTypeGemini, "connectivity test failed").
+			WithOperation("test_connectivity").
+			WithOriginalErr(err)
+	}
+	defer func() {
+		//nolint:staticcheck // Empty branch is intentional - we ignore close errors
+		if err := resp.Body.Close(); err != nil {
+			// Log the error if a logger is available, or ignore it
+		}
+	}()
+
+	// Check response status
+	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+		return types.NewAuthError(types.ProviderTypeGemini, "invalid API key").
+			WithOperation("test_connectivity").
+			WithStatusCode(resp.StatusCode)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return types.NewServerError(types.ProviderTypeGemini, resp.StatusCode,
+			fmt.Sprintf("connectivity test failed: %s", string(body))).
+			WithOperation("test_connectivity")
+	}
+
+	return nil
+}
+
+// testConnectivityWithOAuth tests connectivity using OAuth credentials
+func (p *GeminiProvider) testConnectivityWithOAuth(ctx context.Context, accessToken string) error {
+	// For OAuth, use Cloud Code API format
+	baseURL := cloudcodeBaseURL
+	projectID := p.getProjectID()
+	endpoint := ":generateContent"
+	url := fmt.Sprintf("%s/projects/%s%s", baseURL, projectID, endpoint)
+
+	// Create a minimal request for connectivity testing
+	minimalRequest := map[string]interface{}{
+		"contents": []map[string]interface{}{
+			{
+				"parts": []map[string]string{
+					{"text": "Hi"},
+				},
+			},
+		},
+		"generationConfig": map[string]interface{}{
+			"maxOutputTokens": 1, // Minimal token usage
+		},
+	}
+
+	jsonBody, err := json.Marshal(minimalRequest)
+	if err != nil {
+		return types.NewInvalidRequestError(types.ProviderTypeGemini, "failed to marshal test request").
+			WithOperation("test_connectivity").
+			WithOriginalErr(err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(jsonBody))
+	if err != nil {
+		return types.NewNetworkError(types.ProviderTypeGemini, "failed to create connectivity test request").
+			WithOperation("test_connectivity").
+			WithOriginalErr(err)
+	}
+
+	// Set authentication headers
+	p.authHelper.SetAuthHeaders(req, accessToken, "oauth")
+	req.Header.Set("Content-Type", "application/json")
+
+	// Make the request with a shorter timeout for connectivity testing
+	client := &http.Client{
+		Timeout: 15 * time.Second,
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return types.NewNetworkError(types.ProviderTypeGemini, "connectivity test failed").
+			WithOperation("test_connectivity").
+			WithOriginalErr(err)
+	}
+	defer func() {
+		//nolint:staticcheck // Empty branch is intentional - we ignore close errors
+		if err := resp.Body.Close(); err != nil {
+			// Log the error if a logger is available, or ignore it
+		}
+	}()
+
+	// Check response status
+	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+		return types.NewAuthError(types.ProviderTypeGemini, "invalid OAuth credentials").
+			WithOperation("test_connectivity").
+			WithStatusCode(resp.StatusCode)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return types.NewServerError(types.ProviderTypeGemini, resp.StatusCode,
+			fmt.Sprintf("connectivity test failed: %s", string(body))).
+			WithOperation("test_connectivity")
+	}
+
+	return nil
 }
 
 func (p *GeminiProvider) Configure(config types.ProviderConfig) error {

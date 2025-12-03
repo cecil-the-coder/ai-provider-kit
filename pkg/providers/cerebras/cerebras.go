@@ -23,14 +23,21 @@ import (
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 )
 
+// Constants for Cerebras models
+const (
+	cerebrasDefaultModel = "zai-glm-4.6"  // Default model for chat completions
+	cerebrasTestModel    = "llama3.1-8b"  // Lightweight model for connectivity testing
+)
+
 // CerebrasProvider implements Provider interface for Cerebras
 type CerebrasProvider struct {
 	*base.BaseProvider
-	config          types.ProviderConfig
-	httpClient      *http.Client
-	authHelper      *auth.AuthHelper
-	modelCache      *models.ModelCache
-	rateLimitHelper *common.RateLimitHelper
+	config            types.ProviderConfig
+	httpClient        *http.Client
+	authHelper        *auth.AuthHelper
+	modelCache        *models.ModelCache
+	connectivityCache *common.ConnectivityCache
+	rateLimitHelper   *common.RateLimitHelper
 }
 
 // NewCerebrasProvider creates a new Cerebras provider
@@ -54,12 +61,13 @@ func NewCerebrasProvider(config types.ProviderConfig) *CerebrasProvider {
 	// Cerebras doesn't use OAuth, so no OAuth setup needed
 
 	return &CerebrasProvider{
-		BaseProvider:    base.NewBaseProvider("cerebras", mergedConfig, client, log.Default()),
-		config:          mergedConfig,
-		httpClient:      client,
-		authHelper:      authHelper,
-		modelCache:      models.NewModelCache(commonconfig.GetModelCacheTTL(types.ProviderTypeCerebras)),
-		rateLimitHelper: common.NewRateLimitHelper(&ratelimit.CerebrasParser{}),
+		BaseProvider:      base.NewBaseProvider("cerebras", mergedConfig, client, log.Default()),
+		config:            mergedConfig,
+		httpClient:        client,
+		authHelper:        authHelper,
+		modelCache:        models.NewModelCache(commonconfig.GetModelCacheTTL(types.ProviderTypeCerebras)),
+		connectivityCache: common.NewDefaultConnectivityCache(),
+		rateLimitHelper:   common.NewRateLimitHelper(&ratelimit.CerebrasParser{}),
 	}
 }
 
@@ -263,7 +271,7 @@ func (p *CerebrasProvider) GetDefaultModel() string {
 	if p.config.DefaultModel != "" {
 		return p.config.DefaultModel
 	}
-	return "zai-glm-4.6"
+	return cerebrasDefaultModel
 }
 
 // GenerateChatCompletion generates a chat completion
@@ -793,7 +801,25 @@ func (p *CerebrasProvider) GetMetrics() types.ProviderMetrics {
 }
 
 // TestConnectivity performs a lightweight connectivity test using the /v1/models endpoint
+// Results are cached for 30 seconds by default to prevent hammering the API during rapid health checks
+// To bypass the cache and force a fresh check, use TestConnectivityWithOptions with bypassCache=true
 func (p *CerebrasProvider) TestConnectivity(ctx context.Context) error {
+	return p.TestConnectivityWithOptions(ctx, false)
+}
+
+// TestConnectivityWithOptions performs a connectivity test with optional cache bypass
+// If bypassCache is true, the cache is bypassed and a fresh connectivity check is performed
+func (p *CerebrasProvider) TestConnectivityWithOptions(ctx context.Context, bypassCache bool) error {
+	return p.connectivityCache.TestConnectivity(
+		ctx,
+		types.ProviderTypeCerebras,
+		p.performConnectivityTest,
+		bypassCache,
+	)
+}
+
+// performConnectivityTest performs the actual connectivity test without caching
+func (p *CerebrasProvider) performConnectivityTest(ctx context.Context) error {
 	// Check if we have API keys configured
 	if p.authHelper.KeyManager == nil || len(p.authHelper.KeyManager.GetKeys()) == 0 {
 		return types.NewAuthError(types.ProviderTypeCerebras, "no API keys configured").

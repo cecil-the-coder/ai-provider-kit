@@ -22,6 +22,12 @@ import (
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 )
 
+// Constants for OpenAI models
+const (
+	openAIDefaultModel = "gpt-4o"           // Default model for chat completions
+	openAIFallbackModel = "gpt-3.5-turbo"   // Fallback model when no default specified
+)
+
 // OpenAI API Request/Response Structures
 
 // OpenAIRequest represents a request to the OpenAI chat completions API
@@ -170,14 +176,15 @@ type OpenAIModel struct {
 // OpenAIProvider implements the Provider interface for OpenAI
 type OpenAIProvider struct {
 	*base.BaseProvider
-	authHelper      *auth.AuthHelper
-	client          *http.Client
-	baseURL         string
-	useResponsesAPI bool
-	rateLimitHelper *common.RateLimitHelper
-	modelCache      *models.ModelCache
-	modelRegistry   *models.ModelMetadataRegistry
-	organizationID  string
+	authHelper          *auth.AuthHelper
+	client              *http.Client
+	baseURL             string
+	useResponsesAPI     bool
+	rateLimitHelper     *common.RateLimitHelper
+	modelCache          *models.ModelCache
+	modelRegistry       *models.ModelMetadataRegistry
+	organizationID      string
+	connectivityCache   *common.ConnectivityCache
 }
 
 // NewOpenAIProvider creates a new OpenAI provider
@@ -213,15 +220,16 @@ func NewOpenAIProvider(config types.ProviderConfig) *OpenAIProvider {
 	}
 
 	provider := &OpenAIProvider{
-		BaseProvider:    base.NewBaseProvider("openai", mergedConfig, client, log.Default()),
-		authHelper:      authHelper,
-		client:          client,
-		baseURL:         baseURL,
-		useResponsesAPI: useResponsesAPI,
-		rateLimitHelper: common.NewRateLimitHelper(ratelimit.NewOpenAIParser()),
-		organizationID:  organizationID,
-		modelCache:      models.NewModelCache(24 * time.Hour), // 24 hour cache for OpenAI
-		modelRegistry:   models.GetOpenAIMetadataRegistry(),
+		BaseProvider:      base.NewBaseProvider("openai", mergedConfig, client, log.Default()),
+		authHelper:        authHelper,
+		client:            client,
+		baseURL:           baseURL,
+		useResponsesAPI:   useResponsesAPI,
+		rateLimitHelper:   common.NewRateLimitHelper(ratelimit.NewOpenAIParser()),
+		organizationID:    organizationID,
+		modelCache:        models.NewModelCache(24 * time.Hour), // 24 hour cache for OpenAI
+		modelRegistry:     models.GetOpenAIMetadataRegistry(),
+		connectivityCache: common.NewDefaultConnectivityCache(),
 	}
 
 	return provider
@@ -340,7 +348,7 @@ func (p *OpenAIProvider) GetDefaultModel() string {
 	if config.DefaultModel != "" {
 		return config.DefaultModel
 	}
-	return "gpt-4o"
+	return openAIDefaultModel
 }
 
 // GenerateChatCompletion generates a chat completion
@@ -460,7 +468,7 @@ func (p *OpenAIProvider) buildOpenAIRequest(options types.GenerateOptions) OpenA
 		config := p.GetConfig()
 		model = config.DefaultModel
 		if model == "" {
-			model = "gpt-3.5-turbo"
+			model = openAIFallbackModel
 		}
 	}
 
@@ -830,7 +838,25 @@ func (p *OpenAIProvider) GetToolFormat() types.ToolFormat {
 }
 
 // TestConnectivity performs a lightweight connectivity test using the /v1/models endpoint
+// Results are cached for 30 seconds by default to prevent hammering the API during rapid health checks
+// To bypass the cache and force a fresh check, use TestConnectivityWithOptions with bypassCache=true
 func (p *OpenAIProvider) TestConnectivity(ctx context.Context) error {
+	return p.TestConnectivityWithOptions(ctx, false)
+}
+
+// TestConnectivityWithOptions performs a connectivity test with optional cache bypass
+// If bypassCache is true, the cache is bypassed and a fresh connectivity check is performed
+func (p *OpenAIProvider) TestConnectivityWithOptions(ctx context.Context, bypassCache bool) error {
+	return p.connectivityCache.TestConnectivity(
+		ctx,
+		types.ProviderTypeOpenAI,
+		p.performConnectivityTest,
+		bypassCache,
+	)
+}
+
+// performConnectivityTest performs the actual connectivity test without caching
+func (p *OpenAIProvider) performConnectivityTest(ctx context.Context) error {
 	// Check if we have API keys configured
 	if p.authHelper.KeyManager == nil || len(p.authHelper.KeyManager.GetKeys()) == 0 {
 		return types.NewAuthError(types.ProviderTypeOpenAI, "no API keys configured").

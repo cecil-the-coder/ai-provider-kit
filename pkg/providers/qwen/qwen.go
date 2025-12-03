@@ -26,6 +26,11 @@ import (
 	"golang.org/x/time/rate"
 )
 
+// Constants for Qwen models
+const (
+	qwenDefaultModel = "qwen-turbo"  // Default model for chat completions and testing
+)
+
 // QwenOAuthToken represents an OAuth token for Qwen API
 type QwenOAuthToken struct {
 	AccessToken  string `json:"access_token"`
@@ -171,7 +176,7 @@ func (p *QwenProvider) GetDefaultModel() string {
 	if config.DefaultModel != "" {
 		return config.DefaultModel
 	}
-	return "qwen-turbo" // Default to qwen-turbo
+	return qwenDefaultModel
 }
 
 // GenerateChatCompletion generates a chat completion
@@ -554,6 +559,16 @@ func (p *QwenProvider) IsAuthenticated() bool {
 	return p.authHelper.IsAuthenticated()
 }
 
+// IsOAuthConfigured checks if OAuth authentication is properly configured
+func (p *QwenProvider) IsOAuthConfigured() bool {
+	return p.authHelper.IsOAuthConfigured()
+}
+
+// IsAPIKeyConfigured checks if API key authentication is properly configured
+func (p *QwenProvider) IsAPIKeyConfigured() bool {
+	return p.authHelper.IsAPIKeyConfigured()
+}
+
 // Logout handles logout (clears API key and OAuth token)
 func (p *QwenProvider) Logout(ctx context.Context) error {
 	// Clear authentication first while holding lock
@@ -565,6 +580,102 @@ func (p *QwenProvider) Logout(ctx context.Context) error {
 
 	// Configure outside the lock to avoid deadlock
 	return p.Configure(newConfig)
+}
+
+// TestConnectivity performs a lightweight connectivity test to verify the provider can reach its service
+func (p *QwenProvider) TestConnectivity(ctx context.Context) error {
+	// Check if we have API keys configured
+	hasAPIKeys := p.authHelper.KeyManager != nil && len(p.authHelper.KeyManager.GetKeys()) > 0
+	hasOAuth := p.authHelper.OAuthManager != nil && len(p.authHelper.OAuthManager.GetCredentials()) > 0
+
+	if !hasAPIKeys && !hasOAuth {
+		return types.NewAuthError(types.ProviderTypeQwen, "no API keys or OAuth credentials configured").
+			WithOperation("test_connectivity")
+	}
+
+	// Get auth token (API key or OAuth token)
+	var authToken string
+	var authType string
+	if hasAPIKeys {
+		authToken = p.authHelper.KeyManager.GetKeys()[0]
+		authType = "api_key"
+	} else {
+		creds := p.authHelper.OAuthManager.GetCredentials()
+		authToken = creds[0].AccessToken
+		authType = "oauth"
+	}
+
+	// Create a minimal request for connectivity testing
+	minimalRequest := QwenRequest{
+		Model: qwenDefaultModel, // Use the default model for testing
+		Messages: []QwenMessage{
+			{
+				Role:    "user",
+				Content: "Hi",
+			},
+		},
+		MaxTokens: 1, // Minimal token usage
+		Stream:    false,
+	}
+
+	jsonBody, err := json.Marshal(minimalRequest)
+	if err != nil {
+		return types.NewInvalidRequestError(types.ProviderTypeQwen, "failed to marshal test request").
+			WithOperation("test_connectivity").
+			WithOriginalErr(err)
+	}
+
+	// Determine base URL
+	config := p.GetConfig()
+	baseURL := config.BaseURL
+	if baseURL == "" {
+		baseURL = "https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation"
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", baseURL, bytes.NewReader(jsonBody))
+	if err != nil {
+		return types.NewNetworkError(types.ProviderTypeQwen, "failed to create connectivity test request").
+			WithOperation("test_connectivity").
+			WithOriginalErr(err)
+	}
+
+	// Set authentication headers
+	p.authHelper.SetAuthHeaders(req, authToken, authType)
+	req.Header.Set("Content-Type", "application/json")
+
+	// Make the request with a shorter timeout for connectivity testing
+	client := &http.Client{
+		Timeout: 15 * time.Second,
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return types.NewNetworkError(types.ProviderTypeQwen, "connectivity test failed").
+			WithOperation("test_connectivity").
+			WithOriginalErr(err)
+	}
+	defer func() {
+		//nolint:staticcheck // Empty branch is intentional - we ignore close errors
+		if err := resp.Body.Close(); err != nil {
+			// Log the error if a logger is available, or ignore it
+		}
+	}()
+
+	// Check response status
+	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+		return types.NewAuthError(types.ProviderTypeQwen, "invalid authentication credentials").
+			WithOperation("test_connectivity").
+			WithStatusCode(resp.StatusCode)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return types.NewServerError(types.ProviderTypeQwen, resp.StatusCode,
+			fmt.Sprintf("connectivity test failed: %s", string(body))).
+			WithOperation("test_connectivity")
+	}
+
+	return nil
 }
 
 // Configure updates the provider configuration

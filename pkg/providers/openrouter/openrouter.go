@@ -29,14 +29,15 @@ import (
 // OpenRouterProvider implements the Provider interface for OpenRouter
 type OpenRouterProvider struct {
 	*base.BaseProvider
-	config        ProviderConfig
-	client        *http.Client
-	authHelper    *auth.AuthHelper
-	modelSelector *ModelSelector
-	lastUsedModel string
-	lastUsage     *types.Usage
-	mutex         sync.RWMutex
-	modelCache    *models.ModelCache
+	config            ProviderConfig
+	client            *http.Client
+	authHelper        *auth.AuthHelper
+	modelSelector     *ModelSelector
+	lastUsedModel     string
+	lastUsage         *types.Usage
+	mutex             sync.RWMutex
+	modelCache        *models.ModelCache
+	connectivityCache *common.ConnectivityCache
 
 	// Configuration fields
 	apiKey        string
@@ -134,21 +135,22 @@ func NewOpenRouterProvider(config types.ProviderConfig) *OpenRouterProvider {
 	openRouterParser := ratelimit.NewOpenRouterParser()
 
 	provider := &OpenRouterProvider{
-		BaseProvider:     base.NewBaseProvider("openrouter", config, client, log.Default()),
-		config:           providerConfig,
-		client:           client,
-		authHelper:       authHelper,
-		modelSelector:    NewModelSelector(modelList, modelStrategy),
-		apiKey:           apiKey,
-		baseURL:          baseURL,
-		siteURL:          siteURL,
-		siteName:         siteName,
-		models:           modelList,
-		modelStrategy:    modelStrategy,
-		freeOnly:         providerConfig.FreeOnly,
-		modelCache:       models.NewModelCache(commonconfig.GetModelCacheTTL(types.ProviderTypeOpenRouter)),
-		rateLimitHelper:  common.NewRateLimitHelper(openRouterParser),
-		rateLimitTracker: common.NewRateLimitTracker(openRouterParser),
+		BaseProvider:      base.NewBaseProvider("openrouter", config, client, log.Default()),
+		config:            providerConfig,
+		client:            client,
+		authHelper:        authHelper,
+		modelSelector:     NewModelSelector(modelList, modelStrategy),
+		apiKey:            apiKey,
+		baseURL:           baseURL,
+		siteURL:           siteURL,
+		siteName:          siteName,
+		models:            modelList,
+		modelStrategy:     modelStrategy,
+		freeOnly:          providerConfig.FreeOnly,
+		modelCache:        models.NewModelCache(commonconfig.GetModelCacheTTL(types.ProviderTypeOpenRouter)),
+		connectivityCache: common.NewDefaultConnectivityCache(),
+		rateLimitHelper:   common.NewRateLimitHelper(openRouterParser),
+		rateLimitTracker:  common.NewRateLimitTracker(openRouterParser),
 	}
 
 	return provider
@@ -505,7 +507,25 @@ func (p *OpenRouterProvider) GetToolFormat() types.ToolFormat {
 }
 
 // TestConnectivity performs a lightweight connectivity test using the /v1/models endpoint
+// Results are cached for 30 seconds by default to prevent hammering the API during rapid health checks
+// To bypass the cache and force a fresh check, use TestConnectivityWithOptions with bypassCache=true
 func (p *OpenRouterProvider) TestConnectivity(ctx context.Context) error {
+	return p.TestConnectivityWithOptions(ctx, false)
+}
+
+// TestConnectivityWithOptions performs a connectivity test with optional cache bypass
+// If bypassCache is true, the cache is bypassed and a fresh connectivity check is performed
+func (p *OpenRouterProvider) TestConnectivityWithOptions(ctx context.Context, bypassCache bool) error {
+	return p.connectivityCache.TestConnectivity(
+		ctx,
+		types.ProviderTypeOpenRouter,
+		p.performConnectivityTest,
+		bypassCache,
+	)
+}
+
+// performConnectivityTest performs the actual connectivity test without caching
+func (p *OpenRouterProvider) performConnectivityTest(ctx context.Context) error {
 	// Check if we have API keys configured
 	if p.authHelper.KeyManager == nil || len(p.authHelper.KeyManager.GetKeys()) == 0 {
 		return types.NewAuthError(types.ProviderTypeOpenRouter, "no API keys configured").
@@ -1303,6 +1323,19 @@ func (p *OpenRouterProvider) GetAPIKeys() []string {
 	}
 
 	return []string{}
+}
+
+// IsOAuthConfigured checks if OAuth authentication is properly configured
+// OpenRouter supports OAuth flow which provisions permanent API keys
+func (p *OpenRouterProvider) IsOAuthConfigured() bool {
+	// OpenRouter's OAuth is unique - it provisions API keys rather than tokens
+	// So we check if we have an OAuth callback URL configured and OAuth helper available
+	return p.config.OAuthCallbackURL != ""
+}
+
+// IsAPIKeyConfigured checks if API key authentication is properly configured
+func (p *OpenRouterProvider) IsAPIKeyConfigured() bool {
+	return p.authHelper.IsAPIKeyConfigured()
 }
 
 // Helper functions

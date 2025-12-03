@@ -1,5 +1,11 @@
 # AI Provider Kit - SDK Migration Guide
 
+## Overview
+
+This guide covers migrating **from other SDKs** (OpenAI, Anthropic, Gemini, LangChain, etc.) **to AI Provider Kit**.
+
+For migrating **between versions of AI Provider Kit**, see the [Version-Specific Migration Guide](VERSION_MIGRATION_GUIDE.md) which covers breaking changes, API modifications, and upgrade paths for all versions from v1.0.0 to v1.0.16.
+
 ## Table of Contents
 1. [Migration Overview](#migration-overview)
 2. [Migrating from OpenAI SDK](#migrating-from-openai-sdk)
@@ -3770,6 +3776,7 @@ The phased approach ensures a safe, gradual migration with validation at each st
 
 For questions or issues, refer to:
 - [Main README](/README.md)
+- [Version-Specific Migration Guide](/docs/VERSION_MIGRATION_GUIDE.md)
 - [Tool Calling Guide](/TOOL_CALLING.md)
 - [Metrics Documentation](/docs/METRICS.md)
 - [OAuth Manager Documentation](/docs/OAUTH_MANAGER.md)

@@ -29,8 +29,9 @@ Complete documentation for the AI Provider Kit - a unified interface for multipl
 - **[Metrics](/docs/METRICS.md)** - Provider-level and credential-level metrics tracking, export formats, and best practices
 - **[Common Utilities](/docs/SDK_COMMON_UTILITIES.md)** - Shared utilities and helpers including Phase 3 core API
 
-### Troubleshooting
+### Error Handling & Troubleshooting
 
+- **[Error Code Mapping](/docs/ERROR_CODE_MAPPING.md)** - Complete error code reference with handling strategies
 - **[Troubleshooting FAQ](/docs/SDK_TROUBLESHOOTING_FAQ.md)** - Common issues and solutions
 
 ## Package Documentation

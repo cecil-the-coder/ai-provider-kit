@@ -304,6 +304,17 @@ type HealthCheckProvider interface {
 	GetMetrics() ProviderMetrics
 }
 
+// AuthMethodDetector defines methods for detecting configured authentication methods.
+// This optional interface is for providers that support multiple authentication methods
+// (e.g., both OAuth and API key) and need to expose which methods are currently configured.
+type AuthMethodDetector interface {
+	// IsOAuthConfigured returns true if OAuth credentials are properly configured
+	IsOAuthConfigured() bool
+
+	// IsAPIKeyConfigured returns true if API key authentication is properly configured
+	IsAPIKeyConfigured() bool
+}
+
 // ============================================================================
 // Composite Provider Interface
 // ============================================================================

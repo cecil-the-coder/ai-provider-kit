@@ -23,15 +23,22 @@ import (
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 )
 
+// Constants for Anthropic models
+const (
+	anthropicDefaultModel      = "claude-sonnet-4-5"      // Default model for chat completions
+	anthropicTestModel         = "claude-3-haiku-20240307" // Lightweight model for connectivity testing
+)
+
 // AnthropicProvider implements the Provider interface for Anthropic Claude
 type AnthropicProvider struct {
 	*base.BaseProvider
-	authHelper  *auth.AuthHelper
-	client      *http.Client
-	lastUsage   *types.Usage
-	displayName string
-	config      AnthropicConfig
-	modelCache  *models.ModelCache
+	authHelper        *auth.AuthHelper
+	client            *http.Client
+	lastUsage         *types.Usage
+	displayName       string
+	config            AnthropicConfig
+	modelCache        *models.ModelCache
+	connectivityCache *common.ConnectivityCache
 
 	// Rate limiting (header-based tracking)
 	rateLimitHelper *common.RateLimitHelper
@@ -101,15 +108,16 @@ func NewAnthropicProvider(config types.ProviderConfig) *AnthropicProvider {
 	rateLimitHelper := common.NewRateLimitHelper(ratelimit.NewAnthropicParser())
 
 	provider := &AnthropicProvider{
-		BaseProvider:    base.NewBaseProvider("anthropic", mergedConfig, client, log.Default()),
-		authHelper:      authHelper,
-		client:          client,
-		displayName:     anthropicConfig.DisplayName,
-		config:          anthropicConfig,
-		modelCache:      models.NewModelCache(6 * time.Hour), // 6 hour cache for Anthropic
-		rateLimitHelper: rateLimitHelper,
-		requestHandler:  base.NewDefaultRequestHandler(client, authHelper, baseURL),
-		responseParser:  base.NewDefaultResponseParser(rateLimitHelper),
+		BaseProvider:      base.NewBaseProvider("anthropic", mergedConfig, client, log.Default()),
+		authHelper:        authHelper,
+		client:            client,
+		displayName:       anthropicConfig.DisplayName,
+		config:            anthropicConfig,
+		modelCache:        models.NewModelCache(6 * time.Hour), // 6 hour cache for Anthropic
+		connectivityCache: common.NewDefaultConnectivityCache(),
+		rateLimitHelper:   rateLimitHelper,
+		requestHandler:    base.NewDefaultRequestHandler(client, authHelper, baseURL),
+		responseParser:    base.NewDefaultResponseParser(rateLimitHelper),
 	}
 
 	return provider
@@ -357,7 +365,7 @@ func (p *AnthropicProvider) GetDefaultModel() string {
 		}
 	}
 
-	return "claude-sonnet-4-5"
+	return anthropicDefaultModel
 }
 
 // GenerateChatCompletion generates a chat completion
@@ -1176,6 +1184,16 @@ func (p *AnthropicProvider) IsAuthenticated() bool {
 	return p.authHelper.IsAuthenticated()
 }
 
+// IsOAuthConfigured checks if OAuth authentication is properly configured
+func (p *AnthropicProvider) IsOAuthConfigured() bool {
+	return p.authHelper.IsOAuthConfigured()
+}
+
+// IsAPIKeyConfigured checks if API key authentication is properly configured
+func (p *AnthropicProvider) IsAPIKeyConfigured() bool {
+	return p.authHelper.IsAPIKeyConfigured()
+}
+
 // GetAuthStatus provides detailed authentication status using shared helper
 func (p *AnthropicProvider) GetAuthStatus() map[string]interface{} {
 	return p.authHelper.GetAuthStatus()
@@ -1255,7 +1273,25 @@ func (p *AnthropicProvider) GetToolFormat() types.ToolFormat {
 }
 
 // TestConnectivity performs a lightweight connectivity test using the /v1/models endpoint
+// Results are cached for 30 seconds by default to prevent hammering the API during rapid health checks
+// To bypass the cache and force a fresh check, use TestConnectivityWithOptions with bypassCache=true
 func (p *AnthropicProvider) TestConnectivity(ctx context.Context) error {
+	return p.TestConnectivityWithOptions(ctx, false)
+}
+
+// TestConnectivityWithOptions performs a connectivity test with optional cache bypass
+// If bypassCache is true, the cache is bypassed and a fresh connectivity check is performed
+func (p *AnthropicProvider) TestConnectivityWithOptions(ctx context.Context, bypassCache bool) error {
+	return p.connectivityCache.TestConnectivity(
+		ctx,
+		types.ProviderTypeAnthropic,
+		p.performConnectivityTest,
+		bypassCache,
+	)
+}
+
+// performConnectivityTest performs the actual connectivity test without caching
+func (p *AnthropicProvider) performConnectivityTest(ctx context.Context) error {
 	// For OAuth tokens starting with sk-ant-oat (Anthropic's OAuth prefix),
 	// the models endpoint doesn't work, so we need to test differently
 	if p.authHelper.OAuthManager != nil && len(p.authHelper.OAuthManager.GetCredentials()) > 0 {
@@ -1377,8 +1413,8 @@ func (p *AnthropicProvider) testConnectivityWithMessagesAPI(ctx context.Context,
 
 	// Create a minimal request for connectivity testing
 	minimalRequest := map[string]interface{}{
-		"model":      "claude-3-haiku-20240307", // Use smallest model
-		"max_tokens": 1,                         // Minimal token usage
+		"model":      anthropicTestModel, // Use smallest model
+		"max_tokens": 1,                  // Minimal token usage
 		"messages": []map[string]string{
 			{
 				"role":    "user",
