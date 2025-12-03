@@ -70,7 +70,7 @@ func TestQwenProvider_FactoryIntegration(t *testing.T) {
 	}
 
 	// Verify known models exist
-	expectedModels := []string{"qwen-turbo", "qwen-plus", "qwen-max"}
+	expectedModels := []string{"qwen3-coder-flash", "qwen3-coder-plus"}
 	modelMap := make(map[string]bool)
 	for _, model := range models {
 		modelMap[model.ID] = true
