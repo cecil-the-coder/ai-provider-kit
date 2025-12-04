@@ -37,6 +37,7 @@ type CerebrasFunctionDef struct {
 type CerebrasMessage struct {
 	Role       string             `json:"role"`
 	Content    string             `json:"content"`
+	Reasoning  string             `json:"reasoning,omitempty"` // GLM-4.6 specific field
 	ToolCalls  []CerebrasToolCall `json:"tool_calls,omitempty"`
 	ToolCallID string             `json:"tool_call_id,omitempty"`
 }

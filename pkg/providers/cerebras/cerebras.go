@@ -516,10 +516,18 @@ func (p *CerebrasProvider) executeAPICall(ctx context.Context, url string, reque
 
 	cerebrasMsg := response.Choices[0].Message
 
+	// Handle GLM-4.6 reasoning field: use reasoning as content if content is empty
+	content := cerebrasMsg.Content
+	reasoning := cerebrasMsg.Reasoning
+	if content == "" && reasoning != "" {
+		content = reasoning
+	}
+
 	// Convert to universal format
 	*responseMessage = types.ChatMessage{
-		Role:    cerebrasMsg.Role,
-		Content: cerebrasMsg.Content,
+		Role:      cerebrasMsg.Role,
+		Content:   content,
+		Reasoning: reasoning,
 	}
 
 	// Convert tool calls if present
@@ -533,7 +541,7 @@ func (p *CerebrasProvider) executeAPICall(ctx context.Context, url string, reque
 		TotalTokens:      response.Usage.TotalTokens,
 	}
 
-	return cerebrasMsg.Content, responseUsage, nil
+	return content, responseUsage, nil
 }
 
 // recordSuccessMetrics records success metrics
@@ -1001,9 +1009,19 @@ func (s *CerebrasRealStream) Next() (types.ChatCompletionChunk, error) {
 			choice := streamResp.Choices[0]
 
 			// Use Delta for streaming (not Message)
+			// Handle GLM-4.6 reasoning field: populate both Content and Reasoning
+			content := choice.Delta.Content
+			reasoning := choice.Delta.Reasoning
+
+			// If content is empty but reasoning exists, copy reasoning to content for backward compatibility
+			if content == "" && reasoning != "" {
+				content = reasoning
+			}
+
 			chunk := types.ChatCompletionChunk{
-				Content: choice.Delta.Content,
-				Done:    choice.FinishReason != "",
+				Content:   content,
+				Reasoning: reasoning,
+				Done:      choice.FinishReason != "",
 			}
 
 			// Add usage if present
