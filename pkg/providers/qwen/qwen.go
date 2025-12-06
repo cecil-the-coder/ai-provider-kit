@@ -564,14 +564,15 @@ func (p *QwenProvider) TestConnectivity(ctx context.Context) error {
 	// Get auth token (prefer context OAuth, then stored OAuth, then API key)
 	var authToken string
 	var authType string
-	if hasContextOAuth {
+	switch {
+	case hasContextOAuth:
 		authToken = contextToken
 		authType = "oauth"
-	} else if hasOAuth {
+	case hasOAuth:
 		creds := p.authHelper.OAuthManager.GetCredentials()
 		authToken = creds[0].AccessToken
 		authType = "oauth"
-	} else {
+	default:
 		authToken = p.authHelper.KeyManager.GetKeys()[0]
 		authType = "api_key"
 	}
