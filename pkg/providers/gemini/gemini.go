@@ -592,65 +592,33 @@ func (p *GeminiProvider) testConnectivityWithAPIKey(ctx context.Context, apiKey 
 
 // testConnectivityWithOAuth tests connectivity using OAuth credentials
 func (p *GeminiProvider) testConnectivityWithOAuth(ctx context.Context, accessToken string) error {
-	// For OAuth, use Cloud Code API format
-	baseURL := cloudcodeBaseURL
-	projectID := p.getProjectID()
-	endpoint := ":generateContent"
-	url := fmt.Sprintf("%s/projects/%s%s", baseURL, projectID, endpoint)
+	// Validate the OAuth token using Google's tokeninfo endpoint
+	// This avoids needing a project ID which requires onboarding
+	tokenInfoURL := "https://oauth2.googleapis.com/tokeninfo?access_token=" + accessToken
 
-	// Create a minimal request for connectivity testing
-	minimalRequest := map[string]interface{}{
-		"contents": []map[string]interface{}{
-			{
-				"parts": []map[string]string{
-					{"text": "Hi"},
-				},
-			},
-		},
-		"generationConfig": map[string]interface{}{
-			"maxOutputTokens": 1, // Minimal token usage
-		},
-	}
-
-	jsonBody, err := json.Marshal(minimalRequest)
+	req, err := http.NewRequestWithContext(ctx, "GET", tokenInfoURL, nil)
 	if err != nil {
-		return types.NewInvalidRequestError(types.ProviderTypeGemini, "failed to marshal test request").
+		return types.NewNetworkError(types.ProviderTypeGemini, "failed to create token validation request").
 			WithOperation("test_connectivity").
 			WithOriginalErr(err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(jsonBody))
-	if err != nil {
-		return types.NewNetworkError(types.ProviderTypeGemini, "failed to create connectivity test request").
-			WithOperation("test_connectivity").
-			WithOriginalErr(err)
-	}
-
-	// Set authentication headers
-	p.authHelper.SetAuthHeaders(req, accessToken, "oauth")
-	req.Header.Set("Content-Type", "application/json")
-
-	// Make the request with a shorter timeout for connectivity testing
 	client := &http.Client{
 		Timeout: 15 * time.Second,
 	}
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return types.NewNetworkError(types.ProviderTypeGemini, "connectivity test failed").
+		return types.NewNetworkError(types.ProviderTypeGemini, "token validation failed").
 			WithOperation("test_connectivity").
 			WithOriginalErr(err)
 	}
 	defer func() {
-		//nolint:staticcheck // Empty branch is intentional - we ignore close errors
-		if err := resp.Body.Close(); err != nil {
-			// Log the error if a logger is available, or ignore it
-		}
+		_ = resp.Body.Close()
 	}()
 
-	// Check response status
-	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
-		return types.NewAuthError(types.ProviderTypeGemini, "invalid OAuth credentials").
+	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusBadRequest {
+		return types.NewAuthError(types.ProviderTypeGemini, "invalid or expired OAuth token").
 			WithOperation("test_connectivity").
 			WithStatusCode(resp.StatusCode)
 	}
@@ -658,7 +626,7 @@ func (p *GeminiProvider) testConnectivityWithOAuth(ctx context.Context, accessTo
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		return types.NewServerError(types.ProviderTypeGemini, resp.StatusCode,
-			fmt.Sprintf("connectivity test failed: %s", string(body))).
+			fmt.Sprintf("token validation failed: %s", string(body))).
 			WithOperation("test_connectivity")
 	}
 
