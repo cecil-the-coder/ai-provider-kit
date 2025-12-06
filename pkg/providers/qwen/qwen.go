@@ -548,25 +548,32 @@ func (p *QwenProvider) Logout(ctx context.Context) error {
 
 // TestConnectivity performs a lightweight connectivity test to verify the provider can reach its service
 func (p *QwenProvider) TestConnectivity(ctx context.Context) error {
+	// Check for OAuth token in context first (injected by caller)
+	contextToken := auth.GetOAuthToken(ctx)
+
 	// Check if we have API keys configured
 	hasAPIKeys := p.authHelper.KeyManager != nil && len(p.authHelper.KeyManager.GetKeys()) > 0
 	hasOAuth := p.authHelper.OAuthManager != nil && len(p.authHelper.OAuthManager.GetCredentials()) > 0
+	hasContextOAuth := contextToken != ""
 
-	if !hasAPIKeys && !hasOAuth {
+	if !hasAPIKeys && !hasOAuth && !hasContextOAuth {
 		return types.NewAuthError(types.ProviderTypeQwen, "no API keys or OAuth credentials configured").
 			WithOperation("test_connectivity")
 	}
 
-	// Get auth token (API key or OAuth token)
+	// Get auth token (prefer context OAuth, then stored OAuth, then API key)
 	var authToken string
 	var authType string
-	if hasAPIKeys {
-		authToken = p.authHelper.KeyManager.GetKeys()[0]
-		authType = "api_key"
-	} else {
+	if hasContextOAuth {
+		authToken = contextToken
+		authType = "oauth"
+	} else if hasOAuth {
 		creds := p.authHelper.OAuthManager.GetCredentials()
 		authToken = creds[0].AccessToken
 		authType = "oauth"
+	} else {
+		authToken = p.authHelper.KeyManager.GetKeys()[0]
+		authType = "api_key"
 	}
 
 	// Create a minimal request for connectivity testing
