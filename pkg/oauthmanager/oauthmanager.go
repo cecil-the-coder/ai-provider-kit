@@ -23,6 +23,10 @@ type OAuthKeyManager struct {
 	// Track ongoing refresh operations to prevent duplicates
 	refreshInFlight map[string]bool
 
+	// Dynamic credential provider (optional)
+	// When set, credentials are fetched from this provider instead of using cached credentials
+	credentialProvider types.CredentialProvider
+
 	// Phase 4: Advanced features
 	credMetrics      map[string]*CredentialMetrics       // Credential-level metrics
 	refreshStrategy  *RefreshStrategy                    // Smart refresh configuration
@@ -80,18 +84,73 @@ func NewOAuthKeyManager(providerName string, credentials []*types.OAuthCredentia
 	return manager
 }
 
+// SetCredentialProvider sets a dynamic credential provider for this manager
+// When set, credentials will be fetched from the provider on each request
+// rather than using the cached credentials passed to NewOAuthKeyManager.
+// This ensures that any external token refresh is immediately visible.
+func (m *OAuthKeyManager) SetCredentialProvider(provider types.CredentialProvider) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.credentialProvider = provider
+}
+
+// getCredentials returns credentials from the provider if set, otherwise returns cached credentials
+func (m *OAuthKeyManager) getCredentials(ctx context.Context) []*types.OAuthCredentialSet {
+	m.mu.RLock()
+	provider := m.credentialProvider
+	m.mu.RUnlock()
+
+	if provider != nil {
+		creds, err := provider.GetCredentials(ctx, m.providerName)
+		if err == nil && len(creds) > 0 {
+			// Update internal state for health tracking
+			m.ensureHealthTracking(creds)
+			return creds
+		}
+		// Fall back to cached credentials on error
+	}
+
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.credentials
+}
+
+// ensureHealthTracking ensures health tracking exists for all credentials
+func (m *OAuthKeyManager) ensureHealthTracking(creds []*types.OAuthCredentialSet) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	for _, cred := range creds {
+		if _, exists := m.credHealth[cred.ID]; !exists {
+			m.credHealth[cred.ID] = &credentialHealth{
+				isHealthy:   true,
+				lastSuccess: time.Now(),
+			}
+		}
+		if _, exists := m.credMetrics[cred.ID]; !exists {
+			m.credMetrics[cred.ID] = NewCredentialMetrics()
+		}
+		if _, exists := m.rotationState[cred.ID]; !exists {
+			m.rotationState[cred.ID] = &credentialRotationState{
+				CreatedAt: time.Now(),
+			}
+		}
+	}
+}
+
 // ExecuteWithFailover attempts an operation with automatic failover to next credential on failure
 // Automatically refreshes tokens if they are expired or expiring soon
 func (m *OAuthKeyManager) ExecuteWithFailover(
 	ctx context.Context,
 	operation func(context.Context, *types.OAuthCredentialSet) (string, *types.Usage, error),
 ) (string, *types.Usage, error) {
-	if len(m.credentials) == 0 {
+	credentials := m.getCredentials(ctx)
+	if len(credentials) == 0 {
 		return "", nil, fmt.Errorf("no OAuth credentials configured for %s", m.providerName)
 	}
 
 	var lastErr error
-	attemptsLimit := min(len(m.credentials), 3) // Try up to 3 credentials or all, whichever is less
+	attemptsLimit := min(len(credentials), 3) // Try up to 3 credentials or all, whichever is less
 
 	for attempt := 0; attempt < attemptsLimit; attempt++ {
 		// Get next available credential
@@ -154,33 +213,35 @@ func (m *OAuthKeyManager) ExecuteWithFailover(
 
 // GetNextCredential returns the next available OAuth credential using round-robin load balancing
 func (m *OAuthKeyManager) GetNextCredential(ctx context.Context) (*types.OAuthCredentialSet, error) {
-	if len(m.credentials) == 0 {
+	// Get credentials (from provider if set, otherwise cached)
+	credentials := m.getCredentials(ctx)
+	if len(credentials) == 0 {
 		return nil, fmt.Errorf("no OAuth credentials configured for %s", m.providerName)
 	}
 
 	// Single credential fast path
-	if len(m.credentials) == 1 {
+	if len(credentials) == 1 {
 		m.mu.RLock()
-		health := m.credHealth[m.credentials[0].ID]
-		available := health.isCredentialAvailable()
+		health := m.credHealth[credentials[0].ID]
+		available := health == nil || health.isCredentialAvailable()
 		m.mu.RUnlock()
 
 		if available {
-			return m.credentials[0], nil
+			return credentials[0], nil
 		}
 		return nil, fmt.Errorf("only OAuth credential for %s is unavailable (in backoff)", m.providerName)
 	}
 
 	// Try all credentials in round-robin order
-	startIndex := atomic.AddUint32(&m.currentIndex, 1) % uint32(len(m.credentials)) // #nosec G115 -- len() returns non-negative int, safe conversion
+	startIndex := atomic.AddUint32(&m.currentIndex, 1) % uint32(len(credentials)) // #nosec G115 -- len() returns non-negative int, safe conversion
 
-	for i := 0; i < len(m.credentials); i++ {
-		index := (int(startIndex) + i) % len(m.credentials)
+	for i := 0; i < len(credentials); i++ {
+		index := (int(startIndex) + i) % len(credentials)
 
 		m.mu.RLock()
-		cred := m.credentials[index]
+		cred := credentials[index]
 		health := m.credHealth[cred.ID]
-		available := health.isCredentialAvailable()
+		available := health == nil || health.isCredentialAvailable()
 		m.mu.RUnlock()
 
 		if available {
@@ -188,7 +249,7 @@ func (m *OAuthKeyManager) GetNextCredential(ctx context.Context) (*types.OAuthCr
 		}
 	}
 
-	return nil, fmt.Errorf("all %d OAuth credentials for %s are currently unavailable", len(m.credentials), m.providerName)
+	return nil, fmt.Errorf("all %d OAuth credentials for %s are currently unavailable", len(credentials), m.providerName)
 }
 
 // ReportSuccess reports that an API call succeeded with this credential
@@ -338,12 +399,13 @@ func (m *OAuthKeyManager) ExecuteWithFailoverMessage(
 	ctx context.Context,
 	operation func(context.Context, *types.OAuthCredentialSet) (types.ChatMessage, *types.Usage, error),
 ) (types.ChatMessage, *types.Usage, error) {
-	if len(m.credentials) == 0 {
+	credentials := m.getCredentials(ctx)
+	if len(credentials) == 0 {
 		return types.ChatMessage{}, nil, fmt.Errorf("no OAuth credentials configured for %s", m.providerName)
 	}
 
 	var lastErr error
-	attemptsLimit := min(len(m.credentials), 3) // Try up to 3 credentials or all, whichever is less
+	attemptsLimit := min(len(credentials), 3) // Try up to 3 credentials or all, whichever is less
 
 	for attempt := 0; attempt < attemptsLimit; attempt++ {
 		// Get next available credential

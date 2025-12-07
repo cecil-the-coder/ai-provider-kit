@@ -533,6 +533,15 @@ func (p *QwenProvider) IsAPIKeyConfigured() bool {
 	return p.authHelper.IsAPIKeyConfigured()
 }
 
+// SetCredentialProvider sets a dynamic credential provider for OAuth credentials
+// This allows external systems to manage credential storage and provide fresh
+// credentials on-demand, rather than relying on cached credentials.
+func (p *QwenProvider) SetCredentialProvider(provider types.CredentialProvider) {
+	if p.authHelper.OAuthManager != nil {
+		p.authHelper.OAuthManager.SetCredentialProvider(provider)
+	}
+}
+
 // Logout handles logout (clears API key and OAuth token)
 func (p *QwenProvider) Logout(ctx context.Context) error {
 	// Clear authentication first while holding lock

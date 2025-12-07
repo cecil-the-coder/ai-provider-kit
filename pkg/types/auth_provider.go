@@ -100,3 +100,40 @@ func AsTestableProvider(provider Provider) (TestableProvider, bool) {
 	testableProvider, ok := provider.(TestableProvider)
 	return testableProvider, ok
 }
+
+// =============================================================================
+// Credential Provider Interface
+// =============================================================================
+
+// CredentialProvider is an interface for dynamically providing OAuth credentials
+// This allows external systems to manage credential storage and provide fresh
+// credentials on-demand, rather than relying on cached credentials.
+//
+// When a CredentialProvider is configured, the OAuthKeyManager will call
+// GetCredentials() to fetch the current credentials instead of using its
+// internal cached copy. This ensures that any external token refresh
+// (e.g., from a separate OAuth extension) is immediately visible.
+type CredentialProvider interface {
+	// GetCredentials returns the current OAuth credentials for a provider
+	// The provider name is used to look up credentials in the storage
+	// Returns an empty slice if no credentials are available
+	GetCredentials(ctx context.Context, providerName string) ([]*OAuthCredentialSet, error)
+
+	// UpdateCredential updates a specific credential after token refresh
+	// This is called by OAuthKeyManager after it refreshes a token
+	// The implementation should persist the updated credential
+	UpdateCredential(ctx context.Context, providerName string, credential *OAuthCredentialSet) error
+}
+
+// CredentialProviderAware is an interface for providers that support dynamic credential providers
+// Providers implementing this interface can have their OAuth credentials managed externally
+type CredentialProviderAware interface {
+	// SetCredentialProvider sets a dynamic credential provider for OAuth credentials
+	SetCredentialProvider(provider CredentialProvider)
+}
+
+// AsCredentialProviderAware safely casts a provider to CredentialProviderAware interface
+func AsCredentialProviderAware(provider Provider) (CredentialProviderAware, bool) {
+	aware, ok := provider.(CredentialProviderAware)
+	return aware, ok
+}
