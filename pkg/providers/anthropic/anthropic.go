@@ -575,8 +575,14 @@ func (p *AnthropicProvider) prepareRequest(options types.GenerateOptions, model 
 				log.Printf("🟠 [Anthropic] Extracted system message from Messages array: %.100s...", msg.Content)
 			} else {
 				// Add non-system messages to the messages array
+				// Determine the role - tool messages must be converted to "user" role for Anthropic API
+				msgRole := msg.Role
+				if msg.Role == "tool" {
+					msgRole = "user"
+				}
+
 				messages = append(messages, AnthropicMessage{
-					Role:    msg.Role,
+					Role:    msgRole,
 					Content: convertToAnthropicContent(msg),
 				})
 				log.Printf("🔧 [Anthropic] Added %s message to array", msg.Role)

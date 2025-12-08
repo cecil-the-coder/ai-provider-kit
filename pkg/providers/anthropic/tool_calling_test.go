@@ -201,6 +201,9 @@ func TestToolCalling_ToolResponses(t *testing.T) {
 	// Verify tool result is included
 	assert.Len(t, request.Messages, 1)
 
+	// Verify that tool messages are converted to "user" role for Anthropic API
+	assert.Equal(t, "user", request.Messages[0].Role, "Tool messages should be converted to 'user' role")
+
 	// The content should be an array of content blocks
 	contentBlocks, ok := request.Messages[0].Content.([]AnthropicContentBlock)
 	require.True(t, ok, "Content should be []AnthropicContentBlock")
