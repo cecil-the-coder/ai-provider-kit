@@ -114,6 +114,9 @@ type ProviderConfig struct {
 
 	// Tool format
 	ToolFormat ToolFormat `json:"tool_format,omitempty"`
+
+	// Logging configuration
+	EnableVerboseLogging bool `json:"enable_verbose_logging,omitempty"`
 }
 
 // OAuthConfig represents OAuth configuration

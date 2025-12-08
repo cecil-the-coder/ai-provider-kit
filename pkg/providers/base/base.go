@@ -16,22 +16,24 @@ import (
 
 // BaseProvider provides common functionality for all providers
 type BaseProvider struct {
-	name             string
-	config           types.ProviderConfig
-	client           *http.Client
-	logger           *log.Logger
-	mutex            sync.RWMutex
-	metrics          types.ProviderMetrics
-	metricsCollector types.MetricsCollector
+	name                 string
+	config               types.ProviderConfig
+	client               *http.Client
+	logger               *log.Logger
+	mutex                sync.RWMutex
+	metrics              types.ProviderMetrics
+	metricsCollector     types.MetricsCollector
+	enableVerboseLogging bool
 }
 
 // NewBaseProvider creates a new base provider
 func NewBaseProvider(name string, config types.ProviderConfig, client *http.Client, logger *log.Logger) *BaseProvider {
 	return &BaseProvider{
-		name:   name,
-		config: config,
-		client: client,
-		logger: logger,
+		name:                 name,
+		config:               config,
+		client:               client,
+		logger:               logger,
+		enableVerboseLogging: config.EnableVerboseLogging,
 		metrics: types.ProviderMetrics{
 			RequestCount: 0,
 			SuccessCount: 0,
@@ -83,6 +85,13 @@ func (p *BaseProvider) GetConfig() types.ProviderConfig {
 	p.mutex.RLock()
 	defer p.mutex.RUnlock()
 	return p.config
+}
+
+// SetVerboseLogging enables or disables verbose request/response logging
+func (p *BaseProvider) SetVerboseLogging(enabled bool) {
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
+	p.enableVerboseLogging = enabled
 }
 
 // SetMetricsCollector sets the metrics collector for this provider
@@ -293,12 +302,22 @@ func (p *BaseProvider) LogRequest(method, url string, headers map[string]string,
 	if p.logger == nil {
 		return
 	}
+
+	// Always log basic request info
 	p.logger.Printf("Provider %s - %s %s", p.name, method, url)
-	for key, value := range headers {
-		p.logger.Printf("  Header: %s: %s", key, value)
-	}
-	if body != nil {
-		p.logger.Printf("  Body: %+v", body)
+
+	// Only log headers and body if verbose logging is enabled
+	p.mutex.RLock()
+	verboseEnabled := p.enableVerboseLogging
+	p.mutex.RUnlock()
+
+	if verboseEnabled {
+		for key, value := range headers {
+			p.logger.Printf("  Header: %s: %s", key, value)
+		}
+		if body != nil {
+			p.logger.Printf("  Body: %+v", body)
+		}
 	}
 }
 

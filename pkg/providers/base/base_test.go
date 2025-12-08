@@ -591,10 +591,10 @@ func TestBaseProvider_UpdateHealthStatusResponseTime(t *testing.T) {
 
 // TestBaseProvider_LogRequest tests the LogRequest method
 func TestBaseProvider_LogRequest(t *testing.T) {
-	t.Run("WithLogger", func(t *testing.T) {
+	t.Run("WithLogger_VerboseDisabled", func(t *testing.T) {
 		var logBuffer bytes.Buffer
 		logger := log.New(&logBuffer, "", log.LstdFlags)
-		provider := NewBaseProvider("test-provider", types.ProviderConfig{}, nil, logger)
+		provider := NewBaseProvider("test-provider", types.ProviderConfig{EnableVerboseLogging: false}, nil, logger)
 
 		headers := map[string]string{
 			"Content-Type":  "application/json",
@@ -607,6 +607,31 @@ func TestBaseProvider_LogRequest(t *testing.T) {
 		provider.LogRequest("POST", "https://api.example.com/v1/chat", headers, body)
 
 		logOutput := logBuffer.String()
+		// Basic request info should always be logged
+		assert.Contains(t, logOutput, "test-provider - POST https://api.example.com/v1/chat")
+		// Headers and body should NOT be logged when verbose is disabled
+		assert.NotContains(t, logOutput, "Header: Content-Type: application/json")
+		assert.NotContains(t, logOutput, "Header: Authorization: Bearer token")
+		assert.NotContains(t, logOutput, "Body: map[prompt:test]")
+	})
+
+	t.Run("WithLogger_VerboseEnabled", func(t *testing.T) {
+		var logBuffer bytes.Buffer
+		logger := log.New(&logBuffer, "", log.LstdFlags)
+		provider := NewBaseProvider("test-provider", types.ProviderConfig{EnableVerboseLogging: true}, nil, logger)
+
+		headers := map[string]string{
+			"Content-Type":  "application/json",
+			"Authorization": "Bearer token",
+		}
+		body := map[string]interface{}{
+			"prompt": "test",
+		}
+
+		provider.LogRequest("POST", "https://api.example.com/v1/chat", headers, body)
+
+		logOutput := logBuffer.String()
+		// Everything should be logged when verbose is enabled
 		assert.Contains(t, logOutput, "test-provider - POST https://api.example.com/v1/chat")
 		assert.Contains(t, logOutput, "Header: Content-Type: application/json")
 		assert.Contains(t, logOutput, "Header: Authorization: Bearer token")
