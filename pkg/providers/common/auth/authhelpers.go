@@ -256,38 +256,31 @@ func (h *AuthHelper) executeStreamWithAuthMessage(
 	apiKeyOperation func(context.Context, string) (types.ChatMessage, *types.Usage, error),
 ) (types.ChatMessage, *types.Usage, error) {
 	// Check for context-injected OAuth token first
+	// For streaming, we don't actually call the operation (to avoid multiple API requests)
+	// We just verify the token exists and return success
 	if contextToken := GetOAuthToken(ctx); contextToken != "" {
 		log.Printf("[AuthHelper] Using context-injected OAuth token for streaming")
-		cred := &types.OAuthCredentialSet{
-			AccessToken: contextToken,
-		}
-		_, _, err := oauthOperation(ctx, cred)
-		if err == nil {
-			return types.ChatMessage{Content: "streaming_with_context_oauth"}, &types.Usage{}, nil
-		}
+		return types.ChatMessage{Content: "streaming_with_context_oauth"}, &types.Usage{}, nil
 	}
 
 	// For streaming, we need to return a mock result since the actual streaming
 	// is handled by provider-specific streaming methods
+	// We just verify credentials exist without actually calling the operation
 	if h.OAuthManager != nil {
-		// Try OAuth first
+		// Check if OAuth credentials exist
 		creds := h.OAuthManager.GetCredentials()
-		for _, cred := range creds {
-			_, _, err := oauthOperation(ctx, cred)
-			if err == nil {
-				return types.ChatMessage{Content: "streaming_with_oauth"}, &types.Usage{}, nil
-			}
+		if len(creds) > 0 {
+			log.Printf("[AuthHelper] Using OAuth credentials for streaming (found %d credential(s))", len(creds))
+			return types.ChatMessage{Content: "streaming_with_oauth"}, &types.Usage{}, nil
 		}
 	}
 
 	if h.KeyManager != nil {
-		// Try API keys
+		// Check if API keys exist
 		keys := h.KeyManager.GetKeys()
-		for _, key := range keys {
-			_, _, err := apiKeyOperation(ctx, key)
-			if err == nil {
-				return types.ChatMessage{Content: "streaming_with_api_key"}, &types.Usage{}, nil
-			}
+		if len(keys) > 0 {
+			log.Printf("[AuthHelper] Using API key for streaming (found %d key(s))", len(keys))
+			return types.ChatMessage{Content: "streaming_with_api_key"}, &types.Usage{}, nil
 		}
 	}
 
