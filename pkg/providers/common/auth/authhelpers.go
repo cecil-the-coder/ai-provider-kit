@@ -252,8 +252,8 @@ func (h *AuthHelper) executeStreamWithAuth(
 func (h *AuthHelper) executeStreamWithAuthMessage(
 	ctx context.Context,
 	_ types.GenerateOptions,
-	oauthOperation func(context.Context, *types.OAuthCredentialSet) (types.ChatMessage, *types.Usage, error),
-	apiKeyOperation func(context.Context, string) (types.ChatMessage, *types.Usage, error),
+	_ func(context.Context, *types.OAuthCredentialSet) (types.ChatMessage, *types.Usage, error),
+	_ func(context.Context, string) (types.ChatMessage, *types.Usage, error),
 ) (types.ChatMessage, *types.Usage, error) {
 	// Check for context-injected OAuth token first
 	// For streaming, we don't actually call the operation (to avoid multiple API requests)
