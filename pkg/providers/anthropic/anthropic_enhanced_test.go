@@ -502,7 +502,7 @@ func TestMakeAPICallWithOAuth(t *testing.T) {
 	requestData := provider.prepareRequest(types.GenerateOptions{
 		Prompt: "Hello",
 		Model:  "claude-3-5-sonnet-20241022",
-	}, "claude-3-5-sonnet-20241022")
+	}, "claude-3-5-sonnet-20241022", 4096)
 
 	content, usage, err := provider.makeAPICallWithOAuth(context.Background(), requestData, "test-oauth-token")
 	assert.NoError(t, err)
@@ -558,7 +558,7 @@ func TestMakeStreamingAPICallWithOAuth(t *testing.T) {
 		Prompt: "Hello",
 		Model:  "claude-3-5-sonnet-20241022",
 		Stream: true,
-	}, "claude-3-5-sonnet-20241022")
+	}, "claude-3-5-sonnet-20241022", 4096)
 
 	stream, err := provider.makeStreamingAPICallWithOAuth(context.Background(), requestData, "test-oauth-token")
 	assert.NoError(t, err)
@@ -660,7 +660,7 @@ func TestPrepareRequestWithMessages(t *testing.T) {
 		},
 	}
 
-	request := provider.prepareRequest(options, "claude-3-5-sonnet-20241022")
+	request := provider.prepareRequest(options, "claude-3-5-sonnet-20241022", 4096)
 
 	// Should have extracted system message
 	assert.NotNil(t, request.System)

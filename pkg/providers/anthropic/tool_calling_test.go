@@ -48,7 +48,7 @@ func TestToolCalling_RequestConversion(t *testing.T) {
 	}
 
 	model := provider.GetDefaultModel()
-	request := provider.prepareRequest(options, model)
+	request := provider.prepareRequest(options, model, 4096)
 
 	// Verify tools are included in request
 	assert.NotNil(t, request.Tools)
@@ -160,7 +160,7 @@ func TestToolCalling_ToolCallsInMessages(t *testing.T) {
 	}
 
 	model := provider.GetDefaultModel()
-	request := provider.prepareRequest(options, model)
+	request := provider.prepareRequest(options, model, 4096)
 
 	// Verify tool calls are included in messages
 	assert.Len(t, request.Messages, 1)
@@ -196,7 +196,7 @@ func TestToolCalling_ToolResponses(t *testing.T) {
 	}
 
 	model := provider.GetDefaultModel()
-	request := provider.prepareRequest(options, model)
+	request := provider.prepareRequest(options, model, 4096)
 
 	// Verify tool result is included
 	assert.Len(t, request.Messages, 1)

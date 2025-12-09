@@ -210,7 +210,7 @@ func TestPrepareRequest(t *testing.T) {
 	}
 
 	model := provider.GetDefaultModel()
-	request := provider.prepareRequest(options, model)
+	request := provider.prepareRequest(options, model, 4096)
 
 	if request.Model != "claude-3-opus-20240229" {
 		t.Errorf("Expected model 'claude-3-opus-20240229', got '%s'", request.Model)

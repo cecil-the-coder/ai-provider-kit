@@ -433,7 +433,7 @@ func (p *AnthropicProvider) GenerateChatCompletion(
 
 	log.Printf("🟣 [Anthropic] Taking NON-STREAMING path")
 	// Non-streaming path - use auth helper with message support
-	requestData := p.prepareRequest(options, model)
+	requestData := p.prepareRequest(options, model, maxTokens)
 	log.Printf("🟣 [Anthropic] Request prepared")
 
 	// Define OAuth operation (returns ChatMessage)
@@ -501,7 +501,11 @@ func (p *AnthropicProvider) GenerateChatCompletion(
 
 // executeStreamWithAuth handles streaming requests with authentication
 func (p *AnthropicProvider) executeStreamWithAuth(ctx context.Context, options types.GenerateOptions, model string) (types.ChatCompletionStream, error) {
-	requestData := p.prepareRequest(options, model)
+	maxTokens := options.MaxTokens
+	if maxTokens == 0 {
+		maxTokens = 4096 // Default max tokens
+	}
+	requestData := p.prepareRequest(options, model, maxTokens)
 	requestData.Stream = true
 
 	// Check for context-injected OAuth token first
@@ -551,7 +555,7 @@ func (p *AnthropicProvider) executeStreamWithAuth(ctx context.Context, options t
 }
 
 // prepareRequest prepares the API request payload
-func (p *AnthropicProvider) prepareRequest(options types.GenerateOptions, model string) AnthropicRequest {
+func (p *AnthropicProvider) prepareRequest(options types.GenerateOptions, model string, maxTokens int) AnthropicRequest {
 	log.Printf("🔧 [Anthropic] prepareRequest ENTRY - model=%s, Messages count=%d, Prompt=%q", model, len(options.Messages), options.Prompt)
 
 	// Use the model parameter passed from GenerateChatCompletion
@@ -655,7 +659,7 @@ func (p *AnthropicProvider) prepareRequest(options types.GenerateOptions, model 
 
 	request := AnthropicRequest{
 		Model:     model,
-		MaxTokens: 4096,
+		MaxTokens: maxTokens,
 		System:    systemField,
 		Messages:  messages,
 	}
