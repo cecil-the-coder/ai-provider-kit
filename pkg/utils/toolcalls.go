@@ -29,7 +29,7 @@ func ValidateToolCallSequence(messages []types.ChatMessage) []ToolCallValidation
 			}{tc.Function.Name, i}
 		}
 
-		// Check tool responses
+		// Check tool responses from legacy ToolCallID field
 		if msg.ToolCallID != "" {
 			if _, exists := pendingCalls[msg.ToolCallID]; exists {
 				delete(pendingCalls, msg.ToolCallID)
@@ -39,6 +39,21 @@ func ValidateToolCallSequence(messages []types.ChatMessage) []ToolCallValidation
 					MessageIndex: i,
 					Issue:        "orphan_response",
 				})
+			}
+		}
+
+		// Also check tool responses in ContentParts (modern format)
+		for _, part := range msg.Parts {
+			if part.Type == types.ContentTypeToolResult && part.ToolUseID != "" {
+				if _, exists := pendingCalls[part.ToolUseID]; exists {
+					delete(pendingCalls, part.ToolUseID)
+				} else {
+					errors = append(errors, ToolCallValidationError{
+						ToolCallID:   part.ToolUseID,
+						MessageIndex: i,
+						Issue:        "orphan_response",
+					})
+				}
 			}
 		}
 	}
@@ -72,8 +87,15 @@ func GetPendingToolCalls(messages []types.ChatMessage) []types.ToolCall {
 		for _, tc := range msg.ToolCalls {
 			pending[tc.ID] = tc
 		}
+		// Check legacy ToolCallID field
 		if msg.ToolCallID != "" {
 			delete(pending, msg.ToolCallID)
+		}
+		// Also check ContentParts for tool results (modern format)
+		for _, part := range msg.Parts {
+			if part.Type == types.ContentTypeToolResult && part.ToolUseID != "" {
+				delete(pending, part.ToolUseID)
+			}
 		}
 	}
 
