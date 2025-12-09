@@ -1122,8 +1122,9 @@ func convertToAnthropicContent(msg types.ChatMessage) interface{} {
 
 	// Legacy handling for messages using Content field (backwards compatibility)
 	switch {
-	case msg.Role == "tool":
+	case msg.Role == "tool" || msg.ToolCallID != "":
 		// Tool result message - return as content array
+		// Check both role=="tool" (OpenAI format) and ToolCallID!="" (Anthropic native format)
 		return []AnthropicContentBlock{
 			{
 				Type:      "tool_result",
