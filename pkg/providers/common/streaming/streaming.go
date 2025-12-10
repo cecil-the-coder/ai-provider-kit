@@ -391,6 +391,35 @@ func NewAnthropicStreamParser() *AnthropicStreamParser {
 	return &AnthropicStreamParser{}
 }
 
+// mapAnthropicStopReason maps Anthropic stop reasons to OpenAI finish reasons
+func mapAnthropicStopReason(stopReason string) string {
+	switch stopReason {
+	case "tool_use":
+		return "tool_calls"
+	case "end_turn":
+		return "stop"
+	case "max_tokens":
+		return "length"
+	default:
+		return stopReason
+	}
+}
+
+// parseAnthropicUsage extracts usage information from an Anthropic stream response
+func parseAnthropicUsage(streamResp map[string]interface{}) types.Usage {
+	usage := types.Usage{}
+	if usageMap, ok := streamResp["usage"].(map[string]interface{}); ok {
+		if inputTokens, ok := usageMap["input_tokens"].(float64); ok {
+			usage.PromptTokens = int(inputTokens)
+		}
+		if outputTokens, ok := usageMap["output_tokens"].(float64); ok {
+			usage.CompletionTokens = int(outputTokens)
+		}
+		usage.TotalTokens = usage.PromptTokens + usage.CompletionTokens
+	}
+	return usage
+}
+
 // ParseLine parses a line from an Anthropic stream
 func (p *AnthropicStreamParser) ParseLine(data string) (types.ChatCompletionChunk, bool, error) {
 	var streamResp map[string]interface{}
@@ -491,14 +520,7 @@ func (p *AnthropicStreamParser) ParseLine(data string) (types.ChatCompletionChun
 		if delta, ok := streamResp["delta"].(map[string]interface{}); ok {
 			if stopReason, ok := delta["stop_reason"].(string); ok {
 				// Map Anthropic stop reasons to OpenAI finish reasons
-				finishReason := stopReason
-				if stopReason == "tool_use" {
-					finishReason = "tool_calls"
-				} else if stopReason == "end_turn" {
-					finishReason = "stop"
-				} else if stopReason == "max_tokens" {
-					finishReason = "length"
-				}
+				finishReason := mapAnthropicStopReason(stopReason)
 
 				return types.ChatCompletionChunk{
 					Choices: []types.ChatChoice{
@@ -514,21 +536,10 @@ func (p *AnthropicStreamParser) ParseLine(data string) (types.ChatCompletionChun
 
 	case "message_stop":
 		// Message is complete
-		chunk := types.ChatCompletionChunk{Done: true}
-
-		// Extract usage if present
-		if usage, ok := streamResp["usage"].(map[string]interface{}); ok {
-			chunk.Usage = types.Usage{}
-			if inputTokens, ok := usage["input_tokens"].(float64); ok {
-				chunk.Usage.PromptTokens = int(inputTokens)
-			}
-			if outputTokens, ok := usage["output_tokens"].(float64); ok {
-				chunk.Usage.CompletionTokens = int(outputTokens)
-			}
-			chunk.Usage.TotalTokens = chunk.Usage.PromptTokens + chunk.Usage.CompletionTokens
-		}
-
-		return chunk, true, nil
+		return types.ChatCompletionChunk{
+			Done:  true,
+			Usage: parseAnthropicUsage(streamResp),
+		}, true, nil
 
 	case "error":
 		// Handle error events
