@@ -123,6 +123,16 @@ type ChatChoice struct {
 	Delta        ChatMessage `json:"delta"`
 }
 
+// RunningModel represents a model that is currently loaded/running
+type RunningModel struct {
+	Name      string    `json:"name"`       // Model name/identifier
+	Model     string    `json:"model"`      // Model identifier (may be same as Name)
+	Size      int64     `json:"size"`       // Total model size in bytes
+	Digest    string    `json:"digest"`     // Model digest/hash
+	ExpiresAt time.Time `json:"expires_at"` // When the model will be unloaded from memory
+	SizeVRAM  int64     `json:"size_vram"`  // Size of model in VRAM (GPU memory) in bytes
+}
+
 // GenerateOptions represents options for generating content
 type GenerateOptions struct {
 	Prompt         string                 `json:"prompt"`

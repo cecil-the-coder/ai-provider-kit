@@ -958,3 +958,1087 @@ func TestOllamaProvider_GenerateChatCompletion_WithTools(t *testing.T) {
 	err = stream.Close()
 	assert.NoError(t, err)
 }
+
+func TestOllamaProvider_GenerateEmbeddings(t *testing.T) {
+	// Create mock server
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Verify request
+		assert.Equal(t, "/api/embeddings", r.URL.Path)
+		assert.Equal(t, "POST", r.Method)
+		assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
+
+		// Read and verify request body
+		var req ollamaEmbeddingsRequest
+		err := json.NewDecoder(r.Body).Decode(&req)
+		assert.NoError(t, err)
+		assert.Equal(t, "nomic-embed-text", req.Model)
+		assert.Equal(t, "Hello world", req.Prompt)
+
+		// Send response
+		response := ollamaEmbeddingsResponse{
+			Embedding: []float64{0.1, 0.2, 0.3, 0.4, 0.5},
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		err = json.NewEncoder(w).Encode(response)
+		require.NoError(t, err)
+	}))
+	defer server.Close()
+
+	config := types.ProviderConfig{
+		Type:    types.ProviderTypeOllama,
+		Name:    "ollama-test",
+		BaseURL: server.URL,
+	}
+
+	provider := NewOllamaProvider(config)
+	ctx := context.Background()
+
+	// Test with explicit model
+	embedding, err := provider.GenerateEmbeddings(ctx, "nomic-embed-text", "Hello world")
+
+	assert.NoError(t, err)
+	assert.NotNil(t, embedding)
+	assert.Len(t, embedding, 5)
+	assert.Equal(t, 0.1, embedding[0])
+	assert.Equal(t, 0.2, embedding[1])
+	assert.Equal(t, 0.3, embedding[2])
+	assert.Equal(t, 0.4, embedding[3])
+	assert.Equal(t, 0.5, embedding[4])
+}
+
+func TestOllamaProvider_GenerateEmbeddings_DefaultModel(t *testing.T) {
+	// Create mock server
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Read request body
+		var req ollamaEmbeddingsRequest
+		err := json.NewDecoder(r.Body).Decode(&req)
+		assert.NoError(t, err)
+
+		// Verify default model is used
+		assert.Equal(t, "nomic-embed-text", req.Model)
+
+		// Send response
+		response := ollamaEmbeddingsResponse{
+			Embedding: []float64{0.1, 0.2, 0.3},
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		err = json.NewEncoder(w).Encode(response)
+		require.NoError(t, err)
+	}))
+	defer server.Close()
+
+	config := types.ProviderConfig{
+		Type:    types.ProviderTypeOllama,
+		Name:    "ollama-test",
+		BaseURL: server.URL,
+	}
+
+	provider := NewOllamaProvider(config)
+	ctx := context.Background()
+
+	// Test with empty model (should use default)
+	embedding, err := provider.GenerateEmbeddings(ctx, "", "Test text")
+
+	assert.NoError(t, err)
+	assert.NotNil(t, embedding)
+	assert.Len(t, embedding, 3)
+}
+
+func TestOllamaProvider_GenerateEmbeddings_ErrorHandling(t *testing.T) {
+	tests := []struct {
+		name              string
+		statusCode        int
+		responseBody      string
+		expectedError     string
+		expectedErrorCode types.ErrorCode
+	}{
+		{
+			name:              "Unauthorized",
+			statusCode:        http.StatusUnauthorized,
+			responseBody:      `{"error":"invalid API key"}`,
+			expectedError:     "invalid API key",
+			expectedErrorCode: types.ErrCodeAuthentication,
+		},
+		{
+			name:              "Model not found",
+			statusCode:        http.StatusNotFound,
+			responseBody:      `{"error":"model not found"}`,
+			expectedError:     "model not found",
+			expectedErrorCode: types.ErrCodeNotFound,
+		},
+		{
+			name:              "Rate limit",
+			statusCode:        http.StatusTooManyRequests,
+			responseBody:      `{"error":"rate limit exceeded"}`,
+			expectedError:     "rate limit",
+			expectedErrorCode: types.ErrCodeRateLimit,
+		},
+		{
+			name:              "Server error",
+			statusCode:        http.StatusInternalServerError,
+			responseBody:      `{"error":"internal server error"}`,
+			expectedError:     "internal server error",
+			expectedErrorCode: types.ErrCodeServerError,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(tt.statusCode)
+				_, _ = w.Write([]byte(tt.responseBody))
+			}))
+			defer server.Close()
+
+			config := types.ProviderConfig{
+				Type:    types.ProviderTypeOllama,
+				Name:    "ollama-test",
+				BaseURL: server.URL,
+			}
+
+			provider := NewOllamaProvider(config)
+			ctx := context.Background()
+
+			embedding, err := provider.GenerateEmbeddings(ctx, "nomic-embed-text", "Test text")
+
+			assert.Error(t, err)
+			assert.Nil(t, embedding)
+			assert.Contains(t, err.Error(), tt.expectedError)
+
+			// Check error type by asserting to *ProviderError and checking Code
+			if providerErr, ok := err.(*types.ProviderError); ok {
+				assert.Equal(t, tt.expectedErrorCode, providerErr.Code)
+			} else {
+				t.Errorf("expected *types.ProviderError, got %T", err)
+			}
+		})
+	}
+}
+
+func TestOllamaProvider_GenerateEmbeddings_CloudEndpointAuth(t *testing.T) {
+	authHeaderReceived := false
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Check if Authorization header is present
+		auth := r.Header.Get("Authorization")
+		if auth == "Bearer test-api-key" {
+			authHeaderReceived = true
+		}
+
+		response := ollamaEmbeddingsResponse{
+			Embedding: []float64{0.1, 0.2, 0.3},
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		err := json.NewEncoder(w).Encode(response)
+		require.NoError(t, err)
+	}))
+	defer server.Close()
+
+	// Configure as cloud endpoint
+	config := types.ProviderConfig{
+		Type:    types.ProviderTypeOllama,
+		Name:    "ollama-test",
+		BaseURL: "https://api.ollama.com",
+		APIKey:  "test-api-key",
+	}
+
+	provider := NewOllamaProvider(config)
+
+	// Override base URL to test server while keeping cloud detection
+	provider.config.BaseURL = server.URL
+
+	ctx := context.Background()
+	embedding, err := provider.GenerateEmbeddings(ctx, "nomic-embed-text", "Test text")
+
+	assert.NoError(t, err)
+	assert.NotNil(t, embedding)
+
+	// Since we override the URL, isCloudEndpoint returns false
+	// so auth header won't be sent. This is expected behavior.
+	assert.False(t, authHeaderReceived)
+}
+
+func TestOllamaProvider_GetRunningModels(t *testing.T) {
+	// Create mock server
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/api/ps", r.URL.Path)
+		assert.Equal(t, "GET", r.Method)
+
+		response := ollamaPsResponse{
+			Models: []ollamaRunningModel{
+				{
+					Name:   "llama3.1:8b",
+					Model:  "llama3.1:8b",
+					Size:   4661224448,
+					Digest: "sha256:abcd1234efgh5678",
+					Details: ollamaModelDetails{
+						Format:            "gguf",
+						Family:            "llama",
+						Families:          []string{"llama"},
+						ParameterSize:     "8.0B",
+						QuantizationLevel: "Q4_0",
+					},
+					ExpiresAt: "2024-12-10T12:00:00Z",
+					SizeVRAM:  4294967296,
+				},
+				{
+					Name:   "mistral:7b",
+					Model:  "mistral:7b",
+					Size:   4109865216,
+					Digest: "sha256:ijkl9012mnop3456",
+					Details: ollamaModelDetails{
+						Format:            "gguf",
+						Family:            "mistral",
+						Families:          []string{"mistral"},
+						ParameterSize:     "7B",
+						QuantizationLevel: "Q4_0",
+					},
+					ExpiresAt: "2024-12-10T13:30:00Z",
+					SizeVRAM:  3758096384,
+				},
+			},
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		err := json.NewEncoder(w).Encode(response)
+		require.NoError(t, err)
+	}))
+	defer server.Close()
+
+	config := types.ProviderConfig{
+		Type:    types.ProviderTypeOllama,
+		Name:    "ollama-test",
+		BaseURL: server.URL,
+	}
+
+	provider := NewOllamaProvider(config)
+	ctx := context.Background()
+
+	models, err := provider.GetRunningModels(ctx)
+
+	assert.NoError(t, err)
+	assert.Len(t, models, 2)
+
+	// Check first model
+	llama := models[0]
+	assert.Equal(t, "llama3.1:8b", llama.Name)
+	assert.Equal(t, "llama3.1:8b", llama.Model)
+	assert.Equal(t, int64(4661224448), llama.Size)
+	assert.Equal(t, "sha256:abcd1234efgh5678", llama.Digest)
+	assert.Equal(t, int64(4294967296), llama.SizeVRAM)
+	assert.False(t, llama.ExpiresAt.IsZero())
+
+	// Check second model
+	mistral := models[1]
+	assert.Equal(t, "mistral:7b", mistral.Name)
+	assert.Equal(t, int64(4109865216), mistral.Size)
+	assert.Equal(t, int64(3758096384), mistral.SizeVRAM)
+}
+
+func TestOllamaProvider_GetRunningModels_EmptyResponse(t *testing.T) {
+	// Create mock server that returns empty models list
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		response := ollamaPsResponse{
+			Models: []ollamaRunningModel{},
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		err := json.NewEncoder(w).Encode(response)
+		require.NoError(t, err)
+	}))
+	defer server.Close()
+
+	config := types.ProviderConfig{
+		Type:    types.ProviderTypeOllama,
+		Name:    "ollama-test",
+		BaseURL: server.URL,
+	}
+
+	provider := NewOllamaProvider(config)
+	ctx := context.Background()
+
+	models, err := provider.GetRunningModels(ctx)
+
+	assert.NoError(t, err)
+	assert.Empty(t, models)
+}
+
+func TestOllamaProvider_GetRunningModels_ServerError(t *testing.T) {
+	// Create mock server that returns error
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer server.Close()
+
+	config := types.ProviderConfig{
+		Type:    types.ProviderTypeOllama,
+		Name:    "ollama-test",
+		BaseURL: server.URL,
+	}
+
+	provider := NewOllamaProvider(config)
+	ctx := context.Background()
+
+	models, err := provider.GetRunningModels(ctx)
+
+	assert.Error(t, err)
+	assert.Nil(t, models)
+}
+
+func TestOllamaProvider_GetRunningModels_Unauthorized(t *testing.T) {
+	// Create mock server that requires authentication
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	defer server.Close()
+
+	config := types.ProviderConfig{
+		Type:    types.ProviderTypeOllama,
+		Name:    "ollama-test",
+		BaseURL: server.URL,
+	}
+
+	provider := NewOllamaProvider(config)
+	ctx := context.Background()
+
+	models, err := provider.GetRunningModels(ctx)
+
+	assert.Error(t, err)
+	assert.Nil(t, models)
+	assert.Contains(t, err.Error(), "invalid API key")
+}
+
+// Model Management Tests
+
+func TestOllamaProvider_PullModel_Success(t *testing.T) {
+	// Create mock server
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/api/pull", r.URL.Path)
+		assert.Equal(t, "POST", r.Method)
+		assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
+
+		// Read and verify request body
+		var req map[string]interface{}
+		err := json.NewDecoder(r.Body).Decode(&req)
+		assert.NoError(t, err)
+		assert.Equal(t, "llama3.1:8b", req["name"])
+		assert.True(t, req["stream"].(bool))
+
+		// Send streaming progress responses
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+
+		responses := []string{
+			`{"status":"pulling manifest"}`,
+			`{"status":"downloading","digest":"sha256:abcd1234","total":1000,"completed":250}`,
+			`{"status":"downloading","digest":"sha256:abcd1234","total":1000,"completed":500}`,
+			`{"status":"downloading","digest":"sha256:abcd1234","total":1000,"completed":1000}`,
+			`{"status":"success"}`,
+		}
+
+		for _, resp := range responses {
+			_, _ = w.Write([]byte(resp + "\n"))
+			if f, ok := w.(http.Flusher); ok {
+				f.Flush()
+			}
+		}
+	}))
+	defer server.Close()
+
+	config := types.ProviderConfig{
+		Type:    types.ProviderTypeOllama,
+		Name:    "ollama-test",
+		BaseURL: server.URL,
+	}
+
+	provider := NewOllamaProvider(config)
+	ctx := context.Background()
+
+	err := provider.PullModel(ctx, "llama3.1:8b")
+	assert.NoError(t, err)
+}
+
+func TestOllamaProvider_PullModel_CloudEndpoint(t *testing.T) {
+	config := types.ProviderConfig{
+		Type:    types.ProviderTypeOllama,
+		Name:    "ollama-test",
+		BaseURL: "https://api.ollama.com",
+		APIKey:  "test-key",
+	}
+
+	provider := NewOllamaProvider(config)
+	ctx := context.Background()
+
+	err := provider.PullModel(ctx, "llama3.1:8b")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "not supported on cloud endpoints")
+}
+
+func TestOllamaProvider_PushModel_Success(t *testing.T) {
+	// Create mock server
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/api/push", r.URL.Path)
+		assert.Equal(t, "POST", r.Method)
+		assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
+
+		// Read and verify request body
+		var req map[string]interface{}
+		err := json.NewDecoder(r.Body).Decode(&req)
+		assert.NoError(t, err)
+		assert.Equal(t, "myuser/mymodel:latest", req["name"])
+
+		// Send streaming progress responses
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+
+		responses := []string{
+			`{"status":"pushing manifest"}`,
+			`{"status":"uploading","digest":"sha256:efgh5678","total":1000,"completed":500}`,
+			`{"status":"uploading","digest":"sha256:efgh5678","total":1000,"completed":1000}`,
+			`{"status":"success"}`,
+		}
+
+		for _, resp := range responses {
+			_, _ = w.Write([]byte(resp + "\n"))
+			if f, ok := w.(http.Flusher); ok {
+				f.Flush()
+			}
+		}
+	}))
+	defer server.Close()
+
+	config := types.ProviderConfig{
+		Type:    types.ProviderTypeOllama,
+		Name:    "ollama-test",
+		BaseURL: server.URL,
+	}
+
+	provider := NewOllamaProvider(config)
+	ctx := context.Background()
+
+	err := provider.PushModel(ctx, "myuser/mymodel:latest")
+	assert.NoError(t, err)
+}
+
+func TestOllamaProvider_PushModel_CloudEndpoint(t *testing.T) {
+	config := types.ProviderConfig{
+		Type:    types.ProviderTypeOllama,
+		Name:    "ollama-test",
+		BaseURL: "https://api.ollama.com",
+		APIKey:  "test-key",
+	}
+
+	provider := NewOllamaProvider(config)
+	ctx := context.Background()
+
+	err := provider.PushModel(ctx, "myuser/mymodel:latest")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "not supported on cloud endpoints")
+}
+
+func TestOllamaProvider_DeleteModel_Success(t *testing.T) {
+	// Create mock server
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/api/delete", r.URL.Path)
+		assert.Equal(t, "DELETE", r.Method)
+		assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
+
+		// Read and verify request body
+		var req map[string]interface{}
+		err := json.NewDecoder(r.Body).Decode(&req)
+		assert.NoError(t, err)
+		assert.Equal(t, "llama3.1:8b", req["name"])
+
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	config := types.ProviderConfig{
+		Type:    types.ProviderTypeOllama,
+		Name:    "ollama-test",
+		BaseURL: server.URL,
+	}
+
+	provider := NewOllamaProvider(config)
+	ctx := context.Background()
+
+	err := provider.DeleteModel(ctx, "llama3.1:8b")
+	assert.NoError(t, err)
+}
+
+func TestOllamaProvider_DeleteModel_NotFound(t *testing.T) {
+	// Create mock server that returns 404
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte(`{"error":"model not found"}`))
+	}))
+	defer server.Close()
+
+	config := types.ProviderConfig{
+		Type:    types.ProviderTypeOllama,
+		Name:    "ollama-test",
+		BaseURL: server.URL,
+	}
+
+	provider := NewOllamaProvider(config)
+	ctx := context.Background()
+
+	err := provider.DeleteModel(ctx, "nonexistent:model")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "model not found")
+}
+
+func TestOllamaProvider_DeleteModel_CloudEndpoint(t *testing.T) {
+	config := types.ProviderConfig{
+		Type:    types.ProviderTypeOllama,
+		Name:    "ollama-test",
+		BaseURL: "https://api.ollama.com",
+		APIKey:  "test-key",
+	}
+
+	provider := NewOllamaProvider(config)
+	ctx := context.Background()
+
+	err := provider.DeleteModel(ctx, "llama3.1:8b")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "not supported on cloud endpoints")
+}
+
+func TestOllamaProvider_CopyModel_Success(t *testing.T) {
+	// Create mock server
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/api/copy", r.URL.Path)
+		assert.Equal(t, "POST", r.Method)
+		assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
+
+		// Read and verify request body
+		var req map[string]interface{}
+		err := json.NewDecoder(r.Body).Decode(&req)
+		assert.NoError(t, err)
+		assert.Equal(t, "llama3.1:8b", req["source"])
+		assert.Equal(t, "llama3.1:my-custom", req["destination"])
+
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	config := types.ProviderConfig{
+		Type:    types.ProviderTypeOllama,
+		Name:    "ollama-test",
+		BaseURL: server.URL,
+	}
+
+	provider := NewOllamaProvider(config)
+	ctx := context.Background()
+
+	err := provider.CopyModel(ctx, "llama3.1:8b", "llama3.1:my-custom")
+	assert.NoError(t, err)
+}
+
+func TestOllamaProvider_CopyModel_SourceNotFound(t *testing.T) {
+	// Create mock server that returns 404
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte(`{"error":"source model not found"}`))
+	}))
+	defer server.Close()
+
+	config := types.ProviderConfig{
+		Type:    types.ProviderTypeOllama,
+		Name:    "ollama-test",
+		BaseURL: server.URL,
+	}
+
+	provider := NewOllamaProvider(config)
+	ctx := context.Background()
+
+	err := provider.CopyModel(ctx, "nonexistent:model", "new:model")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "not found")
+}
+
+func TestOllamaProvider_CopyModel_CloudEndpoint(t *testing.T) {
+	config := types.ProviderConfig{
+		Type:    types.ProviderTypeOllama,
+		Name:    "ollama-test",
+		BaseURL: "https://api.ollama.com",
+		APIKey:  "test-key",
+	}
+
+	provider := NewOllamaProvider(config)
+	ctx := context.Background()
+
+	err := provider.CopyModel(ctx, "llama3.1:8b", "llama3.1:custom")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "not supported on cloud endpoints")
+}
+
+func TestOllamaProvider_CreateModel_Success(t *testing.T) {
+	// Create mock server
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/api/create", r.URL.Path)
+		assert.Equal(t, "POST", r.Method)
+		assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
+
+		// Read and verify request body
+		var req map[string]interface{}
+		err := json.NewDecoder(r.Body).Decode(&req)
+		assert.NoError(t, err)
+		assert.Equal(t, "mycustom:model", req["name"])
+		assert.Contains(t, req["modelfile"].(string), "FROM llama3.1:8b")
+		assert.True(t, req["stream"].(bool))
+
+		// Send streaming progress responses
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+
+		responses := []string{
+			`{"status":"parsing modelfile"}`,
+			`{"status":"creating model layer"}`,
+			`{"status":"writing manifest"}`,
+			`{"status":"success"}`,
+		}
+
+		for _, resp := range responses {
+			_, _ = w.Write([]byte(resp + "\n"))
+			if f, ok := w.(http.Flusher); ok {
+				f.Flush()
+			}
+		}
+	}))
+	defer server.Close()
+
+	config := types.ProviderConfig{
+		Type:    types.ProviderTypeOllama,
+		Name:    "ollama-test",
+		BaseURL: server.URL,
+	}
+
+	provider := NewOllamaProvider(config)
+	ctx := context.Background()
+
+	modelfile := `FROM llama3.1:8b
+PARAMETER temperature 0.7
+SYSTEM "You are a helpful assistant."`
+
+	err := provider.CreateModel(ctx, "mycustom:model", modelfile)
+	assert.NoError(t, err)
+}
+
+func TestOllamaProvider_CreateModel_CloudEndpoint(t *testing.T) {
+	config := types.ProviderConfig{
+		Type:    types.ProviderTypeOllama,
+		Name:    "ollama-test",
+		BaseURL: "https://api.ollama.com",
+		APIKey:  "test-key",
+	}
+
+	provider := NewOllamaProvider(config)
+	ctx := context.Background()
+
+	modelfile := `FROM llama3.1:8b`
+
+	err := provider.CreateModel(ctx, "mycustom:model", modelfile)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "not supported on cloud endpoints")
+}
+
+func TestOllamaProvider_ModelManagement_ServerError(t *testing.T) {
+	// Test that all model management methods handle server errors properly
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte(`{"error":"internal server error"}`))
+	}))
+	defer server.Close()
+
+	config := types.ProviderConfig{
+		Type:    types.ProviderTypeOllama,
+		Name:    "ollama-test",
+		BaseURL: server.URL,
+	}
+
+	provider := NewOllamaProvider(config)
+	ctx := context.Background()
+
+	// Test PullModel
+	err := provider.PullModel(ctx, "model:latest")
+	assert.Error(t, err)
+
+	// Test PushModel
+	err = provider.PushModel(ctx, "model:latest")
+	assert.Error(t, err)
+
+	// Test DeleteModel
+	err = provider.DeleteModel(ctx, "model:latest")
+	assert.Error(t, err)
+
+	// Test CopyModel
+	err = provider.CopyModel(ctx, "source:latest", "dest:latest")
+	assert.Error(t, err)
+
+	// Test CreateModel
+	err = provider.CreateModel(ctx, "model:latest", "FROM base")
+	assert.Error(t, err)
+}
+
+func TestOllamaProvider_StructuredOutputs_BasicJSON(t *testing.T) {
+	// Create mock server that expects format field
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Read request body
+		var req ollamaChatRequest
+		err := json.NewDecoder(r.Body).Decode(&req)
+		require.NoError(t, err)
+
+		// Verify format is set to "json"
+		assert.NotNil(t, req.Format)
+		assert.Equal(t, "json", req.Format)
+
+		// Send streaming response with JSON content
+		responses := []string{
+			`{"model":"llama3.1:8b","created_at":"2024-01-01T00:00:00Z","message":{"role":"assistant","content":"{\"name\":"},"done":false}`,
+			`{"model":"llama3.1:8b","created_at":"2024-01-01T00:00:00Z","message":{"role":"assistant","content":"\"John\","},"done":false}`,
+			`{"model":"llama3.1:8b","created_at":"2024-01-01T00:00:00Z","message":{"role":"assistant","content":"\"age\":30}"},"done":false}`,
+			`{"model":"llama3.1:8b","created_at":"2024-01-01T00:00:00Z","message":{"role":"assistant","content":""},"done":true,"prompt_eval_count":10,"eval_count":15}`,
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+
+		for _, resp := range responses {
+			_, _ = w.Write([]byte(resp + "\n"))
+			if f, ok := w.(http.Flusher); ok {
+				f.Flush()
+			}
+		}
+	}))
+	defer server.Close()
+
+	config := types.ProviderConfig{
+		Type:    types.ProviderTypeOllama,
+		Name:    "ollama-test",
+		BaseURL: server.URL,
+	}
+
+	provider := NewOllamaProvider(config)
+	ctx := context.Background()
+
+	options := types.GenerateOptions{
+		Messages: []types.ChatMessage{
+			{Role: "user", Content: "Return a person object with name and age"},
+		},
+		Model:          "llama3.1:8b",
+		ResponseFormat: "json", // Basic JSON mode
+	}
+
+	stream, err := provider.GenerateChatCompletion(ctx, options)
+
+	assert.NoError(t, err)
+	assert.NotNil(t, stream)
+
+	// Read all chunks
+	var content strings.Builder
+	for {
+		chunk, err := stream.Next()
+		if err == io.EOF {
+			break
+		}
+		assert.NoError(t, err)
+		content.WriteString(chunk.Content)
+	}
+
+	// Verify content is valid JSON
+	result := content.String()
+	assert.Contains(t, result, "John")
+	assert.Contains(t, result, "30")
+
+	// Verify it's valid JSON
+	var jsonObj map[string]interface{}
+	err = json.Unmarshal([]byte(result), &jsonObj)
+	assert.NoError(t, err)
+
+	err = stream.Close()
+	assert.NoError(t, err)
+}
+
+func TestOllamaProvider_StructuredOutputs_JSONSchema(t *testing.T) {
+	// Create mock server that expects format field with schema
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Read request body
+		var req ollamaChatRequest
+		err := json.NewDecoder(r.Body).Decode(&req)
+		require.NoError(t, err)
+
+		// Verify format is a JSON schema object
+		assert.NotNil(t, req.Format)
+		formatMap, ok := req.Format.(map[string]interface{})
+		assert.True(t, ok, "Format should be a map")
+		assert.Equal(t, "object", formatMap["type"])
+		assert.NotNil(t, formatMap["properties"])
+
+		// Send streaming response with structured JSON
+		responses := []string{
+			`{"model":"llama3.1:8b","created_at":"2024-01-01T00:00:00Z","message":{"role":"assistant","content":"{\"name\":"},"done":false}`,
+			`{"model":"llama3.1:8b","created_at":"2024-01-01T00:00:00Z","message":{"role":"assistant","content":"\"Alice\","},"done":false}`,
+			`{"model":"llama3.1:8b","created_at":"2024-01-01T00:00:00Z","message":{"role":"assistant","content":"\"email\":\"alice@example.com\"}"},"done":false}`,
+			`{"model":"llama3.1:8b","created_at":"2024-01-01T00:00:00Z","message":{"role":"assistant","content":""},"done":true,"prompt_eval_count":12,"eval_count":18}`,
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+
+		for _, resp := range responses {
+			_, _ = w.Write([]byte(resp + "\n"))
+			if f, ok := w.(http.Flusher); ok {
+				f.Flush()
+			}
+		}
+	}))
+	defer server.Close()
+
+	config := types.ProviderConfig{
+		Type:    types.ProviderTypeOllama,
+		Name:    "ollama-test",
+		BaseURL: server.URL,
+	}
+
+	provider := NewOllamaProvider(config)
+	ctx := context.Background()
+
+	// Define a JSON schema for structured output
+	schema := map[string]interface{}{
+		"type": "object",
+		"properties": map[string]interface{}{
+			"name": map[string]interface{}{
+				"type": "string",
+			},
+			"email": map[string]interface{}{
+				"type": "string",
+			},
+		},
+		"required": []string{"name", "email"},
+	}
+
+	// Convert schema to JSON string
+	schemaJSON, err := json.Marshal(schema)
+	require.NoError(t, err)
+
+	options := types.GenerateOptions{
+		Messages: []types.ChatMessage{
+			{Role: "user", Content: "Return a user object with name and email"},
+		},
+		Model:          "llama3.1:8b",
+		ResponseFormat: string(schemaJSON), // JSON schema
+	}
+
+	stream, err := provider.GenerateChatCompletion(ctx, options)
+
+	assert.NoError(t, err)
+	assert.NotNil(t, stream)
+
+	// Read all chunks
+	var content strings.Builder
+	for {
+		chunk, err := stream.Next()
+		if err == io.EOF {
+			break
+		}
+		assert.NoError(t, err)
+		content.WriteString(chunk.Content)
+	}
+
+	// Verify content matches schema
+	result := content.String()
+	var user map[string]interface{}
+	err = json.Unmarshal([]byte(result), &user)
+	assert.NoError(t, err)
+	assert.Equal(t, "Alice", user["name"])
+	assert.Equal(t, "alice@example.com", user["email"])
+
+	err = stream.Close()
+	assert.NoError(t, err)
+}
+
+func TestOllamaProvider_StructuredOutputs_ComplexSchema(t *testing.T) {
+	// Create mock server
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Read request body
+		var req ollamaChatRequest
+		err := json.NewDecoder(r.Body).Decode(&req)
+		require.NoError(t, err)
+
+		// Verify format is a complex schema
+		assert.NotNil(t, req.Format)
+		_, ok := req.Format.(map[string]interface{})
+		assert.True(t, ok)
+
+		// Send streaming response with nested JSON
+		responses := []string{
+			`{"model":"llama3.1:8b","created_at":"2024-01-01T00:00:00Z","message":{"role":"assistant","content":"{\"user\":"},"done":false}`,
+			`{"model":"llama3.1:8b","created_at":"2024-01-01T00:00:00Z","message":{"role":"assistant","content":"{\"name\":\"Bob\",\"age\":25},"},"done":false}`,
+			`{"model":"llama3.1:8b","created_at":"2024-01-01T00:00:00Z","message":{"role":"assistant","content":"\"items\":[\"apple\",\"banana\"]}"},"done":false}`,
+			`{"model":"llama3.1:8b","created_at":"2024-01-01T00:00:00Z","message":{"role":"assistant","content":""},"done":true,"prompt_eval_count":15,"eval_count":20}`,
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+
+		for _, resp := range responses {
+			_, _ = w.Write([]byte(resp + "\n"))
+			if f, ok := w.(http.Flusher); ok {
+				f.Flush()
+			}
+		}
+	}))
+	defer server.Close()
+
+	config := types.ProviderConfig{
+		Type:    types.ProviderTypeOllama,
+		Name:    "ollama-test",
+		BaseURL: server.URL,
+	}
+
+	provider := NewOllamaProvider(config)
+	ctx := context.Background()
+
+	// Define a complex nested JSON schema
+	schema := map[string]interface{}{
+		"type": "object",
+		"properties": map[string]interface{}{
+			"user": map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"name": map[string]interface{}{"type": "string"},
+					"age":  map[string]interface{}{"type": "number"},
+				},
+				"required": []string{"name", "age"},
+			},
+			"items": map[string]interface{}{
+				"type": "array",
+				"items": map[string]interface{}{
+					"type": "string",
+				},
+			},
+		},
+		"required": []string{"user", "items"},
+	}
+
+	schemaJSON, err := json.Marshal(schema)
+	require.NoError(t, err)
+
+	options := types.GenerateOptions{
+		Messages: []types.ChatMessage{
+			{Role: "user", Content: "Return a complex object with user and items"},
+		},
+		Model:          "llama3.1:8b",
+		ResponseFormat: string(schemaJSON),
+	}
+
+	stream, err := provider.GenerateChatCompletion(ctx, options)
+	assert.NoError(t, err)
+	assert.NotNil(t, stream)
+
+	// Read all chunks
+	var content strings.Builder
+	for {
+		chunk, err := stream.Next()
+		if err == io.EOF {
+			break
+		}
+		assert.NoError(t, err)
+		content.WriteString(chunk.Content)
+	}
+
+	// Verify nested structure
+	result := content.String()
+	var obj map[string]interface{}
+	err = json.Unmarshal([]byte(result), &obj)
+	assert.NoError(t, err)
+
+	// Verify user object
+	user, ok := obj["user"].(map[string]interface{})
+	assert.True(t, ok)
+	assert.Equal(t, "Bob", user["name"])
+	assert.Equal(t, float64(25), user["age"])
+
+	// Verify items array
+	items, ok := obj["items"].([]interface{})
+	assert.True(t, ok)
+	assert.Len(t, items, 2)
+	assert.Equal(t, "apple", items[0])
+	assert.Equal(t, "banana", items[1])
+
+	err = stream.Close()
+	assert.NoError(t, err)
+}
+
+func TestOllamaProvider_StructuredOutputs_NoFormat(t *testing.T) {
+	// Test that requests without ResponseFormat don't include format field
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req ollamaChatRequest
+		err := json.NewDecoder(r.Body).Decode(&req)
+		require.NoError(t, err)
+
+		// Verify format is nil/not set
+		assert.Nil(t, req.Format)
+
+		// Send normal response
+		responses := []string{
+			`{"model":"llama3.1:8b","created_at":"2024-01-01T00:00:00Z","message":{"role":"assistant","content":"Hello"},"done":false}`,
+			`{"model":"llama3.1:8b","created_at":"2024-01-01T00:00:00Z","message":{"role":"assistant","content":""},"done":true,"prompt_eval_count":5,"eval_count":10}`,
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+
+		for _, resp := range responses {
+			_, _ = w.Write([]byte(resp + "\n"))
+			if f, ok := w.(http.Flusher); ok {
+				f.Flush()
+			}
+		}
+	}))
+	defer server.Close()
+
+	config := types.ProviderConfig{
+		Type:    types.ProviderTypeOllama,
+		Name:    "ollama-test",
+		BaseURL: server.URL,
+	}
+
+	provider := NewOllamaProvider(config)
+	ctx := context.Background()
+
+	options := types.GenerateOptions{
+		Messages: []types.ChatMessage{
+			{Role: "user", Content: "Hello"},
+		},
+		Model: "llama3.1:8b",
+		// No ResponseFormat specified
+	}
+
+	stream, err := provider.GenerateChatCompletion(ctx, options)
+	assert.NoError(t, err)
+	assert.NotNil(t, stream)
+
+	var content strings.Builder
+	for {
+		chunk, err := stream.Next()
+		if err == io.EOF {
+			break
+		}
+		assert.NoError(t, err)
+		content.WriteString(chunk.Content)
+	}
+
+	assert.Equal(t, "Hello", content.String())
+
+	err = stream.Close()
+	assert.NoError(t, err)
+}

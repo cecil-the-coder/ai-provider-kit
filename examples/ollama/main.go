@@ -11,6 +11,8 @@ import (
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 )
 
+const separator = "\n==================================================\n"
+
 func main() {
 	fmt.Println("=== Ollama Provider Example ===")
 
@@ -18,7 +20,7 @@ func main() {
 	fmt.Println("1. Local Ollama Instance")
 	runLocalExample()
 
-	fmt.Println("\n" + repeat("=", 50) + "\n")
+	fmt.Print(separator)
 
 	// Example 2: Cloud Ollama with API key (if configured)
 	if os.Getenv("OLLAMA_API_KEY") != "" {
@@ -28,16 +30,22 @@ func main() {
 		fmt.Println("2. Ollama Cloud (Skipped - OLLAMA_API_KEY not set)")
 	}
 
-	fmt.Println("\n" + repeat("=", 50) + "\n")
+	fmt.Print(separator)
 
 	// Example 3: Model discovery
 	fmt.Println("3. Model Discovery")
 	runModelDiscoveryExample()
 
-	fmt.Println("\n" + repeat("=", 50) + "\n")
+	fmt.Print(separator)
 
-	// Example 4: Tool calling
-	fmt.Println("4. Tool Calling Example")
+	// Example 4: Running models info
+	fmt.Println("4. Running Models Info")
+	runRunningModelsExample()
+
+	fmt.Print(separator)
+
+	// Example 5: Tool calling
+	fmt.Println("5. Tool Calling Example")
 	runToolCallingExample()
 }
 
@@ -209,6 +217,51 @@ func runModelDiscoveryExample() {
 	}
 }
 
+// runRunningModelsExample demonstrates listing currently loaded models
+func runRunningModelsExample() {
+	config := types.ProviderConfig{
+		Type:         types.ProviderTypeOllama,
+		Name:         "ollama-local",
+		BaseURL:      "http://localhost:11434",
+		DefaultModel: "llama3.1:8b",
+	}
+
+	provider := ollama.NewOllamaProvider(config)
+	ctx := context.Background()
+
+	// Check connectivity
+	if err := provider.HealthCheck(ctx); err != nil {
+		log.Printf("Warning: Ollama not available: %v\n", err)
+		return
+	}
+
+	// Get running models
+	runningModels, err := provider.GetRunningModels(ctx)
+	if err != nil {
+		log.Printf("Error fetching running models: %v\n", err)
+		return
+	}
+
+	if len(runningModels) == 0 {
+		fmt.Println("No models currently loaded in memory")
+		fmt.Println("Try running a chat completion first to load a model")
+		return
+	}
+
+	fmt.Printf("Found %d running model(s):\n\n", len(runningModels))
+
+	for _, model := range runningModels {
+		fmt.Printf("Model: %s\n", model.Name)
+		fmt.Printf("  Size: %.2f GB\n", float64(model.Size)/1024/1024/1024)
+		fmt.Printf("  VRAM: %.2f GB\n", float64(model.SizeVRAM)/1024/1024/1024)
+		fmt.Printf("  Digest: %s\n", model.Digest[:16]+"...")
+		if !model.ExpiresAt.IsZero() {
+			fmt.Printf("  Expires: %s\n", model.ExpiresAt.Format("2006-01-02 15:04:05"))
+		}
+		fmt.Println()
+	}
+}
+
 // runToolCallingExample demonstrates function calling with tools
 func runToolCallingExample() {
 	config := types.ProviderConfig{
@@ -324,13 +377,4 @@ func runToolCallingExample() {
 		}
 	}
 	fmt.Println()
-}
-
-// Helper function to repeat strings (Go doesn't have this built-in)
-func repeat(s string, count int) string {
-	result := ""
-	for i := 0; i < count; i++ {
-		result += s
-	}
-	return result
 }

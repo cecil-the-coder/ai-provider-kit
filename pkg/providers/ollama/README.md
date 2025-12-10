@@ -10,6 +10,7 @@ The Ollama provider enables integration with both local Ollama instances and Oll
 - **Multimodal Support**: Image inputs for vision-capable models (like LLaVA)
 - **Model Discovery**: Automatic detection and capability inference for installed models
 - **Flexible Endpoints**: Support for both native Ollama API and OpenAI-compatible endpoints
+- **Embeddings**: Generate vector embeddings for text using specialized embedding models
 
 ## Installation
 
@@ -192,6 +193,58 @@ for _, model := range models {
 }
 ```
 
+### Running Models Info
+
+List currently loaded/running models with memory information:
+
+```go
+ctx := context.Background()
+
+runningModels, err := provider.GetRunningModels(ctx)
+if err != nil {
+    log.Fatal(err)
+}
+
+for _, model := range runningModels {
+    fmt.Printf("Model: %s\n", model.Name)
+    fmt.Printf("  Size: %.2f GB\n", float64(model.Size)/1024/1024/1024)
+    fmt.Printf("  VRAM: %.2f GB\n", float64(model.SizeVRAM)/1024/1024/1024)
+    fmt.Printf("  Digest: %s\n", model.Digest)
+    fmt.Printf("  Expires: %s\n", model.ExpiresAt.Format(time.RFC3339))
+}
+```
+
+This is useful for:
+- Monitoring GPU memory usage
+- Checking which models are loaded and ready to use
+- Debugging model loading issues
+- Tracking model expiration times
+
+### Embeddings
+
+Generate embeddings for text using Ollama's embedding models:
+
+```go
+ctx := context.Background()
+
+// Generate embeddings using the default model (nomic-embed-text)
+embedding, err := provider.GenerateEmbeddings(ctx, "", "Hello, world!")
+if err != nil {
+    log.Fatal(err)
+}
+
+fmt.Printf("Embedding vector length: %d\n", len(embedding))
+fmt.Printf("First 5 values: %v\n", embedding[:5])
+
+// Or use a specific embedding model
+embedding, err = provider.GenerateEmbeddings(ctx, "nomic-embed-text", "Your text here")
+if err != nil {
+    log.Fatal(err)
+}
+
+// Use embeddings for similarity search, clustering, etc.
+```
+
 ## API Endpoints
 
 The provider supports multiple Ollama endpoints:
@@ -199,7 +252,9 @@ The provider supports multiple Ollama endpoints:
 ### Native Ollama API
 
 - **POST /api/chat** - Chat completions with streaming (newline-delimited JSON)
+- **POST /api/embeddings** - Generate embeddings for text
 - **GET /api/tags** - List available models
+- **GET /api/ps** - List running/loaded models with memory info
 - **GET /api/version** - Health check and version info
 
 ### OpenAI-Compatible API

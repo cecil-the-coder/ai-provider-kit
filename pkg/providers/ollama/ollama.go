@@ -4,6 +4,7 @@
 package ollama
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -239,6 +240,22 @@ type ollamaModelDetails struct {
 	QuantizationLevel string   `json:"quantization_level"`
 }
 
+// ollamaPsResponse represents the response from /api/ps endpoint
+type ollamaPsResponse struct {
+	Models []ollamaRunningModel `json:"models"`
+}
+
+// ollamaRunningModel represents a running model in the Ollama API
+type ollamaRunningModel struct {
+	Name      string             `json:"name"`
+	Model     string             `json:"model"`
+	Size      int64              `json:"size"`
+	Digest    string             `json:"digest"`
+	Details   ollamaModelDetails `json:"details"`
+	ExpiresAt string             `json:"expires_at"`
+	SizeVRAM  int64              `json:"size_vram"`
+}
+
 // GetModels returns available models
 func (p *OllamaProvider) GetModels(ctx context.Context) ([]types.Model, error) {
 	// Use model cache with fetch and fallback functions
@@ -437,12 +454,89 @@ func (p *OllamaProvider) getStaticFallback() []types.Model {
 	}
 }
 
+// GetRunningModels returns currently loaded/running models
+func (p *OllamaProvider) GetRunningModels(ctx context.Context) ([]types.RunningModel, error) {
+	url := fmt.Sprintf("%s/api/ps", strings.TrimSuffix(p.config.BaseURL, "/"))
+
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return nil, types.NewNetworkError(types.ProviderTypeOllama, "failed to create request").
+			WithOperation("get_running_models").
+			WithOriginalErr(err)
+	}
+
+	// Add authentication header if using cloud endpoint
+	if p.isCloudEndpoint() && p.authHelper.KeyManager != nil && len(p.authHelper.KeyManager.GetKeys()) > 0 {
+		apiKey := p.authHelper.KeyManager.GetKeys()[0]
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", apiKey))
+	}
+
+	resp, err := p.httpClient.Do(req)
+	if err != nil {
+		return nil, types.NewNetworkError(types.ProviderTypeOllama, "failed to fetch running models").
+			WithOperation("get_running_models").
+			WithOriginalErr(err)
+	}
+	defer func() {
+		_ = resp.Body.Close()
+	}()
+
+	// Check response status
+	if resp.StatusCode == http.StatusUnauthorized {
+		return nil, types.NewAuthError(types.ProviderTypeOllama, "invalid API key").
+			WithOperation("get_running_models").
+			WithStatusCode(resp.StatusCode)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, types.NewServerError(types.ProviderTypeOllama, resp.StatusCode,
+			fmt.Sprintf("failed to fetch running models with status %d", resp.StatusCode)).
+			WithOperation("get_running_models")
+	}
+
+	// Parse response
+	var psResp ollamaPsResponse
+	if err := json.NewDecoder(resp.Body).Decode(&psResp); err != nil {
+		return nil, types.NewInvalidRequestError(types.ProviderTypeOllama, "failed to parse running models response").
+			WithOperation("get_running_models").
+			WithOriginalErr(err)
+	}
+
+	// Convert to types.RunningModel
+	result := make([]types.RunningModel, 0, len(psResp.Models))
+	for _, ollamaModel := range psResp.Models {
+		result = append(result, p.convertOllamaRunningModel(ollamaModel))
+	}
+
+	return result, nil
+}
+
+// convertOllamaRunningModel converts an Ollama running model to types.RunningModel
+func (p *OllamaProvider) convertOllamaRunningModel(m ollamaRunningModel) types.RunningModel {
+	// Parse expires_at timestamp
+	expiresAt, err := time.Parse(time.RFC3339, m.ExpiresAt)
+	if err != nil {
+		// If parsing fails, use zero time
+		expiresAt = time.Time{}
+	}
+
+	return types.RunningModel{
+		Name:      m.Name,
+		Model:     m.Model,
+		Size:      m.Size,
+		Digest:    m.Digest,
+		ExpiresAt: expiresAt,
+		SizeVRAM:  m.SizeVRAM,
+	}
+}
+
 // ollamaChatRequest represents a request to Ollama /api/chat endpoint
 type ollamaChatRequest struct {
 	Model    string                 `json:"model"`
 	Messages []ollamaChatMessage    `json:"messages"`
 	Stream   bool                   `json:"stream"`
 	Tools    []ollamaTool           `json:"tools,omitempty"`
+	Format   interface{}            `json:"format,omitempty"` // Can be "json" string or JSON schema object
 	Options  map[string]interface{} `json:"options,omitempty"`
 }
 
@@ -575,6 +669,22 @@ func (p *OllamaProvider) buildOllamaChatRequest(options types.GenerateOptions) o
 	// Convert tools if provided
 	if len(options.Tools) > 0 {
 		request.Tools = p.convertTools(options.Tools)
+	}
+
+	// Handle structured outputs via ResponseFormat
+	// ResponseFormat can be:
+	// - "json" for basic JSON mode
+	// - A JSON schema object for structured output with schema validation
+	if options.ResponseFormat != "" {
+		// Try to parse as JSON schema first
+		var schemaObj map[string]interface{}
+		if err := json.Unmarshal([]byte(options.ResponseFormat), &schemaObj); err == nil {
+			// It's a valid JSON object, use it as the schema
+			request.Format = schemaObj
+		} else {
+			// It's a string like "json", use it directly
+			request.Format = options.ResponseFormat
+		}
 	}
 
 	return request
@@ -766,6 +876,147 @@ func (p *OllamaProvider) convertOllamaToolCallsToUniversal(ollamaToolCalls []oll
 	return toolCalls
 }
 
+// ollamaEmbeddingsRequest represents a request to Ollama /api/embeddings endpoint
+type ollamaEmbeddingsRequest struct {
+	Model  string `json:"model"`
+	Prompt string `json:"prompt"`
+}
+
+// ollamaEmbeddingsResponse represents a response from Ollama /api/embeddings endpoint
+type ollamaEmbeddingsResponse struct {
+	Embedding []float64 `json:"embedding"`
+}
+
+// GenerateEmbeddings generates embeddings for the given text
+func (p *OllamaProvider) GenerateEmbeddings(ctx context.Context, model string, text string) ([]float64, error) {
+	// Initialize request tracking
+	p.IncrementRequestCount()
+	startTime := time.Now()
+
+	// Validate authentication for cloud endpoints
+	if p.isCloudEndpoint() && !p.authHelper.IsAuthenticated() {
+		p.RecordError(types.NewAuthError(types.ProviderTypeOllama, "no API key configured for cloud endpoint"))
+		return nil, types.NewAuthError(types.ProviderTypeOllama, "no API key configured for cloud endpoint").
+			WithOperation("generate_embeddings")
+	}
+
+	// Use default model if not specified
+	if model == "" {
+		model = "nomic-embed-text"
+	}
+
+	// Build the request
+	request := ollamaEmbeddingsRequest{
+		Model:  model,
+		Prompt: text,
+	}
+
+	// Determine the base URL
+	baseURL := p.config.BaseURL
+	if baseURL == "" {
+		baseURL = "http://localhost:11434"
+	}
+	url := fmt.Sprintf("%s/api/embeddings", strings.TrimSuffix(baseURL, "/"))
+
+	// Marshal request
+	reqBody, err := json.Marshal(request)
+	if err != nil {
+		p.RecordError(types.NewInvalidRequestError(types.ProviderTypeOllama, "failed to marshal request"))
+		return nil, types.NewInvalidRequestError(types.ProviderTypeOllama, "failed to marshal request").
+			WithOperation("generate_embeddings").
+			WithOriginalErr(err)
+	}
+
+	// Log the request
+	p.LogRequest("POST", url, map[string]string{
+		"Content-Type": "application/json",
+	}, request)
+
+	// Create HTTP request
+	req, err := http.NewRequestWithContext(ctx, "POST", url, strings.NewReader(string(reqBody)))
+	if err != nil {
+		p.RecordError(types.NewNetworkError(types.ProviderTypeOllama, "failed to create request"))
+		return nil, types.NewNetworkError(types.ProviderTypeOllama, "failed to create request").
+			WithOperation("generate_embeddings").
+			WithOriginalErr(err)
+	}
+
+	// Set headers
+	req.Header.Set("Content-Type", "application/json")
+
+	// Add authentication header if using cloud endpoint
+	if p.isCloudEndpoint() && p.authHelper.KeyManager != nil && len(p.authHelper.KeyManager.GetKeys()) > 0 {
+		apiKey := p.authHelper.KeyManager.GetKeys()[0]
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", apiKey))
+	}
+
+	// Make the request
+	resp, err := p.httpClient.Do(req)
+	if err != nil {
+		p.RecordError(types.NewNetworkError(types.ProviderTypeOllama, "request failed"))
+		return nil, types.NewNetworkError(types.ProviderTypeOllama, "request failed").
+			WithOperation("generate_embeddings").
+			WithOriginalErr(err)
+	}
+	defer func() {
+		_ = resp.Body.Close()
+	}()
+
+	// Check status code
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+
+		// Map HTTP status codes to appropriate errors
+		switch resp.StatusCode {
+		case http.StatusUnauthorized:
+			err := types.NewAuthError(types.ProviderTypeOllama, "invalid API key").
+				WithOperation("generate_embeddings").
+				WithStatusCode(resp.StatusCode)
+			p.RecordError(err)
+			return nil, err
+		case http.StatusNotFound:
+			err := types.NewNotFoundError(types.ProviderTypeOllama, "model not found").
+				WithOperation("generate_embeddings").
+				WithStatusCode(resp.StatusCode)
+			p.RecordError(err)
+			return nil, err
+		case http.StatusTooManyRequests:
+			err := types.NewRateLimitError(types.ProviderTypeOllama, 0).
+				WithOperation("generate_embeddings").
+				WithStatusCode(resp.StatusCode)
+			p.RecordError(err)
+			return nil, err
+		default:
+			if resp.StatusCode >= 500 {
+				err := types.NewServerError(types.ProviderTypeOllama, resp.StatusCode, string(body)).
+					WithOperation("generate_embeddings")
+				p.RecordError(err)
+				return nil, err
+			}
+			err := types.NewProviderError(types.ProviderTypeOllama, types.ErrCodeInvalidRequest, string(body)).
+				WithOperation("generate_embeddings").
+				WithStatusCode(resp.StatusCode)
+			p.RecordError(err)
+			return nil, err
+		}
+	}
+
+	// Parse response
+	var embeddingsResp ollamaEmbeddingsResponse
+	if err := json.NewDecoder(resp.Body).Decode(&embeddingsResp); err != nil {
+		p.RecordError(types.NewInvalidRequestError(types.ProviderTypeOllama, "failed to parse embeddings response"))
+		return nil, types.NewInvalidRequestError(types.ProviderTypeOllama, "failed to parse embeddings response").
+			WithOperation("generate_embeddings").
+			WithOriginalErr(err)
+	}
+
+	// Record success
+	latency := time.Since(startTime)
+	p.RecordSuccess(latency, 0)
+
+	return embeddingsResp.Embedding, nil
+}
+
 // InvokeServerTool invokes a server tool
 func (p *OllamaProvider) InvokeServerTool(
 	ctx context.Context,
@@ -891,4 +1142,366 @@ func (p *OllamaProvider) performConnectivityTest(ctx context.Context) error {
 	return types.NewServerError(types.ProviderTypeOllama, resp.StatusCode,
 		fmt.Sprintf("connectivity test failed with status %d", resp.StatusCode)).
 		WithOperation("test_connectivity")
+}
+
+// Model Management APIs
+// These operations are only supported on local Ollama instances, not cloud endpoints
+
+// ollamaModelRequest represents a request for model operations (pull/push)
+type ollamaModelRequest struct {
+	Name   string `json:"name"`
+	Stream bool   `json:"stream"`
+}
+
+// ollamaProgressResponse represents a streaming progress response from pull/push operations
+type ollamaProgressResponse struct {
+	Status    string `json:"status"`
+	Digest    string `json:"digest,omitempty"`
+	Total     int64  `json:"total,omitempty"`
+	Completed int64  `json:"completed,omitempty"`
+}
+
+// executeStreamingModelOperation executes a streaming model operation (pull/push)
+func (p *OllamaProvider) executeStreamingModelOperation(ctx context.Context, model, endpoint, operation string) error {
+	// Check if this is a cloud endpoint
+	if p.isCloudEndpoint() {
+		return types.NewInvalidRequestError(types.ProviderTypeOllama, "model management operations are not supported on cloud endpoints").
+			WithOperation(operation)
+	}
+
+	// Build the request
+	request := ollamaModelRequest{
+		Name:   model,
+		Stream: true,
+	}
+
+	// Determine the base URL
+	baseURL := p.config.BaseURL
+	if baseURL == "" {
+		baseURL = "http://localhost:11434"
+	}
+	url := fmt.Sprintf("%s/api/%s", strings.TrimSuffix(baseURL, "/"), endpoint)
+
+	// Marshal request
+	reqBody, err := json.Marshal(request)
+	if err != nil {
+		return types.NewInvalidRequestError(types.ProviderTypeOllama, fmt.Sprintf("failed to marshal %s request", endpoint)).
+			WithOperation(operation).
+			WithOriginalErr(err)
+	}
+
+	// Create HTTP request
+	req, err := http.NewRequestWithContext(ctx, "POST", url, strings.NewReader(string(reqBody)))
+	if err != nil {
+		return types.NewNetworkError(types.ProviderTypeOllama, fmt.Sprintf("failed to create %s request", endpoint)).
+			WithOperation(operation).
+			WithOriginalErr(err)
+	}
+
+	// Set headers
+	req.Header.Set("Content-Type", "application/json")
+
+	// Make the request
+	resp, err := p.httpClient.Do(req)
+	if err != nil {
+		return types.NewNetworkError(types.ProviderTypeOllama, fmt.Sprintf("%s request failed", endpoint)).
+			WithOperation(operation).
+			WithOriginalErr(err)
+	}
+	defer func() {
+		_ = resp.Body.Close()
+	}()
+
+	// Check status code
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return types.NewServerError(types.ProviderTypeOllama, resp.StatusCode, string(body)).
+			WithOperation(operation)
+	}
+
+	// Stream the progress updates
+	logPrefix := strings.ToUpper(endpoint)
+	scanner := bufio.NewScanner(resp.Body)
+	for scanner.Scan() {
+		line := scanner.Bytes()
+		if len(line) == 0 {
+			continue
+		}
+
+		var progressResp ollamaProgressResponse
+		if err := json.Unmarshal(line, &progressResp); err != nil {
+			// Skip malformed lines
+			continue
+		}
+
+		// Log progress
+		if p.BaseProvider != nil {
+			p.BaseProvider.LogRequest(logPrefix, "progress", nil, progressResp)
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return types.NewNetworkError(types.ProviderTypeOllama, fmt.Sprintf("failed to read %s response", endpoint)).
+			WithOperation(operation).
+			WithOriginalErr(err)
+	}
+
+	return nil
+}
+
+// PullModel pulls a model from the Ollama registry
+// This operation is only supported on local Ollama instances
+func (p *OllamaProvider) PullModel(ctx context.Context, model string) error {
+	return p.executeStreamingModelOperation(ctx, model, "pull", "pull_model")
+}
+
+// PushModel pushes a model to the Ollama registry
+// This operation is only supported on local Ollama instances
+func (p *OllamaProvider) PushModel(ctx context.Context, model string) error {
+	return p.executeStreamingModelOperation(ctx, model, "push", "push_model")
+}
+
+// ollamaDeleteRequest represents a request to delete a model
+type ollamaDeleteRequest struct {
+	Name string `json:"name"`
+}
+
+// DeleteModel deletes a local model
+// This operation is only supported on local Ollama instances
+func (p *OllamaProvider) DeleteModel(ctx context.Context, model string) error {
+	// Check if this is a cloud endpoint
+	if p.isCloudEndpoint() {
+		return types.NewInvalidRequestError(types.ProviderTypeOllama, "model management operations are not supported on cloud endpoints").
+			WithOperation("delete_model")
+	}
+
+	// Build the request
+	request := ollamaDeleteRequest{
+		Name: model,
+	}
+
+	// Determine the base URL
+	baseURL := p.config.BaseURL
+	if baseURL == "" {
+		baseURL = "http://localhost:11434"
+	}
+	url := fmt.Sprintf("%s/api/delete", strings.TrimSuffix(baseURL, "/"))
+
+	// Marshal request
+	reqBody, err := json.Marshal(request)
+	if err != nil {
+		return types.NewInvalidRequestError(types.ProviderTypeOllama, "failed to marshal delete request").
+			WithOperation("delete_model").
+			WithOriginalErr(err)
+	}
+
+	// Create HTTP request
+	req, err := http.NewRequestWithContext(ctx, "DELETE", url, strings.NewReader(string(reqBody)))
+	if err != nil {
+		return types.NewNetworkError(types.ProviderTypeOllama, "failed to create delete request").
+			WithOperation("delete_model").
+			WithOriginalErr(err)
+	}
+
+	// Set headers
+	req.Header.Set("Content-Type", "application/json")
+
+	// Make the request
+	resp, err := p.httpClient.Do(req)
+	if err != nil {
+		return types.NewNetworkError(types.ProviderTypeOllama, "delete request failed").
+			WithOperation("delete_model").
+			WithOriginalErr(err)
+	}
+	defer func() {
+		_ = resp.Body.Close()
+	}()
+
+	// Check status code
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		if resp.StatusCode == http.StatusNotFound {
+			return types.NewNotFoundError(types.ProviderTypeOllama, "model not found").
+				WithOperation("delete_model").
+				WithStatusCode(resp.StatusCode)
+		}
+		return types.NewServerError(types.ProviderTypeOllama, resp.StatusCode, string(body)).
+			WithOperation("delete_model")
+	}
+
+	return nil
+}
+
+// ollamaCopyRequest represents a request to copy a model
+type ollamaCopyRequest struct {
+	Source      string `json:"source"`
+	Destination string `json:"destination"`
+}
+
+// CopyModel copies a model locally
+// This operation is only supported on local Ollama instances
+func (p *OllamaProvider) CopyModel(ctx context.Context, source, destination string) error {
+	// Check if this is a cloud endpoint
+	if p.isCloudEndpoint() {
+		return types.NewInvalidRequestError(types.ProviderTypeOllama, "model management operations are not supported on cloud endpoints").
+			WithOperation("copy_model")
+	}
+
+	// Build the request
+	request := ollamaCopyRequest{
+		Source:      source,
+		Destination: destination,
+	}
+
+	// Determine the base URL
+	baseURL := p.config.BaseURL
+	if baseURL == "" {
+		baseURL = "http://localhost:11434"
+	}
+	url := fmt.Sprintf("%s/api/copy", strings.TrimSuffix(baseURL, "/"))
+
+	// Marshal request
+	reqBody, err := json.Marshal(request)
+	if err != nil {
+		return types.NewInvalidRequestError(types.ProviderTypeOllama, "failed to marshal copy request").
+			WithOperation("copy_model").
+			WithOriginalErr(err)
+	}
+
+	// Create HTTP request
+	req, err := http.NewRequestWithContext(ctx, "POST", url, strings.NewReader(string(reqBody)))
+	if err != nil {
+		return types.NewNetworkError(types.ProviderTypeOllama, "failed to create copy request").
+			WithOperation("copy_model").
+			WithOriginalErr(err)
+	}
+
+	// Set headers
+	req.Header.Set("Content-Type", "application/json")
+
+	// Make the request
+	resp, err := p.httpClient.Do(req)
+	if err != nil {
+		return types.NewNetworkError(types.ProviderTypeOllama, "copy request failed").
+			WithOperation("copy_model").
+			WithOriginalErr(err)
+	}
+	defer func() {
+		_ = resp.Body.Close()
+	}()
+
+	// Check status code
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		if resp.StatusCode == http.StatusNotFound {
+			return types.NewNotFoundError(types.ProviderTypeOllama, "source model not found").
+				WithOperation("copy_model").
+				WithStatusCode(resp.StatusCode)
+		}
+		return types.NewServerError(types.ProviderTypeOllama, resp.StatusCode, string(body)).
+			WithOperation("copy_model")
+	}
+
+	return nil
+}
+
+// ollamaCreateRequest represents a request to create a model from Modelfile
+type ollamaCreateRequest struct {
+	Name      string `json:"name"`
+	Modelfile string `json:"modelfile"`
+	Stream    bool   `json:"stream"`
+}
+
+// ollamaCreateResponse represents a streaming response from /api/create
+type ollamaCreateResponse struct {
+	Status string `json:"status"`
+}
+
+// CreateModel creates a model from a Modelfile
+// This operation is only supported on local Ollama instances
+func (p *OllamaProvider) CreateModel(ctx context.Context, name string, modelfile string) error {
+	// Check if this is a cloud endpoint
+	if p.isCloudEndpoint() {
+		return types.NewInvalidRequestError(types.ProviderTypeOllama, "model management operations are not supported on cloud endpoints").
+			WithOperation("create_model")
+	}
+
+	// Build the request
+	request := ollamaCreateRequest{
+		Name:      name,
+		Modelfile: modelfile,
+		Stream:    true,
+	}
+
+	// Determine the base URL
+	baseURL := p.config.BaseURL
+	if baseURL == "" {
+		baseURL = "http://localhost:11434"
+	}
+	url := fmt.Sprintf("%s/api/create", strings.TrimSuffix(baseURL, "/"))
+
+	// Marshal request
+	reqBody, err := json.Marshal(request)
+	if err != nil {
+		return types.NewInvalidRequestError(types.ProviderTypeOllama, "failed to marshal create request").
+			WithOperation("create_model").
+			WithOriginalErr(err)
+	}
+
+	// Create HTTP request
+	req, err := http.NewRequestWithContext(ctx, "POST", url, strings.NewReader(string(reqBody)))
+	if err != nil {
+		return types.NewNetworkError(types.ProviderTypeOllama, "failed to create create request").
+			WithOperation("create_model").
+			WithOriginalErr(err)
+	}
+
+	// Set headers
+	req.Header.Set("Content-Type", "application/json")
+
+	// Make the request
+	resp, err := p.httpClient.Do(req)
+	if err != nil {
+		return types.NewNetworkError(types.ProviderTypeOllama, "create request failed").
+			WithOperation("create_model").
+			WithOriginalErr(err)
+	}
+	defer func() {
+		_ = resp.Body.Close()
+	}()
+
+	// Check status code
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return types.NewServerError(types.ProviderTypeOllama, resp.StatusCode, string(body)).
+			WithOperation("create_model")
+	}
+
+	// Stream the progress updates
+	scanner := bufio.NewScanner(resp.Body)
+	for scanner.Scan() {
+		line := scanner.Bytes()
+		if len(line) == 0 {
+			continue
+		}
+
+		var createResp ollamaCreateResponse
+		if err := json.Unmarshal(line, &createResp); err != nil {
+			// Skip malformed lines
+			continue
+		}
+
+		// Log progress
+		if p.BaseProvider != nil {
+			p.BaseProvider.LogRequest("CREATE", "progress", nil, createResp)
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return types.NewNetworkError(types.ProviderTypeOllama, "failed to read create response").
+			WithOperation("create_model").
+			WithOriginalErr(err)
+	}
+
+	return nil
 }
