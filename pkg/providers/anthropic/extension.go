@@ -29,6 +29,8 @@ func NewAnthropicExtension() *AnthropicExtension {
 		"thinking_mode",
 		"tool_choice",
 		"xml_tool_format",
+		"vision",
+		"multimodal",
 	}
 
 	return &AnthropicExtension{

@@ -119,7 +119,8 @@ func (p *QwenProvider) GetModels(ctx context.Context) ([]types.Model, error) {
 			MaxTokens:           8192,
 			SupportsStreaming:   true,
 			SupportsToolCalling: true,
-			Description:         "Qwen's fast model specialized for code generation",
+			Capabilities:        []string{"text", "code", "vision"},
+			Description:         "Qwen's fast model specialized for code generation with vision support",
 		},
 		{
 			ID:                  "qwen3-coder-plus",
@@ -128,7 +129,8 @@ func (p *QwenProvider) GetModels(ctx context.Context) ([]types.Model, error) {
 			MaxTokens:           32768,
 			SupportsStreaming:   true,
 			SupportsToolCalling: true,
-			Description:         "Qwen's balanced code generation model",
+			Capabilities:        []string{"text", "code", "vision"},
+			Description:         "Qwen's balanced code generation model with vision support",
 		},
 	}
 	return models, nil
@@ -273,9 +275,18 @@ func (p *QwenProvider) buildQwenRequest(options types.GenerateOptions) QwenReque
 	messages := []QwenMessage{}
 	if len(options.Messages) > 0 {
 		for _, msg := range options.Messages {
+			// Use GetContentParts() to get unified content access
+			parts := msg.GetContentParts()
+			var content interface{}
+			if len(parts) > 0 {
+				content = convertContentPartsToQwen(parts)
+			} else {
+				content = msg.Content
+			}
+
 			qwenMsg := QwenMessage{
 				Role:    msg.Role,
-				Content: msg.Content,
+				Content: content,
 			}
 
 			// Convert tool calls if present
@@ -342,8 +353,16 @@ func (p *QwenProvider) makeAPICallWithMessage(ctx context.Context, url string, r
 
 	// Convert to universal format
 	message := types.ChatMessage{
-		Role:    qwenMsg.Role,
-		Content: qwenMsg.Content,
+		Role: qwenMsg.Role,
+	}
+
+	// Handle content - it can be a string or array of content parts
+	if contentStr, ok := qwenMsg.Content.(string); ok {
+		message.Content = contentStr
+	} else {
+		// For now, we'll stringify complex content
+		// In a full implementation, you might want to convert back to ContentParts
+		message.Content = fmt.Sprintf("%v", qwenMsg.Content)
 	}
 
 	// Convert tool calls if present
@@ -870,8 +889,17 @@ func (s *QwenRealStream) Next() (types.ChatCompletionChunk, error) {
 
 		if len(streamResp.Choices) > 0 {
 			choice := streamResp.Choices[0]
+
+			// Handle content - it can be a string or array of content parts
+			var content string
+			if contentStr, ok := choice.Delta.Content.(string); ok {
+				content = contentStr
+			} else if choice.Delta.Content != nil {
+				content = fmt.Sprintf("%v", choice.Delta.Content)
+			}
+
 			chunk := types.ChatCompletionChunk{
-				Content: choice.Delta.Content,
+				Content: content,
 				Done:    choice.FinishReason != "",
 			}
 
@@ -964,4 +992,51 @@ func convertQwenToolCallsToUniversal(toolCalls []QwenToolCall) []types.ToolCall 
 
 	// Convert using shared converter
 	return streaming.ConvertOpenAICompatibleToolCallsToUniversal(compatibleCalls)
+}
+
+// convertContentPartsToQwen converts ContentParts to Qwen format (OpenAI-compatible)
+// Returns a string if there's only text, or []QwenContentPart if multimodal
+func convertContentPartsToQwen(parts []types.ContentPart) interface{} {
+	if len(parts) == 0 {
+		return ""
+	}
+
+	// If only one part and it's text, return as string for backwards compatibility
+	if len(parts) == 1 && parts[0].Type == types.ContentTypeText {
+		return parts[0].Text
+	}
+
+	// Otherwise, build multimodal content array
+	qwenParts := make([]QwenContentPart, 0, len(parts))
+	for _, part := range parts {
+		switch part.Type {
+		case types.ContentTypeText:
+			qwenParts = append(qwenParts, QwenContentPart{
+				Type: "text",
+				Text: part.Text,
+			})
+		case types.ContentTypeImage:
+			if part.Source != nil {
+				url := ""
+				if part.Source.Type == types.MediaSourceBase64 {
+					// Build data URL for base64
+					url = fmt.Sprintf("data:%s;base64,%s", part.Source.MediaType, part.Source.Data)
+				} else if part.Source.Type == types.MediaSourceURL {
+					url = part.Source.URL
+				}
+				if url != "" {
+					qwenParts = append(qwenParts, QwenContentPart{
+						Type: "image_url",
+						ImageURL: &QwenImageURL{
+							URL: url,
+						},
+					})
+				}
+			}
+			// Note: Qwen uses OpenAI-compatible format
+			// Documents/audio in chat would need separate handling
+		}
+	}
+
+	return qwenParts
 }

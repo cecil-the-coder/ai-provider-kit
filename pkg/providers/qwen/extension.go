@@ -235,8 +235,14 @@ func (e *QwenExtension) ProviderToStandard(response interface{}) (*types.Standar
 
 	// Convert message
 	message := types.ChatMessage{
-		Role:    choice.Message.Role,
-		Content: choice.Message.Content,
+		Role: choice.Message.Role,
+	}
+
+	// Handle content - it can be a string or array of content parts
+	if contentStr, ok := choice.Message.Content.(string); ok {
+		message.Content = contentStr
+	} else if choice.Message.Content != nil {
+		message.Content = fmt.Sprintf("%v", choice.Message.Content)
 	}
 
 	// Convert tool calls if present
@@ -290,8 +296,14 @@ func (e *QwenExtension) ProviderToStandardChunk(chunk interface{}) (*types.Stand
 
 	// Use Delta for streaming (not Message)
 	delta := types.ChatMessage{
-		Role:    choice.Delta.Role,
-		Content: choice.Delta.Content,
+		Role: choice.Delta.Role,
+	}
+
+	// Handle content - it can be a string or array of content parts
+	if contentStr, ok := choice.Delta.Content.(string); ok {
+		delta.Content = contentStr
+	} else if choice.Delta.Content != nil {
+		delta.Content = fmt.Sprintf("%v", choice.Delta.Content)
 	}
 
 	// Convert tool calls if present in the delta
