@@ -34,16 +34,16 @@ type QwenFunctionDef struct {
 // QwenMessage represents a message in the conversation
 type QwenMessage struct {
 	Role       string         `json:"role"`
-	Content    interface{}    `json:"content"`             // string or []QwenContentPart for multimodal
+	Content    interface{}    `json:"content"` // string or []QwenContentPart for multimodal
 	ToolCalls  []QwenToolCall `json:"tool_calls,omitempty"`
 	ToolCallID string         `json:"tool_call_id,omitempty"`
 }
 
 // QwenContentPart represents a content part in Qwen's multimodal format (OpenAI-compatible)
 type QwenContentPart struct {
-	Type     string         `json:"type"`                // "text" or "image_url"
-	Text     string         `json:"text,omitempty"`      // Text content
-	ImageURL *QwenImageURL  `json:"image_url,omitempty"` // Image URL content
+	Type     string        `json:"type"`                // "text" or "image_url"
+	Text     string        `json:"text,omitempty"`      // Text content
+	ImageURL *QwenImageURL `json:"image_url,omitempty"` // Image URL content
 }
 
 // QwenImageURL represents an image URL in Qwen format (OpenAI-compatible)

@@ -1,6 +1,7 @@
 package qwen
 
 import (
+	"context"
 	"encoding/json"
 	"testing"
 
@@ -145,7 +146,7 @@ func TestQwenVisionSupport(t *testing.T) {
 			APIKey: "test-key",
 		})
 
-		models, err := provider.GetModels(nil)
+		models, err := provider.GetModels(context.Background())
 		if err != nil {
 			t.Fatalf("Failed to get models: %v", err)
 		}
