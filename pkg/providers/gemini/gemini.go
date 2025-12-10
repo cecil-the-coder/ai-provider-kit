@@ -13,7 +13,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -25,7 +24,6 @@ import (
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/ratelimit"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 	"golang.org/x/time/rate"
-	"gopkg.in/yaml.v3"
 )
 
 // Constants for Gemini API
@@ -284,14 +282,14 @@ func (p *GeminiProvider) makeAPICallWithTokenMessage(ctx context.Context, option
 	// Determine model to use
 	model = p.resolveModel(model, options)
 
-	// Execute OAuth API call
-	responseBody, err := p.executeOAuthAPIRequest(ctx, model, accessToken, options)
+	// Use standard Gemini API with OAuth
+	responseBody, err := p.makeStandardAPICallWithOAuth(ctx, model, accessToken, options)
 	if err != nil {
 		return types.ChatMessage{}, nil, err
 	}
 
-	// Parse OAuth API response to ChatMessage
-	return p.parseOAuthGeminiResponseMessage(responseBody, model)
+	// Parse standard API response to ChatMessage
+	return p.parseStandardGeminiResponseMessage(responseBody, model)
 }
 
 // makeAPICallWithAPIKeyMessage makes an API call with API key (returns ChatMessage)
@@ -315,116 +313,6 @@ func (p *GeminiProvider) makeAPICallWithAPIKeyMessage(ctx context.Context, optio
 
 	// Parse standard Gemini API response to ChatMessage
 	return p.parseStandardGeminiResponseMessage(responseBody, model)
-}
-
-// prepareRequestForOAuth prepares request for OAuth-based CloudCode API
-func (p *GeminiProvider) prepareRequestForOAuth(options types.GenerateOptions, model string) interface{} {
-	// Prepare contents
-	var contents []Content
-
-	// Handle messages if provided
-	if len(options.Messages) > 0 {
-		contents = make([]Content, len(options.Messages))
-		for i, msg := range options.Messages {
-			// Use GetContentParts() helper for unified access
-			contentParts := msg.GetContentParts()
-			var parts []Part
-
-			if len(contentParts) > 0 {
-				// Convert multimodal content parts
-				parts = convertContentPartsToGeminiParts(contentParts)
-			} else {
-				// Fallback to string content (should not happen with GetContentParts)
-				parts = []Part{{Text: msg.Content}}
-			}
-
-			contents[i] = Content{
-				Role:  msg.Role,
-				Parts: parts,
-			}
-		}
-	} else if options.Prompt != "" {
-		// Convert prompt to user message
-		contents = append(contents, Content{
-			Role: "user",
-			Parts: []Part{
-				{Text: options.Prompt},
-			},
-		})
-	}
-
-	reqBody := GenerateContentRequest{
-		Contents: contents,
-		GenerationConfig: &GenerationConfig{
-			Temperature:     0.7,
-			TopP:            0.95,
-			TopK:            40,
-			MaxOutputTokens: 8192,
-		},
-	}
-
-	// Add tools if provided
-	if len(options.Tools) > 0 {
-		reqBody.Tools = convertToGeminiTools(options.Tools)
-	}
-
-	projectID := p.getProjectID()
-
-	// Attempt onboarding if needed
-	if p.config.ProjectID == "" && projectID == "" {
-		if onboardedID, err := p.SetupUserProject(options.ContextObj); err == nil {
-			projectID = onboardedID
-			p.config.ProjectID = projectID
-			if err := p.persistProjectID(projectID); err != nil {
-				// Log warning but continue - this is not critical
-				log.Printf("Warning: failed to persist project ID: %v", err)
-			}
-		}
-	}
-
-	return CloudCodeRequestWrapper{
-		Model:   model,
-		Project: projectID,
-		Request: reqBody,
-	}
-}
-
-// persistProjectID persists the project ID to the config file
-func (p *GeminiProvider) persistProjectID(projectID string) error {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return fmt.Errorf("failed to get home directory: %w", err)
-	}
-	configPath := filepath.Join(homeDir, ".mcp-code-api", "config.yaml")
-	configData, err := common.ReadConfigFile(configPath)
-	if err != nil {
-		return fmt.Errorf("failed to read config file: %w", err)
-	}
-	var configMap map[string]interface{}
-	if err := yaml.Unmarshal(configData, &configMap); err != nil {
-		return fmt.Errorf("failed to parse config YAML: %w", err)
-	}
-	providers, ok := configMap["providers"].(map[string]interface{})
-	if !ok {
-		providers = make(map[string]interface{})
-		configMap["providers"] = providers
-	}
-	gemini, ok := providers["gemini"].(map[string]interface{})
-	if !ok {
-		gemini = make(map[string]interface{})
-		providers["gemini"] = gemini
-	}
-	gemini["project_id"] = projectID
-	p.config.ProjectID = projectID
-	p.projectID = projectID
-	updatedData, err := yaml.Marshal(configMap)
-	if err != nil {
-		return fmt.Errorf("failed to marshal updated config: %w", err)
-	}
-	if err := os.WriteFile(configPath, updatedData, 0600); err != nil {
-		return fmt.Errorf("failed to write updated config file: %w", err)
-	}
-	return nil
 }
 
 // Authentication Methods
@@ -599,32 +487,65 @@ func (p *GeminiProvider) testConnectivityWithAPIKey(ctx context.Context, apiKey 
 
 // testConnectivityWithOAuth tests connectivity using OAuth credentials
 func (p *GeminiProvider) testConnectivityWithOAuth(ctx context.Context, accessToken string) error {
-	// Validate the OAuth token using Google's tokeninfo endpoint
-	// This avoids needing a project ID which requires onboarding
-	tokenInfoURL := "https://oauth2.googleapis.com/tokeninfo?access_token=" + accessToken
+	// Make a minimal generateContent request to the standard Gemini API
+	// This tests actual API connectivity and proves the full auth flow works
+	baseURL := p.config.BaseURL
+	if baseURL == "" {
+		baseURL = standardGeminiBaseURL
+	}
+	url := fmt.Sprintf("%s/models/%s:generateContent", baseURL, geminiDefaultModel)
 
-	req, err := http.NewRequestWithContext(ctx, "GET", tokenInfoURL, nil)
+	// Create a minimal request for connectivity testing
+	minimalRequest := map[string]interface{}{
+		"contents": []map[string]interface{}{
+			{
+				"parts": []map[string]string{
+					{"text": "Hi"},
+				},
+			},
+		},
+		"generationConfig": map[string]interface{}{
+			"maxOutputTokens": 1, // Minimal token usage
+		},
+	}
+
+	jsonBody, err := json.Marshal(minimalRequest)
 	if err != nil {
-		return types.NewNetworkError(types.ProviderTypeGemini, "failed to create token validation request").
+		return types.NewInvalidRequestError(types.ProviderTypeGemini, "failed to marshal test request").
 			WithOperation("test_connectivity").
 			WithOriginalErr(err)
 	}
 
+	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(jsonBody))
+	if err != nil {
+		return types.NewNetworkError(types.ProviderTypeGemini, "failed to create connectivity test request").
+			WithOperation("test_connectivity").
+			WithOriginalErr(err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", accessToken))
+
+	// Make the request with a shorter timeout for connectivity testing
 	client := &http.Client{
 		Timeout: 15 * time.Second,
 	}
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return types.NewNetworkError(types.ProviderTypeGemini, "token validation failed").
+		return types.NewNetworkError(types.ProviderTypeGemini, "connectivity test failed").
 			WithOperation("test_connectivity").
 			WithOriginalErr(err)
 	}
 	defer func() {
-		_ = resp.Body.Close()
+		//nolint:staticcheck // Empty branch is intentional - we ignore close errors
+		if err := resp.Body.Close(); err != nil {
+			// Log the error if a logger is available, or ignore it
+		}
 	}()
 
-	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusBadRequest {
+	// Check response status
+	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
 		return types.NewAuthError(types.ProviderTypeGemini, "invalid or expired OAuth token").
 			WithOperation("test_connectivity").
 			WithStatusCode(resp.StatusCode)
@@ -633,7 +554,7 @@ func (p *GeminiProvider) testConnectivityWithOAuth(ctx context.Context, accessTo
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		return types.NewServerError(types.ProviderTypeGemini, resp.StatusCode,
-			fmt.Sprintf("token validation failed: %s", string(body))).
+			fmt.Sprintf("connectivity test failed: %s", string(body))).
 			WithOperation("test_connectivity")
 	}
 
@@ -993,8 +914,13 @@ func (p *GeminiProvider) executeStreamWithAuth(ctx context.Context, options type
 		WithOperation("executeStreamWithAuth")
 }
 
-// makeStreamingAPICallWithToken makes a streaming API call with OAuth token
+// makeStreamingAPICallWithToken makes a streaming API call with OAuth token using the standard API
 func (p *GeminiProvider) makeStreamingAPICallWithToken(ctx context.Context, options types.GenerateOptions, model string, accessToken string) (types.ChatCompletionStream, error) {
+	return p.makeStreamingStandardAPICallWithOAuth(ctx, options, model, accessToken)
+}
+
+// makeStreamingStandardAPICallWithOAuth makes a streaming API call to the standard Gemini API with OAuth
+func (p *GeminiProvider) makeStreamingStandardAPICallWithOAuth(ctx context.Context, options types.GenerateOptions, model string, accessToken string) (types.ChatCompletionStream, error) {
 	// Client-side rate limiting (Gemini doesn't provide proactive headers)
 	waitCtx, cancel := context.WithTimeout(ctx, time.Second*10)
 	defer cancel()
@@ -1007,16 +933,21 @@ func (p *GeminiProvider) makeStreamingAPICallWithToken(ctx context.Context, opti
 		return nil, fmt.Errorf("rate limit wait: %w", err)
 	}
 
-	endpoint := ":streamGenerateContent" // CloudCode API format for OAuth
-	requestBody := p.prepareRequestForOAuth(options, model)
+	// Prepare standard request (same as API key path)
+	requestBody := p.prepareStandardRequest(options)
 
 	jsonBody, err := json.Marshal(requestBody)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
-	baseURL := cloudcodeBaseURL
-	url := fmt.Sprintf("%s/%s", baseURL, endpoint)
+	// Use standard Gemini API endpoint with OAuth bearer token
+	baseURL := standardGeminiBaseURL
+	if p.config.BaseURL != "" {
+		baseURL = p.config.BaseURL
+	}
+	url := fmt.Sprintf("%s/models/%s:streamGenerateContent?alt=sse", baseURL, model)
+
 	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonBody))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
@@ -1432,6 +1363,68 @@ func (p *GeminiProvider) executeStandardAPIRequest(ctx context.Context, model st
 	return responseBody, nil
 }
 
+// makeStandardAPICallWithOAuth executes a non-streaming standard Gemini API request with OAuth
+func (p *GeminiProvider) makeStandardAPICallWithOAuth(ctx context.Context, model string, accessToken string, options types.GenerateOptions) ([]byte, error) {
+	// Prepare standard request
+	requestBody := p.prepareStandardRequest(options)
+
+	// Serialize request
+	jsonBody, err := json.Marshal(requestBody)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	// Create HTTP request using standard Gemini API with OAuth
+	baseURL := standardGeminiBaseURL
+	if p.config.BaseURL != "" {
+		baseURL = p.config.BaseURL
+	}
+	url := fmt.Sprintf("%s/models/%s:generateContent", baseURL, model)
+	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonBody))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	// Set headers with OAuth bearer token
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", accessToken))
+
+	p.LogRequest("POST", url, map[string]string{
+		"Content-Type":  "application/json",
+		"Authorization": "***",
+	}, requestBody)
+
+	// Make the request
+	resp, err := p.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("request failed: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	// Read response body
+	responseBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	// Handle rate limiting
+	if resp.StatusCode == 429 {
+		if info, err := p.rateLimitHelper.GetParser().Parse(resp.Header, model); err == nil && info.RetryAfter > 0 {
+			// Update tracker with retry info
+			p.rateLimitHelper.UpdateRateLimitInfo(info)
+			return nil, fmt.Errorf("rate limited, retry after %v", info.RetryAfter)
+		}
+		return nil, fmt.Errorf("gemini API error: %d - %s", resp.StatusCode, string(responseBody))
+	}
+
+	// Check status code
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("gemini API error: %d - %s", resp.StatusCode, string(responseBody))
+	}
+
+	return responseBody, nil
+}
+
 // parseStandardGeminiResponse parses a standard Gemini API response
 func (p *GeminiProvider) parseStandardGeminiResponse(responseBody []byte, _ string) (string, *types.Usage, error) {
 	// Parse response (standard Gemini API returns direct response)
@@ -1477,116 +1470,6 @@ func (p *GeminiProvider) parseStandardGeminiResponse(responseBody []byte, _ stri
 	}
 
 	return result, usage, nil
-}
-
-// executeOAuthAPIRequest executes an OAuth-based CloudCode API request
-func (p *GeminiProvider) executeOAuthAPIRequest(ctx context.Context, model string, accessToken string, options types.GenerateOptions) ([]byte, error) {
-	// Prepare request for OAuth API
-	endpoint := ":generateContent" // CloudCode API format for OAuth
-	requestBody := p.prepareRequestForOAuth(options, model)
-
-	// Serialize request
-	jsonBody, err := json.Marshal(requestBody)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal request: %w", err)
-	}
-
-	// Create HTTP request
-	baseURL := cloudcodeBaseURL
-	url := fmt.Sprintf("%s/%s", baseURL, endpoint)
-	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonBody))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-
-	// Set headers with provided access token
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", accessToken))
-
-	p.LogRequest("POST", url, map[string]string{
-		"Content-Type":  "application/json",
-		"Authorization": "***",
-	}, requestBody)
-
-	// Make the request
-	resp, err := p.client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("request failed: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	// Read response body
-	responseBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response body: %w", err)
-	}
-
-	// Handle rate limiting
-	if resp.StatusCode == 429 {
-		if info, err := p.rateLimitHelper.GetParser().Parse(resp.Header, model); err == nil && info.RetryAfter > 0 {
-			// Update tracker with retry info
-			p.rateLimitHelper.UpdateRateLimitInfo(info)
-			return nil, fmt.Errorf("rate limited, retry after %v", info.RetryAfter)
-		}
-		return nil, fmt.Errorf("gemini API error: %d - %s", resp.StatusCode, string(responseBody))
-	}
-
-	// Check status code
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("gemini API error: %d - %s", resp.StatusCode, string(responseBody))
-	}
-
-	return responseBody, nil
-}
-
-// parseOAuthGeminiResponseMessage parses OAuth response and returns ChatMessage
-func (p *GeminiProvider) parseOAuthGeminiResponseMessage(responseBody []byte, _ string) (types.ChatMessage, *types.Usage, error) {
-	// Parse response (CloudCode API returns wrapped response)
-	var wrapperResp CloudCodeResponseWrapper
-	if err := json.Unmarshal(responseBody, &wrapperResp); err != nil {
-		return types.ChatMessage{}, nil, fmt.Errorf("failed to parse CloudCode response: %w", err)
-	}
-	apiResp := wrapperResp.Response
-
-	// Extract content
-	if len(apiResp.Candidates) == 0 {
-		return types.ChatMessage{}, nil, fmt.Errorf("no candidates in Gemini response")
-	}
-
-	candidate := apiResp.Candidates[0]
-	if candidate.FinishReason == "SAFETY" {
-		return types.ChatMessage{}, nil, fmt.Errorf("content was filtered due to safety concerns")
-	}
-
-	if len(candidate.Content.Parts) == 0 {
-		return types.ChatMessage{}, nil, fmt.Errorf("no parts in candidate content")
-	}
-
-	// Extract text content and tool calls
-	var fullText strings.Builder
-	for _, part := range candidate.Content.Parts {
-		if part.Text != "" {
-			fullText.WriteString(part.Text)
-		}
-	}
-
-	message := types.ChatMessage{
-		Role:      candidate.Content.Role,
-		Content:   fullText.String(),
-		ToolCalls: convertGeminiFunctionCallsToUniversal(candidate.Content.Parts),
-	}
-
-	// Extract usage information
-	var usage *types.Usage
-	if apiResp.UsageMetadata != nil {
-		usage = &types.Usage{
-			PromptTokens:     apiResp.UsageMetadata.PromptTokenCount,
-			CompletionTokens: apiResp.UsageMetadata.CandidatesTokenCount,
-			TotalTokens:      apiResp.UsageMetadata.TotalTokenCount,
-		}
-	}
-
-	return message, usage, nil
 }
 
 // parseStandardGeminiResponseMessage parses standard Gemini response and returns ChatMessage
