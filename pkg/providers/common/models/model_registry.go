@@ -72,6 +72,44 @@ func (r *ModelMetadataRegistry) GetMetadata(modelID string) *ModelMetadata {
 	return nil
 }
 
+// GetMetadataWithFallback retrieves metadata for a model ID with fallback to defaults
+// Precedence order:
+// 1. Provider-specific metadata (from registry)
+// 2. Embedded defaults (from models.dev snapshot)
+// 3. nil (no metadata available)
+func (r *ModelMetadataRegistry) GetMetadataWithFallback(modelID string) *ModelMetadata {
+	// Try provider-specific metadata first
+	if metadata := r.GetMetadata(modelID); metadata != nil {
+		return metadata
+	}
+
+	// Fall back to embedded defaults from models.dev
+	defaultsRegistry := GetDefaultsRegistry()
+	if defaults := defaultsRegistry.GetModelDefaults(modelID); defaults != nil {
+		return defaults
+	}
+
+	return nil
+}
+
+// GetMetadataWithOverrides retrieves metadata with user overrides applied
+// Precedence order (highest to lowest):
+// 1. User overrides (from ProviderConfig.ModelCapabilities)
+// 2. Provider API response metadata (from registry)
+// 3. Embedded defaults (from models.dev snapshot)
+// 4. nil (no metadata available)
+func (r *ModelMetadataRegistry) GetMetadataWithOverrides(modelID string, override *types.ModelCapabilityOverride) *ModelMetadata {
+	// Get base metadata (provider-specific or defaults)
+	metadata := r.GetMetadataWithFallback(modelID)
+
+	// Apply user overrides if provided
+	if override != nil {
+		metadata = ApplyUserOverride(metadata, *override)
+	}
+
+	return metadata
+}
+
 // EnrichModel enriches a model with metadata from the registry
 // If metadata is not found, returns the model unchanged
 func (r *ModelMetadataRegistry) EnrichModel(model *types.Model) *types.Model {
@@ -114,6 +152,75 @@ func (r *ModelMetadataRegistry) EnrichModels(models []types.Model) []types.Model
 	enriched := make([]types.Model, len(models))
 	for i := range models {
 		enrichedModel := r.EnrichModel(&models[i])
+		if enrichedModel != nil {
+			enriched[i] = *enrichedModel
+		} else {
+			enriched[i] = models[i]
+		}
+	}
+
+	return enriched
+}
+
+// EnrichModelWithOverrides enriches a model with metadata and user overrides
+// This method implements the full precedence hierarchy:
+// 1. User overrides (highest priority)
+// 2. Provider API response (if available in the model)
+// 3. Embedded defaults (from models.dev)
+// 4. Name inference (lowest priority)
+func (r *ModelMetadataRegistry) EnrichModelWithOverrides(model *types.Model, overrides map[string]types.ModelCapabilityOverride) *types.Model {
+	if model == nil {
+		return nil
+	}
+
+	// Get user override for this specific model
+	var override *types.ModelCapabilityOverride
+	if overrides != nil {
+		if o, exists := overrides[model.ID]; exists {
+			override = &o
+		}
+	}
+
+	// Get metadata with overrides applied
+	metadata := r.GetMetadataWithOverrides(model.ID, override)
+
+	// If no metadata found, try fallback to defaults
+	if metadata == nil {
+		metadata = r.GetMetadataWithFallback(model.ID)
+	}
+
+	// Create enriched copy
+	enriched := *model
+
+	// Apply metadata if available
+	if metadata != nil {
+		if metadata.DisplayName != "" {
+			enriched.Name = metadata.DisplayName
+		}
+		if metadata.MaxTokens > 0 {
+			enriched.MaxTokens = metadata.MaxTokens
+		}
+		if metadata.Description != "" {
+			enriched.Description = metadata.Description
+		}
+
+		// Apply capabilities
+		enriched.SupportsToolCalling = metadata.Capabilities.SupportsTools
+		enriched.SupportsStreaming = metadata.Capabilities.SupportsStreaming
+	}
+
+	return &enriched
+}
+
+// EnrichModelsWithOverrides enriches multiple models with metadata and user overrides
+func (r *ModelMetadataRegistry) EnrichModelsWithOverrides(models []types.Model, overrides map[string]types.ModelCapabilityOverride) []types.Model {
+	if len(models) == 0 {
+		return models
+	}
+
+	enriched := make([]types.Model, len(models))
+	for i := range models {
+		enrichedModel := r.EnrichModelWithOverrides(&models[i], overrides)
 		if enrichedModel != nil {
 			enriched[i] = *enrichedModel
 		} else {

@@ -89,6 +89,16 @@ type ProviderInfo struct {
 	DefaultModel   string       `json:"default_model"`
 }
 
+// ModelCapabilityOverride allows users to override model capabilities
+type ModelCapabilityOverride struct {
+	MaxTokens         *int     `json:"max_tokens,omitempty"`
+	ContextWindow     *int     `json:"context_window,omitempty"`
+	SupportsStreaming *bool    `json:"supports_streaming,omitempty"`
+	SupportsTools     *bool    `json:"supports_tools,omitempty"`
+	SupportsVision    *bool    `json:"supports_vision,omitempty"`
+	Capabilities      []string `json:"capabilities,omitempty"`
+}
+
 // ProviderConfig represents configuration for a specific provider
 type ProviderConfig struct {
 	Type           ProviderType           `json:"type"`
@@ -102,6 +112,9 @@ type ProviderConfig struct {
 
 	// Multiple OAuth credentials for failover (multi-OAuth)
 	OAuthCredentials []*OAuthCredentialSet `json:"oauth_credentials,omitempty"`
+
+	// Model capability overrides - allows users to override model capabilities
+	ModelCapabilities map[string]ModelCapabilityOverride `json:"model_capabilities,omitempty"`
 
 	// Feature flags
 	SupportsStreaming    bool `json:"supports_streaming"`
