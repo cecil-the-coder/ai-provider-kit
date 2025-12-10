@@ -630,14 +630,14 @@ func TestCreateProviderFromConfig_RealWorldExamples(t *testing.T) {
 			expectedName := tc.configMap["name"].(string)
 			providerType := tc.configMap["type"].(string)
 
-			// OpenAI has hardcoded name, SimpleProviderStub uses lowercase provider type
+			// Real providers have capitalized names, SimpleProviderStub uses lowercase provider type
 			switch providerType {
 			case "openai":
 				assert.Equal(t, "OpenAI", provider.Name())
 			case "anthropic":
 				assert.Equal(t, "Anthropic", provider.Name())
 			case "ollama":
-				assert.Equal(t, "ollama", provider.Name())
+				assert.Equal(t, "Ollama", provider.Name())
 			default:
 				assert.Equal(t, expectedName, provider.Name())
 			}

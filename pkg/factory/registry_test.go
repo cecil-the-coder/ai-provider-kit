@@ -152,7 +152,7 @@ func TestRegisterDefaultProviders_ProviderCreation(t *testing.T) {
 				BaseURL:      "http://localhost:11434",
 				DefaultModel: "llama2",
 			},
-			expectName: "ollama",
+			expectName: "Ollama",
 		},
 	}
 
@@ -268,11 +268,10 @@ func TestInitializeDefaultProviders_vs_RegisterDefaultProviders(t *testing.T) {
 	providers1 := factory1.GetSupportedProviders()
 	providers2 := factory2.GetSupportedProviders()
 
-	// InitializeDefaultProviders should only have stub providers (3 total)
+	// InitializeDefaultProviders should only have stub providers (2 total)
 	expectedStubProviders := []types.ProviderType{
 		types.ProviderTypeLMStudio,
 		types.ProviderTypeLlamaCpp,
-		types.ProviderTypeOllama,
 	}
 	assert.Len(t, providers1, len(expectedStubProviders))
 
@@ -284,9 +283,9 @@ func TestInitializeDefaultProviders_vs_RegisterDefaultProviders(t *testing.T) {
 		types.ProviderTypeQwen,
 		types.ProviderTypeCerebras,
 		types.ProviderTypeOpenRouter,
+		types.ProviderTypeOllama,
 		types.ProviderTypeLMStudio,
 		types.ProviderTypeLlamaCpp,
-		types.ProviderTypeOllama,
 		types.ProviderTypeRacing,
 		types.ProviderTypeFallback,
 		types.ProviderTypeLoadBalance,
@@ -318,6 +317,7 @@ func TestInitializeDefaultProviders_vs_RegisterDefaultProviders(t *testing.T) {
 		types.ProviderTypeQwen,
 		types.ProviderTypeCerebras,
 		types.ProviderTypeOpenRouter,
+		types.ProviderTypeOllama,
 	}
 
 	for _, realProvider := range realImplementationProviders {

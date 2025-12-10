@@ -6,6 +6,7 @@ import (
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/anthropic"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/cerebras"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/gemini"
+	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/ollama"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/openai"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/openrouter"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/qwen"
@@ -53,6 +54,11 @@ func registerPrimaryProviders(factory *DefaultProviderFactory) {
 	factory.RegisterProvider(types.ProviderTypeOpenRouter, func(config types.ProviderConfig) types.Provider {
 		return openrouter.NewOpenRouterProvider(config)
 	})
+
+	// Register Ollama provider with full implementation
+	factory.RegisterProvider(types.ProviderTypeOllama, func(config types.ProviderConfig) types.Provider {
+		return ollama.NewOllamaProvider(config)
+	})
 }
 
 // registerStubProviders registers stub providers for local/model-server providers
@@ -63,10 +69,6 @@ func registerStubProviders(factory *DefaultProviderFactory) {
 
 	factory.RegisterProvider(types.ProviderTypeLlamaCpp, func(config types.ProviderConfig) types.Provider {
 		return &SimpleProviderStub{name: "llamacpp", providerType: types.ProviderTypeLlamaCpp, config: config}
-	})
-
-	factory.RegisterProvider(types.ProviderTypeOllama, func(config types.ProviderConfig) types.Provider {
-		return &SimpleProviderStub{name: "ollama", providerType: types.ProviderTypeOllama, config: config}
 	})
 }
 

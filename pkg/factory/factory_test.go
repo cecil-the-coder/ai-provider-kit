@@ -243,7 +243,6 @@ func TestInitializeDefaultProviders(t *testing.T) {
 	expectedProviders := []types.ProviderType{
 		types.ProviderTypeLMStudio,
 		types.ProviderTypeLlamaCpp,
-		types.ProviderTypeOllama,
 	}
 
 	assert.Len(t, supportedProviders, len(expectedProviders))
@@ -271,6 +270,7 @@ func TestInitializeDefaultProviders(t *testing.T) {
 		types.ProviderTypeGemini,
 		types.ProviderTypeCerebras,
 		types.ProviderTypeOpenRouter,
+		types.ProviderTypeOllama,
 	}
 
 	for _, providerType := range realImplementationProviders {

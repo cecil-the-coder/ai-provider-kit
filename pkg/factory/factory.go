@@ -89,9 +89,6 @@ func InitializeDefaultProviders(factory *DefaultProviderFactory) {
 	factory.RegisterProvider(types.ProviderTypeLlamaCpp, func(config types.ProviderConfig) types.Provider {
 		return &SimpleProviderStub{name: "llamacpp", providerType: types.ProviderTypeLlamaCpp, config: config}
 	})
-	factory.RegisterProvider(types.ProviderTypeOllama, func(config types.ProviderConfig) types.Provider {
-		return &SimpleProviderStub{name: "ollama", providerType: types.ProviderTypeOllama, config: config}
-	})
 }
 
 // SimpleProviderStub implements types.Provider interface
