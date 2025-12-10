@@ -509,7 +509,7 @@ func TestAnthropicStreamParser(t *testing.T) {
 	}{
 		{
 			name:          "content block delta",
-			data:          `{"type": "content_block_delta", "delta": {"text": "Hello"}}`,
+			data:          `{"type": "content_block_delta", "delta": {"type": "text_delta", "text": "Hello"}}`,
 			expectError:   false,
 			expectDone:    false,
 			expectContent: "Hello",

@@ -379,7 +379,12 @@ func convertToolCalls(toolCallsArray []interface{}) []types.ToolCall {
 }
 
 // AnthropicStreamParser provides a parser for Anthropic's streaming format
-type AnthropicStreamParser struct{}
+type AnthropicStreamParser struct {
+	// State tracking for tool calls across multiple events
+	currentToolCallID   string
+	currentToolName     string
+	currentContentIndex int
+}
 
 // NewAnthropicStreamParser creates a new Anthropic stream parser
 func NewAnthropicStreamParser() *AnthropicStreamParser {
@@ -397,13 +402,112 @@ func (p *AnthropicStreamParser) ParseLine(data string) (types.ChatCompletionChun
 	eventType, _ := streamResp["type"].(string)
 
 	switch eventType {
-	case "content_block_delta":
-		// Extract text content
-		if delta, ok := streamResp["delta"].(map[string]interface{}); ok {
-			if text, ok := delta["text"].(string); ok {
+	case "content_block_start":
+		// Handle the start of a content block (text or tool_use)
+		if contentBlock, ok := streamResp["content_block"].(map[string]interface{}); ok {
+			blockType, _ := contentBlock["type"].(string)
+
+			if blockType == "tool_use" {
+				// Extract tool call metadata
+				toolID, _ := contentBlock["id"].(string)
+				toolName, _ := contentBlock["name"].(string)
+
+				// Store for subsequent deltas
+				p.currentToolCallID = toolID
+				p.currentToolName = toolName
+
+				// Update content index
+				if index, ok := streamResp["index"].(float64); ok {
+					p.currentContentIndex = int(index)
+				}
+
+				// Return chunk with tool call start
 				return types.ChatCompletionChunk{
-					Content: text,
-					Done:    false,
+					Choices: []types.ChatChoice{
+						{
+							Index: 0,
+							Delta: types.ChatMessage{
+								ToolCalls: []types.ToolCall{
+									{
+										ID:   toolID,
+										Type: "function",
+										Function: types.ToolCallFunction{
+											Name: toolName,
+										},
+									},
+								},
+							},
+						},
+					},
+					Done: false,
+				}, false, nil
+			}
+		}
+
+	case "content_block_delta":
+		// Handle deltas for content blocks (text or tool arguments)
+		if delta, ok := streamResp["delta"].(map[string]interface{}); ok {
+			deltaType, _ := delta["type"].(string)
+
+			switch deltaType {
+			case "text_delta":
+				// Extract text content
+				if text, ok := delta["text"].(string); ok {
+					return types.ChatCompletionChunk{
+						Content: text,
+						Done:    false,
+					}, false, nil
+				}
+
+			case "input_json_delta":
+				// Extract tool call arguments
+				if partialJSON, ok := delta["partial_json"].(string); ok {
+					return types.ChatCompletionChunk{
+						Choices: []types.ChatChoice{
+							{
+								Index: 0,
+								Delta: types.ChatMessage{
+									ToolCalls: []types.ToolCall{
+										{
+											ID:   p.currentToolCallID,
+											Type: "function",
+											Function: types.ToolCallFunction{
+												Name:      p.currentToolName,
+												Arguments: partialJSON,
+											},
+										},
+									},
+								},
+							},
+						},
+						Done: false,
+					}, false, nil
+				}
+			}
+		}
+
+	case "message_delta":
+		// Handle message-level deltas (e.g., stop_reason)
+		if delta, ok := streamResp["delta"].(map[string]interface{}); ok {
+			if stopReason, ok := delta["stop_reason"].(string); ok {
+				// Map Anthropic stop reasons to OpenAI finish reasons
+				finishReason := stopReason
+				if stopReason == "tool_use" {
+					finishReason = "tool_calls"
+				} else if stopReason == "end_turn" {
+					finishReason = "stop"
+				} else if stopReason == "max_tokens" {
+					finishReason = "length"
+				}
+
+				return types.ChatCompletionChunk{
+					Choices: []types.ChatChoice{
+						{
+							Index:        0,
+							FinishReason: finishReason,
+						},
+					},
+					Done: false,
 				}, false, nil
 			}
 		}
