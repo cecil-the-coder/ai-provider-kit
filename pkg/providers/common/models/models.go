@@ -3,6 +3,7 @@
 package models
 
 import (
+	"strings"
 	"sync"
 	"time"
 
@@ -107,20 +108,25 @@ func (mr *ModelRegistry) inferModelCapability(model types.Model) *ModelCapabilit
 // inferCategories infers model categories from model ID and provider
 func (mr *ModelRegistry) inferCategories(modelID string, provider types.ProviderType) []string {
 	var categories []string
+	modelLower := strings.ToLower(modelID)
 
 	// Provider-specific categories
 	switch provider {
 	case types.ProviderTypeOpenAI:
 		categories = append(categories, "text", "code")
-		if contains(modelID, "gpt-4-vision") {
-			categories = append(categories, "multimodal", "vision")
-		}
 	case types.ProviderTypeAnthropic:
 		categories = append(categories, "text", "code")
 	case types.ProviderTypeGemini:
 		categories = append(categories, "text", "code", "multimodal")
 	case types.ProviderTypeCerebras:
 		categories = append(categories, "text", "code")
+	default:
+		categories = append(categories, "text")
+	}
+
+	// Vision/multimodal detection based on model name patterns
+	if inferSupportsVision(modelLower) {
+		categories = append(categories, "multimodal", "vision")
 	}
 
 	// Model-specific categories
@@ -132,6 +138,58 @@ func (mr *ModelRegistry) inferCategories(modelID string, provider types.Provider
 	}
 
 	return unique(categories)
+}
+
+// inferSupportsVision checks if a model likely supports vision based on its name
+func inferSupportsVision(modelLower string) bool {
+	// OpenAI vision models
+	if strings.Contains(modelLower, "gpt-4o") || // GPT-4o, GPT-4o-mini
+		strings.Contains(modelLower, "gpt-4-turbo") || // GPT-4 Turbo with vision
+		strings.Contains(modelLower, "gpt-4-vision") { // Explicit vision model
+		return true
+	}
+
+	// Anthropic Claude 3+ models (all support vision)
+	if strings.Contains(modelLower, "claude-3") ||
+		strings.Contains(modelLower, "claude-sonnet-4") ||
+		strings.Contains(modelLower, "claude-opus-4") {
+		return true
+	}
+
+	// Google Gemini models (all support vision)
+	if strings.Contains(modelLower, "gemini") {
+		return true
+	}
+
+	// LLaVA models (vision-language models)
+	if strings.Contains(modelLower, "llava") {
+		return true
+	}
+
+	// Qwen-VL models
+	if strings.Contains(modelLower, "qwen-vl") ||
+		strings.Contains(modelLower, "qwen2-vl") {
+		return true
+	}
+
+	// Generic vision indicators
+	if strings.Contains(modelLower, "-vision") ||
+		strings.Contains(modelLower, "-vl") || // Vision-Language suffix
+		strings.Contains(modelLower, "vision-") {
+		return true
+	}
+
+	// Pixtral (Mistral's vision model)
+	if strings.Contains(modelLower, "pixtral") {
+		return true
+	}
+
+	// Meta Llama vision models
+	if strings.Contains(modelLower, "llama") && strings.Contains(modelLower, "vision") {
+		return true
+	}
+
+	return false
 }
 
 // SearchModels searches for models matching criteria
