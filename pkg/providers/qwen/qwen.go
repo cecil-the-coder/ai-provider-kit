@@ -334,6 +334,25 @@ func (p *QwenProvider) buildQwenRequest(options types.GenerateOptions) QwenReque
 		// ToolChoice defaults to "auto" when tools are provided (Qwen's default behavior)
 	}
 
+	// Handle structured outputs via ResponseFormat
+	// Qwen uses OpenAI-compatible JSON mode (basic JSON validation only, no server-side schema validation)
+	if options.ResponseFormat != "" {
+		// Try to parse as JSON schema first
+		var schemaObj map[string]interface{}
+		if err := json.Unmarshal([]byte(options.ResponseFormat), &schemaObj); err == nil {
+			// For OpenAI-compatible providers like Qwen, wrap in {"type":"json_object"}
+			// Note: Qwen only validates JSON structure, not schema
+			request.ResponseFormat = map[string]interface{}{
+				"type": "json_object",
+			}
+		} else {
+			// It's a string like "json_object", use it directly
+			request.ResponseFormat = map[string]interface{}{
+				"type": options.ResponseFormat,
+			}
+		}
+	}
+
 	return request
 }
 

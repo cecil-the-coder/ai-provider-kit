@@ -8,14 +8,15 @@ import (
 
 // QwenRequest represents the API request to Qwen
 type QwenRequest struct {
-	Model       string        `json:"model"`
-	Messages    []QwenMessage `json:"messages"`
-	Stream      bool          `json:"stream"`
-	MaxTokens   int           `json:"max_tokens"`
-	Temperature float64       `json:"temperature"`
-	Tools       []QwenTool    `json:"tools,omitempty"`
-	ToolChoice  interface{}   `json:"tool_choice,omitempty"`
-	Stop        []string      `json:"stop,omitempty"`
+	Model          string                 `json:"model"`
+	Messages       []QwenMessage          `json:"messages"`
+	Stream         bool                   `json:"stream"`
+	MaxTokens      int                    `json:"max_tokens"`
+	Temperature    float64                `json:"temperature"`
+	Tools          []QwenTool             `json:"tools,omitempty"`
+	ToolChoice     interface{}            `json:"tool_choice,omitempty"`
+	Stop           []string               `json:"stop,omitempty"`
+	ResponseFormat map[string]interface{} `json:"response_format,omitempty"` // For structured outputs
 }
 
 // QwenTool represents a tool in Qwen API (OpenAI-compatible format)

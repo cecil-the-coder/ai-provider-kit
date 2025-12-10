@@ -4,16 +4,17 @@ package anthropic
 
 // AnthropicRequest represents the request payload for Anthropic API
 type AnthropicRequest struct {
-	Model         string             `json:"model"`
-	MaxTokens     int                `json:"max_tokens"`
-	System        interface{}        `json:"system,omitempty"` // Can be string or []interface{} for OAuth
-	Messages      []AnthropicMessage `json:"messages"`
-	Stream        bool               `json:"stream,omitempty"`
-	Tools         []AnthropicTool    `json:"tools,omitempty"`
-	ToolChoice    interface{}        `json:"tool_choice,omitempty"` // Can be map[string]string or map[string]interface{}
-	StopSequences []string           `json:"stop_sequences,omitempty"`
-	TopP          *float64           `json:"top_p,omitempty"`
-	TopK          *int               `json:"top_k,omitempty"`
+	Model          string             `json:"model"`
+	MaxTokens      int                `json:"max_tokens"`
+	System         interface{}        `json:"system,omitempty"` // Can be string or []interface{} for OAuth
+	Messages       []AnthropicMessage `json:"messages"`
+	Stream         bool               `json:"stream,omitempty"`
+	Tools          []AnthropicTool    `json:"tools,omitempty"`
+	ToolChoice     interface{}        `json:"tool_choice,omitempty"`     // Can be map[string]string or map[string]interface{}
+	ResponseFormat interface{}        `json:"response_format,omitempty"` // For structured outputs
+	StopSequences  []string           `json:"stop_sequences,omitempty"`
+	TopP           *float64           `json:"top_p,omitempty"`
+	TopK           *int               `json:"top_k,omitempty"`
 }
 
 // AnthropicTool represents a tool definition in the Anthropic API

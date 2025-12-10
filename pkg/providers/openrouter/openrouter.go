@@ -683,6 +683,25 @@ func (p *OpenRouterProvider) prepareRequest(options types.GenerateOptions) (Open
 		// ToolChoice defaults to "auto" when tools are provided (OpenAI's default behavior)
 	}
 
+	// Handle structured outputs via ResponseFormat
+	// OpenRouter uses OpenAI-compatible JSON mode (varies by underlying model)
+	if options.ResponseFormat != "" {
+		// Try to parse as JSON schema first
+		var schemaObj map[string]interface{}
+		if err := json.Unmarshal([]byte(options.ResponseFormat), &schemaObj); err == nil {
+			// For OpenAI-compatible providers like OpenRouter, wrap in {"type":"json_object"}
+			// Note: Actual support depends on the underlying model selected
+			requestData.ResponseFormat = map[string]interface{}{
+				"type": "json_object",
+			}
+		} else {
+			// It's a string like "json_object", use it directly
+			requestData.ResponseFormat = map[string]interface{}{
+				"type": options.ResponseFormat,
+			}
+		}
+	}
+
 	return requestData, nil
 }
 
@@ -969,15 +988,16 @@ func (s *OpenRouterStream) Close() error {
 
 // OpenRouterRequest represents the request payload for OpenRouter API
 type OpenRouterRequest struct {
-	Model         string              `json:"model"`
-	Messages      []OpenRouterMessage `json:"messages"`
-	Stream        bool                `json:"stream"`
-	HTTPReferer   string              `json:"http_referer,omitempty"`
-	HTTPUserAgent string              `json:"x-title,omitempty"`
-	Temperature   float64             `json:"temperature,omitempty"`
-	MaxTokens     int                 `json:"max_tokens,omitempty"`
-	Tools         []OpenRouterTool    `json:"tools,omitempty"`
-	ToolChoice    interface{}         `json:"tool_choice,omitempty"`
+	Model          string                 `json:"model"`
+	Messages       []OpenRouterMessage    `json:"messages"`
+	Stream         bool                   `json:"stream"`
+	HTTPReferer    string                 `json:"http_referer,omitempty"`
+	HTTPUserAgent  string                 `json:"x-title,omitempty"`
+	Temperature    float64                `json:"temperature,omitempty"`
+	MaxTokens      int                    `json:"max_tokens,omitempty"`
+	Tools          []OpenRouterTool       `json:"tools,omitempty"`
+	ToolChoice     interface{}            `json:"tool_choice,omitempty"`
+	ResponseFormat map[string]interface{} `json:"response_format,omitempty"` // For structured outputs
 }
 
 // OpenRouterTool represents a tool in the OpenRouter API (OpenAI-compatible format)

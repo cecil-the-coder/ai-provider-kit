@@ -1288,14 +1288,31 @@ func (p *GeminiProvider) prepareStandardRequest(options types.GenerateOptions) G
 		})
 	}
 
+	generationConfig := &GenerationConfig{
+		Temperature:     0.7,
+		TopP:            0.95,
+		TopK:            40,
+		MaxOutputTokens: 8192,
+	}
+
+	// Handle structured outputs via ResponseFormat
+	// Gemini supports JSON schema validation with response_schema + response_mime_type="application/json"
+	if options.ResponseFormat != "" {
+		// Try to parse as JSON schema first
+		var schemaObj map[string]interface{}
+		if err := json.Unmarshal([]byte(options.ResponseFormat), &schemaObj); err == nil {
+			// It's a valid JSON schema object
+			generationConfig.ResponseSchema = schemaObj
+			generationConfig.ResponseMimeType = "application/json"
+		} else {
+			// It's a string like "json", just set the mime type
+			generationConfig.ResponseMimeType = "application/json"
+		}
+	}
+
 	requestBody := GenerateContentRequest{
-		Contents: contents,
-		GenerationConfig: &GenerationConfig{
-			Temperature:     0.7,
-			TopP:            0.95,
-			TopK:            40,
-			MaxOutputTokens: 8192,
-		},
+		Contents:         contents,
+		GenerationConfig: generationConfig,
 	}
 
 	// Add tools if provided

@@ -10,14 +10,15 @@ import (
 
 // CerebrasRequest represents a request to the Cerebras chat completions API
 type CerebrasRequest struct {
-	Model       string            `json:"model"`
-	Messages    []CerebrasMessage `json:"messages"`
-	Temperature *float64          `json:"temperature,omitempty"`
-	MaxTokens   *int              `json:"max_tokens,omitempty"`
-	Stream      bool              `json:"stream"`
-	Stop        []string          `json:"stop,omitempty"`
-	Tools       []CerebrasTool    `json:"tools,omitempty"`
-	ToolChoice  interface{}       `json:"tool_choice,omitempty"`
+	Model          string                 `json:"model"`
+	Messages       []CerebrasMessage      `json:"messages"`
+	Temperature    *float64               `json:"temperature,omitempty"`
+	MaxTokens      *int                   `json:"max_tokens,omitempty"`
+	Stream         bool                   `json:"stream"`
+	Stop           []string               `json:"stop,omitempty"`
+	Tools          []CerebrasTool         `json:"tools,omitempty"`
+	ToolChoice     interface{}            `json:"tool_choice,omitempty"`
+	ResponseFormat map[string]interface{} `json:"response_format,omitempty"` // For structured outputs
 }
 
 // CerebrasTool represents a tool in the Cerebras API (OpenAI-compatible)

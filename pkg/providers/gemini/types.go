@@ -46,10 +46,12 @@ type FunctionResponse struct {
 
 // GenerationConfig represents generation configuration
 type GenerationConfig struct {
-	Temperature     float64 `json:"temperature,omitempty"`
-	TopP            float64 `json:"topP,omitempty"`
-	TopK            int     `json:"topK,omitempty"`
-	MaxOutputTokens int     `json:"maxOutputTokens,omitempty"`
+	Temperature      float64                `json:"temperature,omitempty"`
+	TopP             float64                `json:"topP,omitempty"`
+	TopK             int                    `json:"topK,omitempty"`
+	MaxOutputTokens  int                    `json:"maxOutputTokens,omitempty"`
+	ResponseMimeType string                 `json:"responseMimeType,omitempty"` // For structured outputs
+	ResponseSchema   map[string]interface{} `json:"responseSchema,omitempty"`   // For structured outputs JSON schema
 }
 
 // GenerateContentResponse represents a response from generate content
