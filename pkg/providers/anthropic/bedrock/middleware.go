@@ -72,10 +72,7 @@ func (m *BedrockMiddleware) ProcessRequest(ctx context.Context, req *http.Reques
 	}
 
 	// Transform request body to Bedrock format
-	bedrockReq, err := m.transformRequestToBedrock(anthropicReq)
-	if err != nil {
-		return ctx, req, fmt.Errorf("bedrock: failed to transform request: %w", err)
-	}
+	bedrockReq := m.transformRequestToBedrock(anthropicReq)
 
 	// Marshal the transformed request
 	transformedBody, err := json.Marshal(bedrockReq)
@@ -84,9 +81,7 @@ func (m *BedrockMiddleware) ProcessRequest(ctx context.Context, req *http.Reques
 	}
 
 	// Update the request URL to point to Bedrock
-	if err := m.updateRequestURL(req, anthropicReq["model"].(string)); err != nil {
-		return ctx, req, fmt.Errorf("bedrock: failed to update request URL: %w", err)
-	}
+	m.updateRequestURL(req, anthropicReq["model"].(string))
 
 	// Update request body
 	req.Body = io.NopCloser(bytes.NewReader(transformedBody))
@@ -172,7 +167,7 @@ func (m *BedrockMiddleware) isStreamingResponse(resp *http.Response) bool {
 }
 
 // updateRequestURL updates the request URL to point to Bedrock
-func (m *BedrockMiddleware) updateRequestURL(req *http.Request, modelID string) error {
+func (m *BedrockMiddleware) updateRequestURL(req *http.Request, modelID string) {
 	// Bedrock uses the model ID in the URL path
 	// Format: /model/{modelId}/invoke or /model/{modelId}/invoke-with-response-stream
 
@@ -194,8 +189,6 @@ func (m *BedrockMiddleware) updateRequestURL(req *http.Request, modelID string) 
 	req.URL.Host = endpoint
 	req.URL.Path = path
 	req.Host = endpoint
-
-	return nil
 }
 
 // transformHeaders updates headers for Bedrock compatibility
@@ -216,7 +209,7 @@ func (m *BedrockMiddleware) transformHeaders(req *http.Request) {
 
 // transformRequestToBedrock transforms an Anthropic request to Bedrock format
 // Bedrock's format is very similar to Anthropic's, but there are some differences
-func (m *BedrockMiddleware) transformRequestToBedrock(anthropicReq map[string]interface{}) (map[string]interface{}, error) {
+func (m *BedrockMiddleware) transformRequestToBedrock(anthropicReq map[string]interface{}) map[string]interface{} {
 	bedrockReq := make(map[string]interface{})
 
 	// Copy most fields directly
@@ -238,7 +231,7 @@ func (m *BedrockMiddleware) transformRequestToBedrock(anthropicReq map[string]in
 		bedrockReq["max_tokens"] = 4096
 	}
 
-	return bedrockReq, nil
+	return bedrockReq
 }
 
 // transformResponseToAnthropic transforms a Bedrock response to Anthropic format

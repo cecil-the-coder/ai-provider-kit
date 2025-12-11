@@ -48,8 +48,8 @@ type ExponentialBackoffStrategy struct {
 func NewExponentialBackoffStrategy(policy *RetryPolicy) *ExponentialBackoffStrategy {
 	return &ExponentialBackoffStrategy{
 		policy:        policy,
-		jitterType:    EqualJitter, // Default to equal jitter
-		rng:           rand.New(rand.NewSource(time.Now().UnixNano())),
+		jitterType:    EqualJitter,                                     // Default to equal jitter
+		rng:           rand.New(rand.NewSource(time.Now().UnixNano())), //nolint:gosec // G404: math/rand is sufficient for jitter
 		previousDelay: 0,
 	}
 }

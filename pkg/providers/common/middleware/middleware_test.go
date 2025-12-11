@@ -38,7 +38,7 @@ func (m *mockRequestMiddleware) wasCalled() bool {
 	return m.called
 }
 
-func (m *mockRequestMiddleware) reset() {
+func (m *mockRequestMiddleware) reset() { //nolint:unused // kept for test utility
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.called = false
@@ -68,7 +68,7 @@ func (m *mockResponseMiddleware) wasCalled() bool {
 	return m.called
 }
 
-func (m *mockResponseMiddleware) reset() {
+func (m *mockResponseMiddleware) reset() { //nolint:unused // kept for test utility
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.called = false

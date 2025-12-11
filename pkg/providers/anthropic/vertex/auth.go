@@ -62,16 +62,17 @@ func (a *AuthProvider) initializeTokenSource(ctx context.Context) error {
 		var credentialsJSON []byte
 		var err error
 
-		if a.config.ServiceAccountJSON != "" {
+		switch {
+		case a.config.ServiceAccountJSON != "":
 			// Use raw JSON content
 			credentialsJSON = []byte(a.config.ServiceAccountJSON)
-		} else if a.config.ServiceAccountFile != "" {
+		case a.config.ServiceAccountFile != "":
 			// Read from file
 			credentialsJSON, err = os.ReadFile(a.config.ServiceAccountFile)
 			if err != nil {
 				return fmt.Errorf("failed to read service account file: %w", err)
 			}
-		} else {
+		default:
 			return fmt.Errorf("no service account credentials provided")
 		}
 

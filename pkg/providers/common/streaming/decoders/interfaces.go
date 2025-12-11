@@ -1,3 +1,6 @@
+// Package decoders provides pluggable stream decoders for various streaming formats
+// including Server-Sent Events (SSE), NDJSON, and EventStream. The package supports
+// automatic format detection and a factory pattern for creating appropriate decoders.
 package decoders
 
 import (

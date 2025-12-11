@@ -356,8 +356,7 @@ func TestBedrockMiddleware_updateRequestURL(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			req := httptest.NewRequest("POST", tt.originalURL, nil)
-			err := middleware.updateRequestURL(req, tt.modelID)
-			require.NoError(t, err)
+			middleware.updateRequestURL(req, tt.modelID)
 
 			assert.Equal(t, tt.expectedHost, req.URL.Host)
 			assert.Equal(t, tt.expectedPath, req.URL.Path)
@@ -402,8 +401,7 @@ func TestBedrockMiddleware_transformRequestToBedrock(t *testing.T) {
 		"anthropic_version": "2023-06-01",
 	}
 
-	bedrockReq, err := middleware.transformRequestToBedrock(anthropicReq)
-	require.NoError(t, err)
+	bedrockReq := middleware.transformRequestToBedrock(anthropicReq)
 
 	// Model should not be in body (it's in URL)
 	assert.NotContains(t, bedrockReq, "model")
@@ -426,8 +424,7 @@ func TestBedrockMiddleware_transformRequestToBedrock_DefaultMaxTokens(t *testing
 		},
 	}
 
-	bedrockReq, err := middleware.transformRequestToBedrock(anthropicReq)
-	require.NoError(t, err)
+	bedrockReq := middleware.transformRequestToBedrock(anthropicReq)
 
 	// Should add default max_tokens
 	assert.Equal(t, 4096, bedrockReq["max_tokens"])

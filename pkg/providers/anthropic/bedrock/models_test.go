@@ -143,14 +143,15 @@ func TestModelMapper_ToAnthropicModelName(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			anthropicName, found := mapper.ToAnthropicModelName(tt.bedrockID)
 			assert.Equal(t, tt.expectedFound, found)
-			if found && !strings.HasPrefix(tt.bedrockID, "anthropic.") {
+			switch {
+			case found && !strings.HasPrefix(tt.bedrockID, "anthropic."):
 				// If input was already an Anthropic name, should return as-is
 				assert.Equal(t, tt.expectedName, anthropicName)
-			} else if found {
+			case found:
 				// Verify the returned name maps back to the same Bedrock ID
 				bedrockID, _ := mapper.ToBedrockModelID(anthropicName)
 				assert.Equal(t, tt.bedrockID, bedrockID)
-			} else {
+			default:
 				assert.Equal(t, tt.expectedName, anthropicName)
 			}
 		})

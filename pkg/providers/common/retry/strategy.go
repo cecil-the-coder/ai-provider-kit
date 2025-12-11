@@ -150,8 +150,8 @@ func (r *RetryExecutor) ExecuteWithResult(ctx context.Context, operation func() 
 	}
 }
 
-// ExecuteWithData is a generic version that works with any return type
-// This is useful for strongly-typed operations
+// ExecuteFunc is a generic function type that works with any return type.
+// This is useful for strongly-typed operations.
 type ExecuteFunc[T any] func() (T, error)
 
 // ExecuteTyped executes a typed function with retry logic
@@ -212,7 +212,7 @@ func ExecuteTyped[T any](ctx context.Context, executor *RetryExecutor, operation
 	}
 }
 
-// OnRetry is a callback function that can be called before each retry
+// OnRetryFunc is a callback function type that is called before each retry attempt.
 type OnRetryFunc func(attempt int, err error, delay time.Duration)
 
 // ExecuteWithCallback executes a function with retry logic and callback notifications

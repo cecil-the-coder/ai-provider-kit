@@ -126,10 +126,8 @@ func TestVertexConfig_Validate(t *testing.T) {
 				if tt.errMsg != "" && err.Error() != tt.errMsg && !contains(err.Error(), tt.errMsg) {
 					t.Errorf("Validate() error = %v, want error containing %q", err, tt.errMsg)
 				}
-			} else {
-				if err != nil {
-					t.Errorf("Validate() unexpected error = %v", err)
-				}
+			} else if err != nil {
+				t.Errorf("Validate() unexpected error = %v", err)
 			}
 		})
 	}

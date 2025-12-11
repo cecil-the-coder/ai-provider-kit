@@ -186,7 +186,7 @@ func (s *Signer) buildCanonicalHeaders(req *http.Request) (canonical, signed str
 	sort.Strings(keys)
 
 	// Build canonical headers
-	var canonicalParts []string
+	canonicalParts := make([]string, 0, len(keys))
 	for _, k := range keys {
 		values := headers[k]
 		// Join multiple values with commas, trim whitespace

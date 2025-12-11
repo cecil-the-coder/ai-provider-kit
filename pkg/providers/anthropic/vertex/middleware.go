@@ -74,10 +74,7 @@ func (m *VertexMiddleware) ProcessRequest(ctx context.Context, req *http.Request
 	}
 
 	// Transform the request body for Vertex AI
-	vertexReq, err := m.transformRequestBody(anthropicReq)
-	if err != nil {
-		return ctx, req, fmt.Errorf("failed to transform request: %w", err)
-	}
+	vertexReq := m.transformRequestBody(anthropicReq)
 
 	// Marshal the transformed request
 	vertexBody, err := json.Marshal(vertexReq)
@@ -171,7 +168,7 @@ func (m *VertexMiddleware) ProcessResponse(ctx context.Context, req *http.Reques
 }
 
 // transformRequestBody converts Anthropic request format to Vertex AI format
-func (m *VertexMiddleware) transformRequestBody(anthropicReq map[string]interface{}) (map[string]interface{}, error) {
+func (m *VertexMiddleware) transformRequestBody(anthropicReq map[string]interface{}) map[string]interface{} {
 	// Vertex AI accepts the same request format as Anthropic API
 	// However, we need to ensure the model field is removed as it's in the URL
 	vertexReq := make(map[string]interface{})
@@ -184,7 +181,7 @@ func (m *VertexMiddleware) transformRequestBody(anthropicReq map[string]interfac
 		vertexReq[key] = value
 	}
 
-	return vertexReq, nil
+	return vertexReq
 }
 
 // transformResponseBody converts Vertex AI response format to Anthropic format
