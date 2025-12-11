@@ -200,6 +200,25 @@ func TestMiddlewareChain_Clear(t *testing.T) {
 	assert.Equal(t, 0, chain.Len())
 }
 
+// verifyMiddlewareOrder is a helper that verifies middleware execution order
+func verifyMiddlewareOrder(t *testing.T, setupChain func(chain *DefaultMiddlewareChain, mw1, mw2, mw3 *orderTrackingMiddleware), expectedOrder []string) {
+	t.Helper()
+	order := make([]string, 0)
+	mu := &sync.Mutex{}
+	orderMw1 := &orderTrackingMiddleware{id: "1", order: &order, mu: mu}
+	orderMw2 := &orderTrackingMiddleware{id: "2", order: &order, mu: mu}
+	orderMw3 := &orderTrackingMiddleware{id: "3", order: &order, mu: mu}
+
+	chain := NewMiddlewareChain()
+	setupChain(chain, orderMw1, orderMw2, orderMw3)
+
+	req := httptest.NewRequest("GET", "http://example.com", nil)
+	ctx := context.Background()
+	_, _, err := chain.ProcessRequest(ctx, req)
+	require.NoError(t, err)
+	assert.Equal(t, expectedOrder, order)
+}
+
 func TestMiddlewareChain_AddBefore(t *testing.T) {
 	chain := NewMiddlewareChain()
 	mw1 := &mockRequestMiddleware{}
@@ -207,29 +226,15 @@ func TestMiddlewareChain_AddBefore(t *testing.T) {
 	mw3 := &mockBothMiddleware{}
 
 	chain.Add(mw1).Add(mw3)
-
-	// Add mw2 before mw3
 	added := chain.AddBefore(mw3, mw2)
 	assert.True(t, added)
 	assert.Equal(t, 3, chain.Len())
 
-	// Verify order by processing
-	order := make([]string, 0)
-	mu := &sync.Mutex{}
-	orderMw1 := &orderTrackingMiddleware{id: "1", order: &order, mu: mu}
-	orderMw2 := &orderTrackingMiddleware{id: "2", order: &order, mu: mu}
-	orderMw3 := &orderTrackingMiddleware{id: "3", order: &order, mu: mu}
-
-	chain2 := NewMiddlewareChain()
-	chain2.Add(orderMw1).Add(orderMw3)
-	chain2.AddBefore(orderMw3, orderMw2)
-
-	req := httptest.NewRequest("GET", "http://example.com", nil)
-	ctx := context.Background()
-	_, _, err := chain2.ProcessRequest(ctx, req)
-	require.NoError(t, err)
-
-	assert.Equal(t, []string{"req:1", "req:2", "req:3"}, order)
+	// Verify order using helper
+	verifyMiddlewareOrder(t, func(c *DefaultMiddlewareChain, m1, m2, m3 *orderTrackingMiddleware) {
+		c.Add(m1).Add(m3)
+		c.AddBefore(m3, m2)
+	}, []string{"req:1", "req:2", "req:3"})
 }
 
 func TestMiddlewareChain_AddAfter(t *testing.T) {
@@ -239,29 +244,15 @@ func TestMiddlewareChain_AddAfter(t *testing.T) {
 	mw3 := &mockBothMiddleware{}
 
 	chain.Add(mw1).Add(mw3)
-
-	// Add mw2 after mw1
 	added := chain.AddAfter(mw1, mw2)
 	assert.True(t, added)
 	assert.Equal(t, 3, chain.Len())
 
-	// Verify order
-	order := make([]string, 0)
-	mu := &sync.Mutex{}
-	orderMw1 := &orderTrackingMiddleware{id: "1", order: &order, mu: mu}
-	orderMw2 := &orderTrackingMiddleware{id: "2", order: &order, mu: mu}
-	orderMw3 := &orderTrackingMiddleware{id: "3", order: &order, mu: mu}
-
-	chain2 := NewMiddlewareChain()
-	chain2.Add(orderMw1).Add(orderMw3)
-	chain2.AddAfter(orderMw1, orderMw2)
-
-	req := httptest.NewRequest("GET", "http://example.com", nil)
-	ctx := context.Background()
-	_, _, err := chain2.ProcessRequest(ctx, req)
-	require.NoError(t, err)
-
-	assert.Equal(t, []string{"req:1", "req:2", "req:3"}, order)
+	// Verify order using helper
+	verifyMiddlewareOrder(t, func(c *DefaultMiddlewareChain, m1, m2, m3 *orderTrackingMiddleware) {
+		c.Add(m1).Add(m3)
+		c.AddAfter(m1, m2)
+	}, []string{"req:1", "req:2", "req:3"})
 }
 
 func TestMiddlewareChain_AddBeforeNotFound(t *testing.T) {
@@ -607,29 +598,15 @@ func TestMiddlewareChain_AddAfterLast(t *testing.T) {
 	mw3 := &mockBothMiddleware{}
 
 	chain.Add(mw1).Add(mw2)
-
-	// Add after the last middleware
 	added := chain.AddAfter(mw2, mw3)
 	assert.True(t, added)
 	assert.Equal(t, 3, chain.Len())
 
-	// Verify it's actually at the end
-	order := make([]string, 0)
-	mu := &sync.Mutex{}
-	orderMw1 := &orderTrackingMiddleware{id: "1", order: &order, mu: mu}
-	orderMw2 := &orderTrackingMiddleware{id: "2", order: &order, mu: mu}
-	orderMw3 := &orderTrackingMiddleware{id: "3", order: &order, mu: mu}
-
-	chain2 := NewMiddlewareChain()
-	chain2.Add(orderMw1).Add(orderMw2)
-	chain2.AddAfter(orderMw2, orderMw3)
-
-	req := httptest.NewRequest("GET", "http://example.com", nil)
-	ctx := context.Background()
-	_, _, err := chain2.ProcessRequest(ctx, req)
-	require.NoError(t, err)
-
-	assert.Equal(t, []string{"req:1", "req:2", "req:3"}, order)
+	// Verify order using helper
+	verifyMiddlewareOrder(t, func(c *DefaultMiddlewareChain, m1, m2, m3 *orderTrackingMiddleware) {
+		c.Add(m1).Add(m2)
+		c.AddAfter(m2, m3)
+	}, []string{"req:1", "req:2", "req:3"})
 }
 
 func TestMiddlewareChain_ContextModification(t *testing.T) {

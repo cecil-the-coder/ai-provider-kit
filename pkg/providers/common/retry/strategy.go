@@ -154,62 +154,25 @@ func (r *RetryExecutor) ExecuteWithResult(ctx context.Context, operation func() 
 // This is useful for strongly-typed operations.
 type ExecuteFunc[T any] func() (T, error)
 
-// ExecuteTyped executes a typed function with retry logic
+// ExecuteTyped executes a typed function with retry logic.
+// It wraps the generic ExecuteWithResult to provide type-safe returns.
 func ExecuteTyped[T any](ctx context.Context, executor *RetryExecutor, operation ExecuteFunc[T]) (T, error) {
-	var lastErr error
-	var result T
-	attempt := 0
-
-	// Reset strategy state before starting
-	executor.strategy.Reset()
-
-	for {
-		// Check context cancellation before attempting
-		select {
-		case <-ctx.Done():
-			if lastErr != nil {
-				return result, fmt.Errorf("context cancelled after %d attempts: %w", attempt, lastErr)
+	var zero T
+	result, err := executor.ExecuteWithResult(ctx, func() (interface{}, error) {
+		return operation()
+	})
+	if err != nil {
+		if result != nil {
+			if typed, ok := result.(T); ok {
+				return typed, err
 			}
-			return result, ctx.Err()
-		default:
 		}
-
-		// Execute the operation
-		res, err := operation()
-		if err == nil {
-			// Success!
-			if attempt > 0 {
-				log.Printf("[RetryExecutor] Operation succeeded after %d retries", attempt)
-			}
-			return res, nil
-		}
-
-		// Store the error and result (might be partial)
-		lastErr = err
-		result = res
-
-		// Check if we should retry
-		if !executor.policy.ShouldRetry(err, attempt) {
-			if attempt >= executor.policy.MaxRetries {
-				return result, fmt.Errorf("max retries (%d) exceeded: %w", executor.policy.MaxRetries, err)
-			}
-			return result, fmt.Errorf("non-retryable error: %w", err)
-		}
-
-		// Calculate delay before next retry
-		delay := executor.strategy.NextDelay(attempt, err)
-		log.Printf("[RetryExecutor] Attempt %d failed: %v. Retrying in %v", attempt+1, err, delay)
-
-		// Wait for the delay, respecting context cancellation
-		select {
-		case <-ctx.Done():
-			return result, fmt.Errorf("context cancelled during retry wait after %d attempts: %w", attempt, lastErr)
-		case <-time.After(delay):
-			// Continue to next attempt
-		}
-
-		attempt++
+		return zero, err
 	}
+	if result == nil {
+		return zero, nil
+	}
+	return result.(T), nil
 }
 
 // OnRetryFunc is a callback function type that is called before each retry attempt.
