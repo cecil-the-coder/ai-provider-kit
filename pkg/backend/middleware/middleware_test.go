@@ -335,6 +335,39 @@ func TestLogging_ResponseWriter(t *testing.T) {
 	}
 }
 
+// TestLogging_FlusherInterface tests that responseWriter implements http.Flusher
+func TestLogging_FlusherInterface(t *testing.T) {
+	var buf bytes.Buffer
+	log.SetOutput(&buf)
+	defer log.SetOutput(os.Stderr)
+
+	var flusherSupported bool
+	var flushCalled bool
+
+	handler := Logging(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		flusher, ok := w.(http.Flusher)
+		flusherSupported = ok
+		if ok {
+			flusher.Flush()
+			flushCalled = true
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	w := httptest.NewRecorder()
+
+	handler.ServeHTTP(w, req)
+
+	if !flusherSupported {
+		t.Error("Expected responseWriter to implement http.Flusher")
+	}
+
+	if !flushCalled {
+		t.Error("Expected Flush() to be called successfully")
+	}
+}
+
 // TestLogging_DefaultStatusCode tests that default status code is 200
 func TestLogging_DefaultStatusCode(t *testing.T) {
 	var buf bytes.Buffer
