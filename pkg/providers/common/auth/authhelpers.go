@@ -123,7 +123,9 @@ func (h *AuthHelper) ExecuteWithAuth(
 	}
 
 	log.Printf("🟡 [AuthHelper] Non-streaming path")
-	// Non-streaming path
+	// Non-streaming path - try OAuth first, then API key
+	// If OAuth is configured and fails with a real error (not just "no credentials"),
+	// we should return that error, not fall through to API key auth
 	if h.OAuthManager != nil {
 		log.Printf("🟡 [AuthHelper] Trying OAuth failover...")
 		result, usage, err := h.OAuthManager.ExecuteWithFailover(ctx, oauthOperation)
@@ -132,18 +134,19 @@ func (h *AuthHelper) ExecuteWithAuth(
 			return result, usage, nil
 		}
 		log.Printf("🔴 [AuthHelper] OAuth FAILED: %v", err)
-	} else {
-		log.Printf("⚠️  [AuthHelper] OAuthManager is NIL")
+		// Return OAuth error - don't fall through to API key if OAuth was configured
+		// This ensures timeout errors etc are properly propagated
+		return result, usage, err
 	}
+	log.Printf("⚠️  [AuthHelper] OAuthManager is NIL")
 
 	if h.KeyManager != nil {
 		log.Printf("🟡 [AuthHelper] Trying API key failover...")
 		result, usage, err := h.KeyManager.ExecuteWithFailover(ctx, apiKeyOperation)
 		log.Printf("🟡 [AuthHelper] API key result - err=%v", err)
 		return result, usage, err
-	} else {
-		log.Printf("⚠️  [AuthHelper] KeyManager is NIL")
 	}
+	log.Printf("⚠️  [AuthHelper] KeyManager is NIL")
 
 	log.Printf("🔴 [AuthHelper] NO AUTH CONFIGURED ERROR")
 	return "", nil, fmt.Errorf("no authentication configured for %s", h.ProviderName)
@@ -177,7 +180,9 @@ func (h *AuthHelper) ExecuteWithAuthMessage(
 	}
 
 	log.Printf("🟡 [AuthHelper] Non-streaming path")
-	// Non-streaming path
+	// Non-streaming path - try OAuth first, then API key
+	// If OAuth is configured and fails with a real error (not just "no credentials"),
+	// we should return that error, not fall through to API key auth
 	if h.OAuthManager != nil {
 		log.Printf("🟡 [AuthHelper] Trying OAuth failover...")
 		result, usage, err := h.OAuthManager.ExecuteWithFailoverMessage(ctx, oauthOperation)
@@ -186,18 +191,19 @@ func (h *AuthHelper) ExecuteWithAuthMessage(
 			return result, usage, nil
 		}
 		log.Printf("🔴 [AuthHelper] OAuth FAILED: %v", err)
-	} else {
-		log.Printf("⚠️  [AuthHelper] OAuthManager is NIL")
+		// Return OAuth error - don't fall through to API key if OAuth was configured
+		// This ensures timeout errors etc are properly propagated
+		return result, usage, err
 	}
+	log.Printf("⚠️  [AuthHelper] OAuthManager is NIL")
 
 	if h.KeyManager != nil {
 		log.Printf("🟡 [AuthHelper] Trying API key failover...")
 		result, usage, err := h.KeyManager.ExecuteWithFailoverMessage(ctx, apiKeyOperation)
 		log.Printf("🟡 [AuthHelper] API key result - err=%v", err)
 		return result, usage, err
-	} else {
-		log.Printf("⚠️  [AuthHelper] KeyManager is NIL")
 	}
+	log.Printf("⚠️  [AuthHelper] KeyManager is NIL")
 
 	log.Printf("🔴 [AuthHelper] NO AUTH CONFIGURED ERROR")
 	return types.ChatMessage{}, nil, fmt.Errorf("no authentication configured for %s", h.ProviderName)
