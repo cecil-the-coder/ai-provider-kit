@@ -17,6 +17,7 @@ import (
 	"sync"
 	"time"
 
+	pkghttp "github.com/cecil-the-coder/ai-provider-kit/internal/http"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/base"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common/auth"
@@ -75,9 +76,13 @@ func NewGeminiProvider(config types.ProviderConfig) *GeminiProvider {
 	// Merge with defaults and extract configuration
 	mergedConfig := configHelper.MergeWithDefaults(config)
 
-	client := &http.Client{
+	// Create HTTP client using internal/http package
+	httpClient := pkghttp.NewHTTPClient(pkghttp.HTTPClientConfig{
 		Timeout: configHelper.ExtractTimeout(mergedConfig),
-	}
+	})
+
+	// Extract the underlying http.Client for compatibility with existing code
+	client := httpClient.Client()
 
 	// Extract Gemini-specific config
 	var geminiConfig GeminiConfig
@@ -445,11 +450,11 @@ func (p *GeminiProvider) testConnectivityWithAPIKey(ctx context.Context, apiKey 
 	req.Header.Set("Content-Type", "application/json")
 
 	// Make the request with a shorter timeout for connectivity testing
-	client := &http.Client{
+	testClient := pkghttp.NewHTTPClient(pkghttp.HTTPClientConfig{
 		Timeout: 15 * time.Second,
-	}
+	})
 
-	resp, err := client.Do(req)
+	resp, err := testClient.Client().Do(req)
 	if err != nil {
 		return types.NewNetworkError(types.ProviderTypeGemini, "connectivity test failed").
 			WithOperation("test_connectivity").
@@ -521,11 +526,11 @@ func (p *GeminiProvider) testConnectivityWithOAuth(ctx context.Context, accessTo
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", accessToken))
 
 	// Make the request with a shorter timeout for connectivity testing
-	client := &http.Client{
+	testClient := pkghttp.NewHTTPClient(pkghttp.HTTPClientConfig{
 		Timeout: 15 * time.Second,
-	}
+	})
 
-	resp, err := client.Do(req)
+	resp, err := testClient.Client().Do(req)
 	if err != nil {
 		return types.NewNetworkError(types.ProviderTypeGemini, "connectivity test failed").
 			WithOperation("test_connectivity").

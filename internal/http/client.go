@@ -38,6 +38,13 @@ type HTTPClientConfig struct {
 	EnableMetrics       bool                `json:"enable_metrics,omitempty"`
 	RequestInterceptor  RequestInterceptor  `json:"-"`
 	ResponseInterceptor ResponseInterceptor `json:"-"`
+	// Transport configuration
+	MaxIdleConns          int           `json:"max_idle_conns,omitempty"`
+	MaxIdleConnsPerHost   int           `json:"max_idle_conns_per_host,omitempty"`
+	MaxConnsPerHost       int           `json:"max_conns_per_host,omitempty"`
+	IdleConnTimeout       time.Duration `json:"idle_conn_timeout,omitempty"`
+	TLSHandshakeTimeout   time.Duration `json:"tls_handshake_timeout,omitempty"`
+	ExpectContinueTimeout time.Duration `json:"expect_continue_timeout,omitempty"`
 }
 
 // ClientMetrics tracks HTTP client performance
@@ -87,14 +94,38 @@ func NewHTTPClient(config HTTPClientConfig) *HTTPClient {
 		config.BackoffMultiplier = 2.0
 	}
 
+	// Set transport defaults
+	if config.MaxIdleConns == 0 {
+		config.MaxIdleConns = 100
+	}
+	if config.MaxIdleConnsPerHost == 0 {
+		config.MaxIdleConnsPerHost = 10
+	}
+	if config.MaxConnsPerHost == 0 {
+		config.MaxConnsPerHost = 0 // 0 means unlimited
+	}
+	if config.IdleConnTimeout == 0 {
+		config.IdleConnTimeout = 90 * time.Second
+	}
+	if config.TLSHandshakeTimeout == 0 {
+		config.TLSHandshakeTimeout = 10 * time.Second
+	}
+	if config.ExpectContinueTimeout == 0 {
+		config.ExpectContinueTimeout = 1 * time.Second
+	}
+
 	// Default retryable HTTP status codes
 	if len(config.RetryableErrors) == 0 {
 		config.RetryableErrors = []string{"429", "500", "502", "503", "504"}
 	}
 
+	// Create custom transport with connection pooling settings
+	transport := createTransport(config)
+
 	client := &HTTPClient{
 		client: &http.Client{
-			Timeout: config.Timeout,
+			Timeout:   config.Timeout,
+			Transport: transport,
 		},
 		config:       config,
 		metrics:      &ClientMetrics{ErrorsByType: make(map[int]int64)},
@@ -112,6 +143,39 @@ func NewHTTPClient(config HTTPClientConfig) *HTTPClient {
 	}
 
 	return client
+}
+
+// createTransport creates an http.Transport with the specified configuration
+func createTransport(config HTTPClientConfig) *http.Transport {
+	return &http.Transport{
+		MaxIdleConns:          config.MaxIdleConns,
+		MaxIdleConnsPerHost:   config.MaxIdleConnsPerHost,
+		MaxConnsPerHost:       config.MaxConnsPerHost,
+		IdleConnTimeout:       config.IdleConnTimeout,
+		TLSHandshakeTimeout:   config.TLSHandshakeTimeout,
+		ExpectContinueTimeout: config.ExpectContinueTimeout,
+		// Use http.DefaultTransport settings for other fields
+		ForceAttemptHTTP2: true,
+		// Additional sensible defaults from http.DefaultTransport
+		Proxy:                 http.ProxyFromEnvironment,
+		ResponseHeaderTimeout: 0, // No timeout by default
+		DisableKeepAlives:     false,
+		DisableCompression:    false,
+	}
+}
+
+// NewHighConcurrencyHTTPClient creates an HTTP client optimized for high-concurrency scenarios.
+// It uses increased connection pool limits suitable for applications making many parallel requests.
+func NewHighConcurrencyHTTPClient(config HTTPClientConfig) *HTTPClient {
+	// Override transport settings for high concurrency
+	config.MaxIdleConns = 500
+	config.MaxIdleConnsPerHost = 100
+	config.MaxConnsPerHost = 0 // unlimited
+	config.IdleConnTimeout = 90 * time.Second
+	config.TLSHandshakeTimeout = 10 * time.Second
+	config.ExpectContinueTimeout = 1 * time.Second
+
+	return NewHTTPClient(config)
 }
 
 // Do executes an HTTP request with retry logic and metrics
@@ -372,7 +436,38 @@ func (b *HTTPClientBuilder) WithResponseInterceptor(interceptor ResponseIntercep
 	return b
 }
 
+// WithTransportConfig sets transport configuration for connection pooling
+func (b *HTTPClientBuilder) WithTransportConfig(maxIdleConns, maxIdleConnsPerHost, maxConnsPerHost int) *HTTPClientBuilder {
+	b.config.MaxIdleConns = maxIdleConns
+	b.config.MaxIdleConnsPerHost = maxIdleConnsPerHost
+	b.config.MaxConnsPerHost = maxConnsPerHost
+	return b
+}
+
+// WithIdleConnTimeout sets the idle connection timeout
+func (b *HTTPClientBuilder) WithIdleConnTimeout(timeout time.Duration) *HTTPClientBuilder {
+	b.config.IdleConnTimeout = timeout
+	return b
+}
+
+// WithTLSHandshakeTimeout sets the TLS handshake timeout
+func (b *HTTPClientBuilder) WithTLSHandshakeTimeout(timeout time.Duration) *HTTPClientBuilder {
+	b.config.TLSHandshakeTimeout = timeout
+	return b
+}
+
+// WithExpectContinueTimeout sets the expect continue timeout
+func (b *HTTPClientBuilder) WithExpectContinueTimeout(timeout time.Duration) *HTTPClientBuilder {
+	b.config.ExpectContinueTimeout = timeout
+	return b
+}
+
 // Build creates the HTTP client
 func (b *HTTPClientBuilder) Build() *HTTPClient {
 	return NewHTTPClient(b.config)
+}
+
+// Client returns the underlying http.Client
+func (c *HTTPClient) Client() *http.Client {
+	return c.client
 }

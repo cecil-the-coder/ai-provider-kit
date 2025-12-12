@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	pkghttp "github.com/cecil-the-coder/ai-provider-kit/internal/http"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/base"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common/auth"
@@ -59,9 +60,13 @@ func NewOllamaProvider(config types.ProviderConfig) *OllamaProvider {
 		}
 	}
 
-	client := &http.Client{
+	// Create HTTP client using internal/http package
+	httpClient := pkghttp.NewHTTPClient(pkghttp.HTTPClientConfig{
 		Timeout: timeout,
-	}
+	})
+
+	// Extract the underlying http.Client for compatibility with existing code
+	client := httpClient.Client()
 
 	// Create auth helper
 	authHelper := auth.NewAuthHelper("ollama", mergedConfig, client)

@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -939,5 +940,223 @@ func TestHTTPClient_DoWithFullResponse_Error(t *testing.T) {
 	_, _, err = client.DoWithFullResponse(context.Background(), req)
 	if err == nil {
 		t.Error("expected error for failed request")
+	}
+}
+
+func TestHTTPClient_TransportDefaults(t *testing.T) {
+	client := NewHTTPClient(HTTPClientConfig{})
+
+	// Verify that client has a custom transport (not default)
+	transport, ok := client.client.Transport.(*http.Transport)
+	if !ok {
+		t.Fatal("expected client to have custom http.Transport")
+	}
+
+	// Verify default transport settings
+	if transport.MaxIdleConns != 100 {
+		t.Errorf("expected MaxIdleConns=100, got %d", transport.MaxIdleConns)
+	}
+	if transport.MaxIdleConnsPerHost != 10 {
+		t.Errorf("expected MaxIdleConnsPerHost=10, got %d", transport.MaxIdleConnsPerHost)
+	}
+	if transport.MaxConnsPerHost != 0 {
+		t.Errorf("expected MaxConnsPerHost=0 (unlimited), got %d", transport.MaxConnsPerHost)
+	}
+	if transport.IdleConnTimeout != 90*time.Second {
+		t.Errorf("expected IdleConnTimeout=90s, got %v", transport.IdleConnTimeout)
+	}
+	if transport.TLSHandshakeTimeout != 10*time.Second {
+		t.Errorf("expected TLSHandshakeTimeout=10s, got %v", transport.TLSHandshakeTimeout)
+	}
+	if transport.ExpectContinueTimeout != 1*time.Second {
+		t.Errorf("expected ExpectContinueTimeout=1s, got %v", transport.ExpectContinueTimeout)
+	}
+	if !transport.ForceAttemptHTTP2 {
+		t.Error("expected ForceAttemptHTTP2=true")
+	}
+}
+
+func TestHTTPClient_CustomTransportConfig(t *testing.T) {
+	config := HTTPClientConfig{
+		MaxIdleConns:          200,
+		MaxIdleConnsPerHost:   20,
+		MaxConnsPerHost:       50,
+		IdleConnTimeout:       120 * time.Second,
+		TLSHandshakeTimeout:   15 * time.Second,
+		ExpectContinueTimeout: 2 * time.Second,
+	}
+
+	client := NewHTTPClient(config)
+	transport, ok := client.client.Transport.(*http.Transport)
+	if !ok {
+		t.Fatal("expected client to have custom http.Transport")
+	}
+
+	// Verify custom transport settings
+	if transport.MaxIdleConns != 200 {
+		t.Errorf("expected MaxIdleConns=200, got %d", transport.MaxIdleConns)
+	}
+	if transport.MaxIdleConnsPerHost != 20 {
+		t.Errorf("expected MaxIdleConnsPerHost=20, got %d", transport.MaxIdleConnsPerHost)
+	}
+	if transport.MaxConnsPerHost != 50 {
+		t.Errorf("expected MaxConnsPerHost=50, got %d", transport.MaxConnsPerHost)
+	}
+	if transport.IdleConnTimeout != 120*time.Second {
+		t.Errorf("expected IdleConnTimeout=120s, got %v", transport.IdleConnTimeout)
+	}
+	if transport.TLSHandshakeTimeout != 15*time.Second {
+		t.Errorf("expected TLSHandshakeTimeout=15s, got %v", transport.TLSHandshakeTimeout)
+	}
+	if transport.ExpectContinueTimeout != 2*time.Second {
+		t.Errorf("expected ExpectContinueTimeout=2s, got %v", transport.ExpectContinueTimeout)
+	}
+}
+
+func TestNewHighConcurrencyHTTPClient(t *testing.T) {
+	client := NewHighConcurrencyHTTPClient(HTTPClientConfig{
+		Timeout: 30 * time.Second,
+	})
+
+	if client == nil {
+		t.Fatal("expected non-nil client")
+	}
+
+	transport, ok := client.client.Transport.(*http.Transport)
+	if !ok {
+		t.Fatal("expected client to have custom http.Transport")
+	}
+
+	// Verify high concurrency settings
+	if transport.MaxIdleConns != 500 {
+		t.Errorf("expected MaxIdleConns=500, got %d", transport.MaxIdleConns)
+	}
+	if transport.MaxIdleConnsPerHost != 100 {
+		t.Errorf("expected MaxIdleConnsPerHost=100, got %d", transport.MaxIdleConnsPerHost)
+	}
+	if transport.MaxConnsPerHost != 0 {
+		t.Errorf("expected MaxConnsPerHost=0 (unlimited), got %d", transport.MaxConnsPerHost)
+	}
+	if transport.IdleConnTimeout != 90*time.Second {
+		t.Errorf("expected IdleConnTimeout=90s, got %v", transport.IdleConnTimeout)
+	}
+	if transport.TLSHandshakeTimeout != 10*time.Second {
+		t.Errorf("expected TLSHandshakeTimeout=10s, got %v", transport.TLSHandshakeTimeout)
+	}
+	if transport.ExpectContinueTimeout != 1*time.Second {
+		t.Errorf("expected ExpectContinueTimeout=1s, got %v", transport.ExpectContinueTimeout)
+	}
+
+	// Verify timeout was preserved
+	if client.client.Timeout != 30*time.Second {
+		t.Errorf("expected timeout 30s, got %v", client.client.Timeout)
+	}
+}
+
+func TestHTTPClientBuilder_WithTransportConfig(t *testing.T) {
+	builder := NewHTTPClientBuilder()
+	client := builder.
+		WithTimeout(30*time.Second).
+		WithTransportConfig(300, 30, 100).
+		WithIdleConnTimeout(60 * time.Second).
+		WithTLSHandshakeTimeout(5 * time.Second).
+		WithExpectContinueTimeout(500 * time.Millisecond).
+		Build()
+
+	if client == nil {
+		t.Fatal("expected non-nil client")
+	}
+
+	transport, ok := client.client.Transport.(*http.Transport)
+	if !ok {
+		t.Fatal("expected client to have custom http.Transport")
+	}
+
+	if transport.MaxIdleConns != 300 {
+		t.Errorf("expected MaxIdleConns=300, got %d", transport.MaxIdleConns)
+	}
+	if transport.MaxIdleConnsPerHost != 30 {
+		t.Errorf("expected MaxIdleConnsPerHost=30, got %d", transport.MaxIdleConnsPerHost)
+	}
+	if transport.MaxConnsPerHost != 100 {
+		t.Errorf("expected MaxConnsPerHost=100, got %d", transport.MaxConnsPerHost)
+	}
+	if transport.IdleConnTimeout != 60*time.Second {
+		t.Errorf("expected IdleConnTimeout=60s, got %v", transport.IdleConnTimeout)
+	}
+	if transport.TLSHandshakeTimeout != 5*time.Second {
+		t.Errorf("expected TLSHandshakeTimeout=5s, got %v", transport.TLSHandshakeTimeout)
+	}
+	if transport.ExpectContinueTimeout != 500*time.Millisecond {
+		t.Errorf("expected ExpectContinueTimeout=500ms, got %v", transport.ExpectContinueTimeout)
+	}
+}
+
+func TestHTTPClient_TransportProxyFromEnvironment(t *testing.T) {
+	client := NewHTTPClient(HTTPClientConfig{})
+	transport, ok := client.client.Transport.(*http.Transport)
+	if !ok {
+		t.Fatal("expected client to have custom http.Transport")
+	}
+
+	// Verify that proxy configuration is using http.ProxyFromEnvironment
+	if transport.Proxy == nil {
+		t.Error("expected Proxy to be set to http.ProxyFromEnvironment")
+	}
+}
+
+func TestHTTPClient_TransportKeepAliveEnabled(t *testing.T) {
+	client := NewHTTPClient(HTTPClientConfig{})
+	transport, ok := client.client.Transport.(*http.Transport)
+	if !ok {
+		t.Fatal("expected client to have custom http.Transport")
+	}
+
+	// Verify keep-alives are enabled (default behavior)
+	if transport.DisableKeepAlives {
+		t.Error("expected DisableKeepAlives=false")
+	}
+	if transport.DisableCompression {
+		t.Error("expected DisableCompression=false")
+	}
+}
+
+func TestHTTPClient_HighConcurrencyActualUsage(t *testing.T) {
+	// Test that high concurrency client can handle many parallel requests
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(50 * time.Millisecond) // Simulate some processing
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("ok"))
+	}))
+	defer server.Close()
+
+	client := NewHighConcurrencyHTTPClient(HTTPClientConfig{
+		Timeout: 5 * time.Second,
+	})
+
+	numRequests := 100
+	var completed atomic.Int64
+	var wg sync.WaitGroup
+
+	for i := 0; i < numRequests; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			req, err := http.NewRequest("GET", server.URL, nil)
+			if err != nil {
+				return
+			}
+			resp, err := client.Do(context.Background(), req)
+			if err == nil {
+				_ = resp.Body.Close()
+				completed.Add(1)
+			}
+		}()
+	}
+
+	wg.Wait()
+
+	if completed.Load() != int64(numRequests) {
+		t.Errorf("expected %d completed requests, got %d", numRequests, completed.Load())
 	}
 }

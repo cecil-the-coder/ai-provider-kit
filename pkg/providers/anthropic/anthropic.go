@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	pkghttp "github.com/cecil-the-coder/ai-provider-kit/internal/http"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/base"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common/auth"
@@ -66,9 +67,13 @@ func NewAnthropicProvider(config types.ProviderConfig) *AnthropicProvider {
 	// Merge with defaults and extract configuration
 	mergedConfig := configHelper.MergeWithDefaults(config)
 
-	client := &http.Client{
+	// Create HTTP client using internal/http package
+	httpClient := pkghttp.NewHTTPClient(pkghttp.HTTPClientConfig{
 		Timeout: configHelper.ExtractTimeout(mergedConfig),
-	}
+	})
+
+	// Extract the underlying http.Client for compatibility with existing code
+	client := httpClient.Client()
 
 	// Extract Anthropic-specific config
 	var anthropicConfig AnthropicConfig

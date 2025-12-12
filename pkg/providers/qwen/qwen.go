@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	pkghttp "github.com/cecil-the-coder/ai-provider-kit/internal/http"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/base"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common/auth"
@@ -43,7 +44,8 @@ type QwenOAuthToken struct {
 type QwenProvider struct {
 	*base.BaseProvider
 	mu                sync.RWMutex
-	httpClient        *http.Client
+	httpClient        *pkghttp.HTTPClient
+	client            *http.Client
 	authHelper        *auth.AuthHelper
 	rateLimitHelper   *common.RateLimitHelper
 	rateLimitMutex    sync.RWMutex
@@ -58,12 +60,13 @@ func NewQwenProvider(config types.ProviderConfig) *QwenProvider {
 	// Merge with defaults and extract configuration
 	mergedConfig := configHelper.MergeWithDefaults(config)
 
-	client := &http.Client{
+	// Create HTTP client using internal/http package
+	httpClient := pkghttp.NewHTTPClient(pkghttp.HTTPClientConfig{
 		Timeout: configHelper.ExtractTimeout(mergedConfig),
-	}
+	})
 
-	// Create auth helper
-	authHelper := auth.NewAuthHelper("qwen", mergedConfig, client)
+	// Create auth helper with the underlying http.Client
+	authHelper := auth.NewAuthHelper("qwen", mergedConfig, httpClient.Client())
 
 	// Setup API keys using shared helper
 	authHelper.SetupAPIKeys()
@@ -75,8 +78,9 @@ func NewQwenProvider(config types.ProviderConfig) *QwenProvider {
 	clientSideLimiter := rate.NewLimiter(rate.Every(time.Minute/60), 60)
 
 	p := &QwenProvider{
-		BaseProvider:      base.NewBaseProvider("qwen", mergedConfig, client, log.Default()),
-		httpClient:        client,
+		BaseProvider:      base.NewBaseProvider("qwen", mergedConfig, httpClient.Client(), log.Default()),
+		httpClient:        httpClient,
+		client:            httpClient.Client(),
 		authHelper:        authHelper,
 		rateLimitHelper:   rateLimitHelper,
 		clientSideLimiter: clientSideLimiter,
@@ -415,7 +419,7 @@ func (p *QwenProvider) makeAPICall(ctx context.Context, url string, request Qwen
 	}, request)
 
 	startTime := time.Now()
-	resp, err := p.httpClient.Do(req)
+	resp, err := p.client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("request failed: %w", err)
 	}
@@ -828,7 +832,7 @@ func (p *QwenProvider) makeStreamingAPICall(ctx context.Context, url string, req
 	}, request)
 
 	startTime := time.Now()
-	resp, err := p.httpClient.Do(req)
+	resp, err := p.client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("request failed: %w", err)
 	}

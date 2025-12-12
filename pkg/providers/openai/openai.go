@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"time"
 
+	pkghttp "github.com/cecil-the-coder/ai-provider-kit/internal/http"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/base"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common/auth"
@@ -177,6 +178,7 @@ type OpenAIModel struct {
 type OpenAIProvider struct {
 	*base.BaseProvider
 	authHelper        *auth.AuthHelper
+	httpClient        *pkghttp.HTTPClient
 	client            *http.Client
 	baseURL           string
 	useResponsesAPI   bool
@@ -195,16 +197,17 @@ func NewOpenAIProvider(config types.ProviderConfig) *OpenAIProvider {
 	// Merge with defaults and extract configuration
 	mergedConfig := configHelper.MergeWithDefaults(config)
 
-	client := &http.Client{
+	// Create HTTP client using internal/http package
+	httpClient := pkghttp.NewHTTPClient(pkghttp.HTTPClientConfig{
 		Timeout: configHelper.ExtractTimeout(mergedConfig),
-	}
+	})
 
 	// Extract configuration using helper
 	baseURL := configHelper.ExtractBaseURL(mergedConfig)
 	organizationID := configHelper.ExtractStringField(mergedConfig, "organization_id", "")
 
-	// Create auth helper
-	authHelper := auth.NewAuthHelper("openai", mergedConfig, client)
+	// Create auth helper with the underlying http.Client
+	authHelper := auth.NewAuthHelper("openai", mergedConfig, httpClient.Client())
 
 	// Setup API keys using shared helper
 	authHelper.SetupAPIKeys()
@@ -220,9 +223,10 @@ func NewOpenAIProvider(config types.ProviderConfig) *OpenAIProvider {
 	}
 
 	provider := &OpenAIProvider{
-		BaseProvider:      base.NewBaseProvider("openai", mergedConfig, client, log.Default()),
+		BaseProvider:      base.NewBaseProvider("openai", mergedConfig, httpClient.Client(), log.Default()),
 		authHelper:        authHelper,
-		client:            client,
+		httpClient:        httpClient,
+		client:            httpClient.Client(),
 		baseURL:           baseURL,
 		useResponsesAPI:   useResponsesAPI,
 		rateLimitHelper:   common.NewRateLimitHelper(ratelimit.NewOpenAIParser()),
