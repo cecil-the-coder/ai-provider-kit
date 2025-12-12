@@ -462,15 +462,9 @@ func (p *OpenAIProvider) executeStreamWithAuth(ctx context.Context, requestData 
 
 // buildOpenAIRequest builds the OpenAI API request from options
 func (p *OpenAIProvider) buildOpenAIRequest(options types.GenerateOptions) OpenAIRequest {
-	// Determine which model to use: options.Model takes precedence over default
-	model := options.Model
-	if model == "" {
-		config := p.GetConfig()
-		model = config.DefaultModel
-		if model == "" {
-			model = openAIFallbackModel
-		}
-	}
+	// Determine which model to use with fallback priority
+	config := p.GetConfig()
+	model := common.ResolveModel(options.Model, config.DefaultModel, openAIFallbackModel)
 
 	// Convert messages to OpenAI format
 	var messages []OpenAIMessage

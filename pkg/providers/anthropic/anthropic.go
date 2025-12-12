@@ -394,15 +394,15 @@ func (p *AnthropicProvider) GenerateChatCompletion(
 	p.IncrementRequestCount()
 	startTime := time.Now()
 
-	// Determine which model to use: options.Model takes precedence over default
-	model := options.Model
+	// Determine which model to use with fallback priority
+	config := p.GetConfig()
+	model := common.ResolveModel(options.Model, config.DefaultModel, anthropicDefaultModel)
 	if model == "" {
-		model = p.GetDefaultModel()
-		if model == "" {
-			log.Printf("🔴 [Anthropic] ERROR: No model specified and no default available")
-			return nil, types.NewInvalidRequestError(types.ProviderTypeAnthropic, "no model specified and no default model available (required when using third-party OAuth tokens)").
-				WithOperation("GenerateChatCompletion")
-		}
+		log.Printf("🔴 [Anthropic] ERROR: No model specified and no default available")
+		return nil, types.NewInvalidRequestError(types.ProviderTypeAnthropic, "no model specified and no default model available (required when using third-party OAuth tokens)").
+			WithOperation("GenerateChatCompletion")
+	}
+	if options.Model == "" {
 		log.Printf("🟣 [Anthropic] Using default model: %s", model)
 	} else {
 		log.Printf("🟣 [Anthropic] Using specified model: %s", model)

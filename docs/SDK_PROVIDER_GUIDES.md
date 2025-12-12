@@ -2288,7 +2288,7 @@ func (s *AdaptiveService) Generate(ctx context.Context, options GenerateOptions)
     switch p := s.provider.(type) {
     case types.ToolCallingProvider:
         return s.generateWithTools(ctx, p, options)
-    case types.StreamingProvider:
+    case types.CapabilityProvider:
         return s.generateWithStreaming(ctx, p, options)
     case types.ChatProvider:
         return s.generateBasic(ctx, p, options)

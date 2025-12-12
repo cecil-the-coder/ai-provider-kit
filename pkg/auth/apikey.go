@@ -3,6 +3,7 @@
 package auth
 
 import (
+	"context"
 	"crypto/rand"
 	"fmt"
 	"math/big"
@@ -10,7 +11,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	pkghttp "github.com/cecil-the-coder/ai-provider-kit/pkg/http"
+	pkghttp "github.com/cecil-the-coder/ai-provider-kit/internal/http"
+	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 )
 
 // APIKeyManagerImpl implements APIKeyManager with load balancing and failover
@@ -379,7 +381,7 @@ func (m *APIKeyManagerImpl) ReportFailure(key string, err error) {
 }
 
 // calculateBackoff calculates exponential backoff duration
-// Uses the shared CalculateBackoff function from pkg/http
+// Uses the shared CalculateBackoff function from internal/http
 func (m *APIKeyManagerImpl) calculateBackoff(failureCount int) time.Duration {
 	if !m.config.Health.Enabled || failureCount <= 0 {
 		return 0
@@ -412,9 +414,9 @@ func (m *APIKeyManagerImpl) calculateBackoff(failureCount int) time.Duration {
 }
 
 // ExecuteWithFailover attempts an operation with automatic failover to next key on failure
-func (m *APIKeyManagerImpl) ExecuteWithFailover(operation func(apiKey string) (string, error)) (string, error) {
+func (m *APIKeyManagerImpl) ExecuteWithFailover(ctx context.Context, operation func(context.Context, string) (string, *types.Usage, error)) (string, *types.Usage, error) {
 	if len(m.keys) == 0 {
-		return "", fmt.Errorf("no API keys configured for %s", m.providerName)
+		return "", nil, fmt.Errorf("no API keys configured for %s", m.providerName)
 	}
 
 	var lastErr error
@@ -429,13 +431,13 @@ func (m *APIKeyManagerImpl) ExecuteWithFailover(operation func(apiKey string) (s
 		if err != nil {
 			// All keys exhausted or unavailable
 			if lastErr != nil {
-				return "", fmt.Errorf("%s: all API keys failed, last error: %w", m.providerName, lastErr)
+				return "", nil, fmt.Errorf("%s: all API keys failed, last error: %w", m.providerName, lastErr)
 			}
-			return "", err
+			return "", nil, err
 		}
 
 		// Execute the operation
-		result, err := operation(key)
+		result, usage, err := operation(ctx, key)
 		if err != nil {
 			lastErr = err
 			m.ReportFailure(key, err)
@@ -448,11 +450,57 @@ func (m *APIKeyManagerImpl) ExecuteWithFailover(operation func(apiKey string) (s
 			// Log successful failover if needed
 			_ = fmt.Sprintf("successful failover after %d attempts for provider %s", attempt, m.providerName)
 		}
-		return result, nil
+		return result, usage, nil
 	}
 
 	// All attempts failed
-	return "", fmt.Errorf("%s: all %d failover attempts failed, last error: %w",
+	return "", nil, fmt.Errorf("%s: all %d failover attempts failed, last error: %w",
+		m.providerName, maxAttempts, lastErr)
+}
+
+// ExecuteWithFailoverMessage attempts an operation with automatic failover (message variant)
+// This is used for operations that return ChatMessage to preserve tool calls and structured content
+func (m *APIKeyManagerImpl) ExecuteWithFailoverMessage(ctx context.Context, operation func(context.Context, string) (types.ChatMessage, *types.Usage, error)) (types.ChatMessage, *types.Usage, error) {
+	if len(m.keys) == 0 {
+		return types.ChatMessage{}, nil, fmt.Errorf("no API keys configured for %s", m.providerName)
+	}
+
+	var lastErr error
+	maxAttempts := m.config.Failover.MaxAttempts
+	if maxAttempts <= 0 {
+		maxAttempts = min(len(m.keys), 3)
+	}
+
+	for attempt := 0; attempt < maxAttempts; attempt++ {
+		// Get next available key
+		key, err := m.GetNextKey()
+		if err != nil {
+			// All keys exhausted or unavailable
+			if lastErr != nil {
+				return types.ChatMessage{}, nil, fmt.Errorf("%s: all API keys failed, last error: %w", m.providerName, lastErr)
+			}
+			return types.ChatMessage{}, nil, err
+		}
+
+		// Execute the operation
+		result, usage, err := operation(ctx, key)
+		if err != nil {
+			lastErr = err
+			m.ReportFailure(key, err)
+			continue
+		}
+
+		// Success!
+		m.ReportSuccess(key)
+		if attempt > 0 {
+			// Log successful failover if needed
+			_ = fmt.Sprintf("successful failover after %d attempts for provider %s", attempt, m.providerName)
+		}
+		return result, usage, nil
+	}
+
+	// All attempts failed
+	return types.ChatMessage{}, nil, fmt.Errorf("%s: all %d failover attempts failed, last error: %w",
 		m.providerName, maxAttempts, lastErr)
 }
 
@@ -512,16 +560,14 @@ func (m *APIKeyManagerImpl) GetStatus() map[string]interface{} {
 	return status
 }
 
-// GetKeys returns all configured keys (masked for security)
+// GetKeys returns a copy of the keys slice
 func (m *APIKeyManagerImpl) GetKeys() []string {
+	if m == nil {
+		return nil
+	}
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-
-	maskedKeys := make([]string, len(m.keys))
-	for i, key := range m.keys {
-		maskedKeys[i] = maskAPIKey(key)
-	}
-	return maskedKeys
+	return append([]string{}, m.keys...)
 }
 
 // AddKey adds a new API key to the manager

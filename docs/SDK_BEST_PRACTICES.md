@@ -4988,14 +4988,13 @@ type ToolCapable interface {
 
 type StreamingCapable interface {
     types.ChatProvider
-    types.StreamingProvider
+    types.CapabilityProvider
 }
 
 type FullFeatured interface {
     types.ChatProvider
     types.ToolCallingProvider
-    types.StreamingProvider
-    types.ResponsesAPIProvider
+    types.CapabilityProvider
 }
 
 // Service that adapts based on capabilities

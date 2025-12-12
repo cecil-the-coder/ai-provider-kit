@@ -61,8 +61,7 @@ func TestInterfaceSegregation(t *testing.T) {
 	testConfigurableProvider(t, mock)
 	testChatProvider(t, mock, ctx)
 	testToolCallingProvider(t, mock, ctx)
-	testStreamingProvider(t, mock)
-	testResponsesAPIProvider(t, mock)
+	testCapabilityProvider(t, mock)
 	testHealthCheckProvider(t, mock, ctx)
 	testFullProvider(t, mock, ctx)
 }
@@ -182,21 +181,14 @@ func testToolCallingProvider(t *testing.T, mock *MockProvider, ctx context.Conte
 	})
 }
 
-// testStreamingProvider tests the StreamingProvider interface
-func testStreamingProvider(t *testing.T, mock *MockProvider) {
-	t.Run("StreamingProvider", func(t *testing.T) {
-		var streamingProvider StreamingProvider = mock
-		if !streamingProvider.SupportsStreaming() {
+// testCapabilityProvider tests the CapabilityProvider interface
+func testCapabilityProvider(t *testing.T, mock *MockProvider) {
+	t.Run("CapabilityProvider", func(t *testing.T) {
+		var capabilityProvider CapabilityProvider = mock
+		if !capabilityProvider.SupportsStreaming() {
 			t.Error("SupportsStreaming() = false, want true")
 		}
-	})
-}
-
-// testResponsesAPIProvider tests the ResponsesAPIProvider interface
-func testResponsesAPIProvider(t *testing.T, mock *MockProvider) {
-	t.Run("ResponsesAPIProvider", func(t *testing.T) {
-		var responsesProvider ResponsesAPIProvider = mock
-		if responsesProvider.SupportsResponsesAPI() {
+		if capabilityProvider.SupportsResponsesAPI() {
 			t.Error("SupportsResponsesAPI() = true, want false")
 		}
 	})

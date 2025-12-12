@@ -66,10 +66,10 @@ func ExampleAPIKeyManager() {
 	}
 
 	// Execute with failover
-	result, err := manager.ExecuteWithFailover(func(apiKey string) (string, error) {
+	result, usage, err := manager.ExecuteWithFailover(context.Background(), func(ctx context.Context, apiKey string) (string, *types.Usage, error) {
 		// Simulate API call
 		println("Using API key:", apiKey[:8]+"...")
-		return "API response", nil
+		return "API response", &types.Usage{TotalTokens: 100}, nil
 	})
 
 	if err != nil {
@@ -77,6 +77,7 @@ func ExampleAPIKeyManager() {
 	}
 
 	println("Result:", result)
+	println("Usage:", usage.TotalTokens, "tokens")
 
 	// Get status
 	status := manager.GetStatus()

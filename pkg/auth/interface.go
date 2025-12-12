@@ -136,12 +136,15 @@ type APIKeyManager interface {
 	ReportFailure(key string, err error)
 
 	// ExecuteWithFailover attempts an operation with automatic failover to next key on failure
-	ExecuteWithFailover(operation func(apiKey string) (string, error)) (string, error)
+	ExecuteWithFailover(ctx context.Context, operation func(context.Context, string) (string, *types.Usage, error)) (string, *types.Usage, error)
+
+	// ExecuteWithFailoverMessage attempts an operation with automatic failover (message variant)
+	ExecuteWithFailoverMessage(ctx context.Context, operation func(context.Context, string) (types.ChatMessage, *types.Usage, error)) (types.ChatMessage, *types.Usage, error)
 
 	// GetStatus returns the current health status of all keys
 	GetStatus() map[string]interface{}
 
-	// GetKeys returns all configured keys (masked for security)
+	// GetKeys returns a copy of the keys slice
 	GetKeys() []string
 
 	// AddKey adds a new API key to the manager

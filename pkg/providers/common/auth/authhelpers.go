@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cecil-the-coder/ai-provider-kit/pkg/keymanager"
+	"github.com/cecil-the-coder/ai-provider-kit/pkg/auth"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/oauthmanager"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 )
@@ -18,7 +18,7 @@ import (
 // AuthHelper provides shared authentication functionality for providers
 type AuthHelper struct {
 	ProviderName string
-	KeyManager   *keymanager.KeyManager
+	KeyManager   *auth.APIKeyManagerImpl
 	OAuthManager *oauthmanager.OAuthKeyManager
 	HTTPClient   *http.Client
 	Config       types.ProviderConfig
@@ -53,7 +53,8 @@ func (h *AuthHelper) SetupAPIKeys() {
 
 	// Create key manager if we have keys, otherwise clear it
 	if len(keys) > 0 {
-		h.KeyManager = keymanager.NewKeyManager(h.ProviderName, keys)
+		manager, _ := auth.NewAPIKeyManager(h.ProviderName, keys, nil)
+		h.KeyManager = manager
 	} else {
 		// Clear the key manager when no keys are available
 		h.KeyManager = nil

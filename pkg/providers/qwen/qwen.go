@@ -261,15 +261,9 @@ func (p *QwenProvider) GenerateChatCompletion(
 
 // buildQwenRequest builds a Qwen API request from GenerateOptions
 func (p *QwenProvider) buildQwenRequest(options types.GenerateOptions) QwenRequest {
-	// Determine which model to use: options.Model takes precedence over default
-	model := options.Model
-	if model == "" {
-		config := p.GetConfig()
-		model = config.DefaultModel
-		if model == "" {
-			model = p.GetDefaultModel()
-		}
-	}
+	// Determine which model to use with fallback priority
+	config := p.GetConfig()
+	model := common.ResolveModel(options.Model, config.DefaultModel, qwenDefaultModel)
 
 	// Convert messages to Qwen format
 	messages := []QwenMessage{}

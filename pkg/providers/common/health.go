@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cecil-the-coder/ai-provider-kit/pkg/http"
+	"github.com/cecil-the-coder/ai-provider-kit/internal/http"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 )
 

@@ -312,13 +312,9 @@ func TestAllInterfaceImplementations(t *testing.T) {
 		assert.Equal(t, "tool result", result)
 	})
 
-	t.Run("StreamingProvider", func(t *testing.T) {
-		var _ StreamingProvider = mock
+	t.Run("CapabilityProvider", func(t *testing.T) {
+		var _ CapabilityProvider = mock
 		assert.True(t, mock.SupportsStreaming())
-	})
-
-	t.Run("ResponsesAPIProvider", func(t *testing.T) {
-		var _ ResponsesAPIProvider = mock
 		assert.False(t, mock.SupportsResponsesAPI())
 	})
 

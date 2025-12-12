@@ -196,8 +196,8 @@ func TestExecuteWithFailover(t *testing.T) {
 		}
 		manager, _ := NewAPIKeyManager("test", keys, config)
 
-		result, err := manager.ExecuteWithFailover(func(apiKey string) (string, error) {
-			return "success", nil
+		result, usage, err := manager.ExecuteWithFailover(context.Background(), func(ctx context.Context, apiKey string) (string, *types.Usage, error) {
+			return "success", &types.Usage{TotalTokens: 100}, nil
 		})
 
 		if err != nil {
@@ -205,6 +205,9 @@ func TestExecuteWithFailover(t *testing.T) {
 		}
 		if result != "success" {
 			t.Errorf("Expected 'success', got '%s'", result)
+		}
+		if usage == nil || usage.TotalTokens != 100 {
+			t.Errorf("Expected usage with 100 tokens, got %v", usage)
 		}
 	})
 
@@ -219,12 +222,12 @@ func TestExecuteWithFailover(t *testing.T) {
 		manager, _ := NewAPIKeyManager("test", keys, config)
 
 		attempt := 0
-		result, err := manager.ExecuteWithFailover(func(apiKey string) (string, error) {
+		result, usage, err := manager.ExecuteWithFailover(context.Background(), func(ctx context.Context, apiKey string) (string, *types.Usage, error) {
 			attempt++
 			if attempt == 1 {
-				return "", errors.New("first key failed")
+				return "", nil, errors.New("first key failed")
 			}
-			return "success", nil
+			return "success", &types.Usage{TotalTokens: 50}, nil
 		})
 
 		if err != nil {
@@ -232,6 +235,9 @@ func TestExecuteWithFailover(t *testing.T) {
 		}
 		if result != "success" {
 			t.Error("Expected success after failover")
+		}
+		if usage == nil || usage.TotalTokens != 50 {
+			t.Errorf("Expected usage with 50 tokens, got %v", usage)
 		}
 	})
 
@@ -245,8 +251,8 @@ func TestExecuteWithFailover(t *testing.T) {
 		}
 		manager, _ := NewAPIKeyManager("test", keys, config)
 
-		_, err := manager.ExecuteWithFailover(func(apiKey string) (string, error) {
-			return "", errors.New("key failed")
+		_, _, err := manager.ExecuteWithFailover(context.Background(), func(ctx context.Context, apiKey string) (string, *types.Usage, error) {
+			return "", nil, errors.New("key failed")
 		})
 
 		if err == nil {
@@ -282,19 +288,24 @@ func TestGetKeys(t *testing.T) {
 	keys := []string{"key1-long-key", "key2-long-key"}
 	manager, _ := NewAPIKeyManager("test", keys, nil)
 
-	maskedKeys := manager.GetKeys()
+	retrievedKeys := manager.GetKeys()
 
-	if len(maskedKeys) != 2 {
-		t.Errorf("Expected 2 keys, got %d", len(maskedKeys))
+	if len(retrievedKeys) != 2 {
+		t.Errorf("Expected 2 keys, got %d", len(retrievedKeys))
 	}
 
-	// Verify keys are masked
-	for _, key := range maskedKeys {
-		if key == "key1-long-key" || key == "key2-long-key" {
-			t.Error("Expected keys to be masked")
+	// Verify keys match the original keys
+	for i, key := range retrievedKeys {
+		if key != keys[i] {
+			t.Errorf("Expected key %s at index %d, got %s", keys[i], i, key)
 		}
-		if key == "" {
-			t.Error("Expected non-empty masked key")
+	}
+
+	// Verify it returns a copy (modifying returned slice doesn't affect original)
+	if len(retrievedKeys) > 0 {
+		retrievedKeys[0] = "modified"
+		if manager.keys[0] == "modified" {
+			t.Error("GetKeys should return a copy, not the original slice")
 		}
 	}
 }

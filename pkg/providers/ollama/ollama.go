@@ -637,11 +637,8 @@ func (p *OllamaProvider) GenerateChatCompletion(
 
 // buildOllamaChatRequest builds an Ollama chat request from GenerateOptions
 func (p *OllamaProvider) buildOllamaChatRequest(options types.GenerateOptions) ollamaChatRequest {
-	// Determine model
-	model := options.Model
-	if model == "" {
-		model = p.GetDefaultModel()
-	}
+	// Determine model with fallback priority
+	model := common.ResolveModel(options.Model, p.config.DefaultModel, ollamaDefaultModel)
 
 	// Convert messages
 	messages := p.convertMessages(options.Messages)

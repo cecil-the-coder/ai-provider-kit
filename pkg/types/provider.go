@@ -2,8 +2,6 @@ package types
 
 import (
 	"context"
-	"io"
-	"net/http"
 	"time"
 )
 
@@ -194,54 +192,6 @@ type TokenStorage interface {
 	ListTokens() ([]string, error)
 }
 
-// Options represents configuration options for a provider
-type Options interface {
-	Get(key string) (interface{}, bool)
-	Set(key string, value interface{})
-	GetString(key string) string
-	GetInt(key string) int
-	GetBool(key string) bool
-	GetDuration(key string) time.Duration
-	GetStringSlice(key string) []string
-}
-
-// Router represents a router for provider selection
-type Router interface {
-	SelectProvider(prompt string, options interface{}) (Provider, error)
-	GetAvailableProviders() []ProviderInfo
-	GetProvider(name string) (Provider, error)
-	SetPreference(providerName string) error
-}
-
-// ProviderRegistry represents a registry of providers
-type ProviderRegistry interface {
-	Register(provider Provider) error
-	Unregister(name string) error
-	Get(name string) (Provider, error)
-	List() []Provider
-	ListByType(providerType ProviderType) []Provider
-	GetAvailable() []Provider
-	GetHealthy() []Provider
-}
-
-// Logger represents a logger interface
-type Logger interface {
-	Debug(msg string, fields ...interface{})
-	Info(msg string, fields ...interface{})
-	Warn(msg string, fields ...interface{})
-	Error(msg string, fields ...interface{})
-	Fatal(msg string, fields ...interface{})
-	WithField(key string, value interface{}) Logger
-	WithFields(fields map[string]interface{}) Logger
-}
-
-// HTTPClient represents an HTTP client interface
-type HTTPClient interface {
-	Do(req *http.Request) (*http.Response, error)
-	Get(url string) (*http.Response, error)
-	Post(url string, bodyType string, body io.Reader) (*http.Response, error)
-}
-
 // ============================================================================
 // Interface Segregation - Focused Provider Interfaces
 // ============================================================================
@@ -298,16 +248,12 @@ type ToolCallingProvider interface {
 	GetToolFormat() ToolFormat
 }
 
-// StreamingProvider defines streaming capabilities.
-// This interface is for providers that support real-time streaming responses.
-type StreamingProvider interface {
+// CapabilityProvider provides methods to query provider capabilities.
+// This interface is for providers that expose their feature support.
+type CapabilityProvider interface {
 	// Streaming support
 	SupportsStreaming() bool
-}
 
-// ResponsesAPIProvider defines support for structured responses API.
-// This interface is for providers that support structured response formats.
-type ResponsesAPIProvider interface {
 	// Responses API support
 	SupportsResponsesAPI() bool
 }
@@ -345,8 +291,7 @@ type AuthMethodDetector interface {
 // - Use ConfigurableProvider when you only need to configure the provider
 // - Use ChatProvider when you only need basic chat completion
 // - Use ToolCallingProvider when you only need tool/function calling
-// - Use StreamingProvider when you only need to check streaming support
-// - Use ResponsesAPIProvider when you only need responses API support
+// - Use CapabilityProvider when you only need to check provider capabilities
 // - Use HealthCheckProvider when you only need health monitoring
 //
 // This approach follows the Interface Segregation Principle, allowing clients
@@ -358,8 +303,7 @@ type Provider interface {
 	ConfigurableProvider
 	ChatProvider
 	ToolCallingProvider
-	StreamingProvider
-	ResponsesAPIProvider
+	CapabilityProvider
 	HealthCheckProvider
 }
 

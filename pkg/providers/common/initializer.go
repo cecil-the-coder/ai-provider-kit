@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cecil-the-coder/ai-provider-kit/pkg/http"
+	"github.com/cecil-the-coder/ai-provider-kit/internal/http"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common/models"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 )

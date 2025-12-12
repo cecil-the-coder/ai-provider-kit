@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/cecil-the-coder/ai-provider-kit/pkg/keymanager"
+	"github.com/cecil-the-coder/ai-provider-kit/pkg/auth"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common/streaming"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 )
@@ -150,8 +150,11 @@ func TestAnthropicProviderGetDefaultModel(t *testing.T) {
 
 func TestMultiKeyManager(t *testing.T) {
 	keys := []string{"key1", "key2", "key3"}
-	manager := keymanager.NewKeyManager("test", keys)
+	manager, err := auth.NewAPIKeyManager("test", keys, nil)
 
+	if err != nil {
+		t.Fatalf("Unexpected error creating manager: %v", err)
+	}
 	if manager == nil {
 		t.Fatal("Manager should not be nil")
 	}
@@ -344,8 +347,11 @@ func contains(s, substr string) bool {
 
 func TestMultiKeyManagerFailover(t *testing.T) {
 	keys := []string{"key1", "key2"}
-	manager := keymanager.NewKeyManager("test", keys)
+	manager, err := auth.NewAPIKeyManager("test", keys, nil)
 
+	if err != nil {
+		t.Fatalf("Unexpected error creating manager: %v", err)
+	}
 	if manager == nil {
 		t.Fatal("Manager should not be nil")
 	}

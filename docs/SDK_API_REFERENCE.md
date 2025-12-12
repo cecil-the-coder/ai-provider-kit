@@ -90,18 +90,11 @@ type ToolCallingProvider interface {
 }
 ```
 
-**StreamingProvider** - Streaming support indication (1 method)
+**CapabilityProvider** - Provider capability queries (2 methods)
 
 ```go
-type StreamingProvider interface {
+type CapabilityProvider interface {
     SupportsStreaming() bool
-}
-```
-
-**ResponsesAPIProvider** - Structured responses support (1 method)
-
-```go
-type ResponsesAPIProvider interface {
     SupportsResponsesAPI() bool
 }
 ```
@@ -127,8 +120,7 @@ type Provider interface {
     ConfigurableProvider
     ChatProvider
     ToolCallingProvider
-    StreamingProvider
-    ResponsesAPIProvider
+    CapabilityProvider
     HealthCheckProvider
 }
 ```
@@ -143,8 +135,7 @@ type Provider interface {
 | **ConfigurableProvider** | Runtime configuration | Configure(), GetConfig() |
 | **ChatProvider** | Text generation | GenerateChatCompletion() |
 | **ToolCallingProvider** | Function/tool calling | InvokeServerTool(), SupportsToolCalling(), GetToolFormat() |
-| **StreamingProvider** | Streaming support check | SupportsStreaming() |
-| **ResponsesAPIProvider** | Structured responses | SupportsResponsesAPI() |
+| **CapabilityProvider** | Capability queries | SupportsStreaming(), SupportsResponsesAPI() |
 | **HealthCheckProvider** | Health monitoring | HealthCheck(), GetMetrics() |
 
 ### Standardized Core API (Phase 3)
@@ -2972,7 +2963,7 @@ if err != nil {
 **Retryable Errors**
 
 ```go
-import "github.com/cecil-the-coder/ai-provider-kit/pkg/http"
+import "github.com/cecil-the-coder/ai-provider-kit/internal/http"
 
 maxRetries := 3
 for attempt := 0; attempt < maxRetries; attempt++ {
@@ -3104,7 +3095,7 @@ const (
 ### Request Building
 
 ```go
-import "github.com/cecil-the-coder/ai-provider-kit/pkg/http"
+import "github.com/cecil-the-coder/ai-provider-kit/internal/http"
 
 // Create JSON request
 req, err := http.NewJSONRequest("POST", "https://api.example.com/v1/chat", requestBody)

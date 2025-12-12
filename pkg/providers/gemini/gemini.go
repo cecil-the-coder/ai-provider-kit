@@ -171,14 +171,8 @@ func (p *GeminiProvider) GenerateChatCompletion(
 
 	// Check if streaming is requested
 	if options.Stream {
-		// Determine model for streaming
-		model := options.Model
-		if model == "" {
-			model = p.config.Model
-			if model == "" {
-				model = geminiDefaultModel
-			}
-		}
+		// Determine model for streaming with fallback priority
+		model := common.ResolveModel(options.Model, p.config.Model, geminiDefaultModel)
 
 		var stream types.ChatCompletionStream
 		var err error
@@ -858,14 +852,8 @@ func convertUniversalToolCallsToGeminiParts(toolCalls []types.ToolCall) []Part {
 // executeStreamWithAuth handles streaming requests with authentication
 func (p *GeminiProvider) executeStreamWithAuth(ctx context.Context, options types.GenerateOptions) (types.ChatCompletionStream, error) {
 	options.ContextObj = ctx
-	// Determine which model to use: options.Model takes precedence over default
-	model := options.Model
-	if model == "" {
-		model = p.config.Model
-		if model == "" {
-			model = geminiDefaultModel
-		}
-	}
+	// Determine which model to use with fallback priority
+	model := common.ResolveModel(options.Model, p.config.Model, geminiDefaultModel)
 
 	// Check for context-injected OAuth token first
 	if contextToken := auth.GetOAuthToken(ctx); contextToken != "" {
@@ -1241,16 +1229,7 @@ func (p *GeminiProvider) applyRateLimiting(ctx context.Context) error {
 
 // resolveModel determines which model to use based on precedence
 func (p *GeminiProvider) resolveModel(model string, options types.GenerateOptions) string {
-	if model == "" {
-		model = options.Model
-		if model == "" {
-			model = p.config.Model
-			if model == "" {
-				model = geminiDefaultModel
-			}
-		}
-	}
-	return model
+	return common.ResolveModel(options.Model, p.config.Model, geminiDefaultModel)
 }
 
 // prepareStandardRequest prepares request body for standard Gemini API
