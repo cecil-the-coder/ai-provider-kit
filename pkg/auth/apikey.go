@@ -131,11 +131,11 @@ func (m *APIKeyManagerImpl) GetCurrentKey() string {
 	}
 
 	// Try to find the first available key
-	for _, key := range m.keys {
-		m.mu.RLock()
-		health := m.keyHealth[key]
-		m.mu.RUnlock()
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 
+	for _, key := range m.keys {
+		health := m.keyHealth[key]
 		if m.isKeyAvailable(key, health) {
 			return key
 		}
@@ -155,9 +155,10 @@ func (m *APIKeyManagerImpl) GetNextKey() (string, error) {
 	if len(m.keys) == 1 {
 		m.mu.RLock()
 		health := m.keyHealth[m.keys[0]]
+		available := m.isKeyAvailable(m.keys[0], health)
 		m.mu.RUnlock()
 
-		if m.isKeyAvailable(m.keys[0], health) {
+		if available {
 			return m.keys[0], nil
 		}
 		return "", fmt.Errorf("only API key for %s is unavailable (in backoff)", m.providerName)
@@ -181,13 +182,13 @@ func (m *APIKeyManagerImpl) getNextKeyRoundRobin() (string, error) {
 	keysLen := uint32(len(m.keys)) // #nosec G115 -- len() returns non-negative int, keys slice won't exceed uint32 max
 	startIndex := atomic.AddUint32(&m.currentIndex, 1) % keysLen
 
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
 	for i := 0; i < len(m.keys); i++ {
 		index := (int(startIndex) + i) % len(m.keys)
 		key := m.keys[index]
-
-		m.mu.RLock()
 		health := m.keyHealth[key]
-		m.mu.RUnlock()
 
 		if m.isKeyAvailable(key, health) {
 			return key, nil
