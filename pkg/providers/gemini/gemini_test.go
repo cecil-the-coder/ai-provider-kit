@@ -1208,35 +1208,24 @@ func TestResolveModel(t *testing.T) {
 	tests := []struct {
 		name          string
 		providerModel string
-		inputModel    string
 		optionsModel  string
 		expectedModel string
 	}{
 		{
-			name:          "Use input model",
-			providerModel: "provider-default",
-			inputModel:    "input-model",
-			optionsModel:  "",
-			expectedModel: "input-model",
-		},
-		{
 			name:          "Use options model",
 			providerModel: "provider-default",
-			inputModel:    "",
 			optionsModel:  "options-model",
 			expectedModel: "options-model",
 		},
 		{
 			name:          "Use provider default",
 			providerModel: "provider-default",
-			inputModel:    "",
 			optionsModel:  "",
 			expectedModel: "provider-default",
 		},
 		{
 			name:          "Use system default",
 			providerModel: "",
-			inputModel:    "",
 			optionsModel:  "",
 			expectedModel: geminiDefaultModel,
 		},
@@ -1254,7 +1243,8 @@ func TestResolveModel(t *testing.T) {
 				Model: tt.optionsModel,
 			}
 
-			result := provider.resolveModel(tt.inputModel, options)
+			// Note: first parameter is unused as callers always pass empty string
+			result := provider.resolveModel("", options)
 			if result != tt.expectedModel {
 				t.Errorf("Expected model '%s', got '%s'", tt.expectedModel, result)
 			}

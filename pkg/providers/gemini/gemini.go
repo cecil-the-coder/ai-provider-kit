@@ -1228,7 +1228,7 @@ func (p *GeminiProvider) applyRateLimiting(ctx context.Context) error {
 }
 
 // resolveModel determines which model to use based on precedence
-func (p *GeminiProvider) resolveModel(model string, options types.GenerateOptions) string {
+func (p *GeminiProvider) resolveModel(_ string, options types.GenerateOptions) string {
 	return common.ResolveModel(options.Model, p.config.Model, geminiDefaultModel)
 }
 
