@@ -1052,6 +1052,20 @@ func convertContentPartsToQwen(parts []types.ContentPart) interface{} {
 			}
 			// Note: Qwen uses OpenAI-compatible format
 			// Documents/audio in chat would need separate handling
+		case types.ContentTypeToolResult:
+			// For tool results, extract text content
+			if resultText, ok := part.Content.(string); ok {
+				// Return as simple text for tool responses
+				qwenParts = append(qwenParts, QwenContentPart{
+					Type: "text",
+					Text: resultText,
+				})
+			} else {
+				qwenParts = append(qwenParts, QwenContentPart{
+					Type: "text",
+					Text: fmt.Sprintf("%v", part.Content),
+				})
+			}
 		}
 	}
 

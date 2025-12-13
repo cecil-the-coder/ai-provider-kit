@@ -414,3 +414,162 @@ func TestJSONSerialization(t *testing.T) {
 		t.Errorf("Expected name 'test_function', got '%s'", unmarshaled.Function.Name)
 	}
 }
+
+// TestToolResultsWithContentParts tests that ContentParts-based tool results are handled correctly
+func TestToolResultsWithContentParts(t *testing.T) {
+	config := types.ProviderConfig{
+		Type:         types.ProviderTypeQwen,
+		DefaultModel: "qwen-turbo",
+	}
+
+	provider := NewQwenProvider(config)
+
+	// Create messages with ContentParts-based tool results (modern format)
+	messages := []types.ChatMessage{
+		{
+			Role:    "user",
+			Content: "What's the weather in San Francisco?",
+		},
+		{
+			Role:    "assistant",
+			Content: "",
+			ToolCalls: []types.ToolCall{
+				{
+					ID:   "call_123",
+					Type: "function",
+					Function: types.ToolCallFunction{
+						Name:      "get_weather",
+						Arguments: `{"location": "San Francisco, CA"}`,
+					},
+				},
+			},
+		},
+		{
+			Role:       "tool",
+			ToolCallID: "call_123",
+			Parts: []types.ContentPart{
+				{
+					Type:      types.ContentTypeToolResult,
+					ToolUseID: "call_123",
+					Content:   `{"temperature": 72, "condition": "sunny"}`,
+				},
+			},
+		},
+	}
+
+	options := types.GenerateOptions{
+		Messages: messages,
+	}
+
+	request := provider.buildQwenRequest(options)
+
+	// Verify that we have 3 messages
+	if len(request.Messages) != 3 {
+		t.Fatalf("Expected 3 messages, got %d", len(request.Messages))
+	}
+
+	// Verify tool call message
+	if len(request.Messages[1].ToolCalls) != 1 {
+		t.Errorf("Expected 1 tool call in message, got %d", len(request.Messages[1].ToolCalls))
+	}
+
+	if request.Messages[1].ToolCalls[0].ID != "call_123" {
+		t.Errorf("Expected tool call ID 'call_123', got '%s'", request.Messages[1].ToolCalls[0].ID)
+	}
+
+	// Verify tool result message has content
+	toolResultMsg := request.Messages[2]
+	if toolResultMsg.ToolCallID != "call_123" {
+		t.Errorf("Expected tool call ID 'call_123', got '%s'", toolResultMsg.ToolCallID)
+	}
+
+	// The content should be an array of QwenContentPart
+	contentParts, ok := toolResultMsg.Content.([]QwenContentPart)
+	if !ok {
+		t.Fatalf("Expected content to be []QwenContentPart, got %T", toolResultMsg.Content)
+	}
+
+	if len(contentParts) != 1 {
+		t.Fatalf("Expected 1 content part, got %d", len(contentParts))
+	}
+
+	if contentParts[0].Type != "text" {
+		t.Errorf("Expected content part type 'text', got '%s'", contentParts[0].Type)
+	}
+
+	expectedText := `{"temperature": 72, "condition": "sunny"}`
+	if contentParts[0].Text != expectedText {
+		t.Errorf("Expected text '%s', got '%s'", expectedText, contentParts[0].Text)
+	}
+}
+
+// TestToolResultsWithMixedContent tests tool results with mixed content types
+func TestToolResultsWithMixedContent(t *testing.T) {
+	config := types.ProviderConfig{
+		Type:         types.ProviderTypeQwen,
+		DefaultModel: "qwen-turbo",
+	}
+
+	provider := NewQwenProvider(config)
+
+	// Create messages with mixed content in tool results
+	messages := []types.ChatMessage{
+		{
+			Role:    "user",
+			Content: "Test multimodal tool result",
+		},
+		{
+			Role:       "tool",
+			ToolCallID: "call_456",
+			Parts: []types.ContentPart{
+				{
+					Type: types.ContentTypeText,
+					Text: "Here is the analysis:",
+				},
+				{
+					Type:      types.ContentTypeToolResult,
+					ToolUseID: "call_456",
+					Content:   "Analysis complete: Success",
+				},
+			},
+		},
+	}
+
+	options := types.GenerateOptions{
+		Messages: messages,
+	}
+
+	request := provider.buildQwenRequest(options)
+
+	// Verify we have 2 messages
+	if len(request.Messages) != 2 {
+		t.Fatalf("Expected 2 messages, got %d", len(request.Messages))
+	}
+
+	// Verify tool result message has both text and tool_result parts converted to text
+	toolResultMsg := request.Messages[1]
+	contentParts, ok := toolResultMsg.Content.([]QwenContentPart)
+	if !ok {
+		t.Fatalf("Expected content to be []QwenContentPart, got %T", toolResultMsg.Content)
+	}
+
+	if len(contentParts) != 2 {
+		t.Fatalf("Expected 2 content parts, got %d", len(contentParts))
+	}
+
+	// First part should be regular text
+	if contentParts[0].Type != "text" {
+		t.Errorf("Expected first part type 'text', got '%s'", contentParts[0].Type)
+	}
+	if contentParts[0].Text != "Here is the analysis:" {
+		t.Errorf("Expected first part text 'Here is the analysis:', got '%s'", contentParts[0].Text)
+	}
+
+	// Second part should be converted tool result (as text)
+	if contentParts[1].Type != "text" {
+		t.Errorf("Expected second part type 'text', got '%s'", contentParts[1].Type)
+	}
+	if contentParts[1].Text != "Analysis complete: Success" {
+		t.Errorf("Expected second part text 'Analysis complete: Success', got '%s'", contentParts[1].Text)
+	}
+}
