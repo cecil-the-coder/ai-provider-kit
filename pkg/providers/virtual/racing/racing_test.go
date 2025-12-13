@@ -292,10 +292,9 @@ func TestFirstWinsStrategy_AllProvidersFail(t *testing.T) {
 	}
 }
 
-// TestWeightedStrategy_ScoreBasedSelection tests that score-based selection
-// picks the provider with the best performance score during the grace period,
+// TestWeightedStrategy_ScoreBasedSelection tests that StrategyWeighted
+// picks the provider with the best performance score after collecting all results,
 // even if a faster provider with worse history finishes first.
-// NOTE: After strategy name correction, score-based selection is in StrategyFirstWins.
 func TestWeightedStrategy_ScoreBasedSelection(t *testing.T) {
 	tests := []struct {
 		name             string
@@ -364,7 +363,7 @@ func TestWeightedStrategy_ScoreBasedSelection(t *testing.T) {
 			rp := NewRacingProvider("test", &Config{
 				TimeoutMS:     5000,
 				GracePeriodMS: tt.gracePeriodMS,
-				Strategy:      StrategyFirstWins, // Score-based selection is now in FirstWins
+				Strategy:      StrategyWeighted, // Weighted strategy does score-based selection
 			})
 
 			// Pre-seed performance stats
@@ -1688,9 +1687,9 @@ func TestVirtualModel_DifferentStrategies(t *testing.T) {
 			name:             "weighted strategy with history",
 			virtualModel:     "quality-model",
 			expectedStrategy: StrategyWeighted,
-			// After strategy swap: StrategyWeighted now waits for all and picks first success
-			// (benchmark mode), not score-based. Score-based selection is in StrategyFirstWins.
-			expectedWinner: "fast-provider",
+			// StrategyWeighted waits for all providers then does weighted selection
+			// quality-provider wins due to better performance history
+			expectedWinner: "quality-provider",
 			providers: []types.Provider{
 				&mockChatProvider{
 					name:     "fast-provider",

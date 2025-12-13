@@ -195,100 +195,34 @@ func (r *RacingProvider) GenerateChatCompletion(ctx context.Context, opts types.
 func (r *RacingProvider) selectWinner(ctx context.Context, results chan *raceResult, cancelTimeout context.CancelFunc, cancelRace context.CancelFunc, raceParticipants []string, modelID string, virtualModelConfig *VirtualModelConfig) (types.ChatCompletionStream, error) {
 	switch r.config.Strategy {
 	case StrategyWeighted:
-		return r.firstWinsStrategy(ctx, results, cancelTimeout, cancelRace, raceParticipants, modelID, virtualModelConfig)
+		return r.weightedStrategy(ctx, results, cancelTimeout, cancelRace, raceParticipants, modelID, virtualModelConfig)
 	case StrategyQuality:
 		return r.qualityStrategy(ctx, results, cancelTimeout, cancelRace, raceParticipants, modelID, virtualModelConfig)
 	default:
-		return r.weightedStrategy(ctx, results, cancelTimeout, cancelRace, raceParticipants, modelID, virtualModelConfig)
+		return r.firstWinsStrategy(ctx, results, cancelTimeout, cancelRace, raceParticipants, modelID, virtualModelConfig)
 	}
 }
 
-func (r *RacingProvider) firstWinsStrategy(ctx context.Context, results chan *raceResult, cancelTimeout context.CancelFunc, cancelRace context.CancelFunc, raceParticipants []string, modelID string, virtualModelConfig *VirtualModelConfig) (types.ChatCompletionStream, error) {
-	r.mu.RLock()
-	collector := r.metricsCollector
-	r.mu.RUnlock()
-
+func (r *RacingProvider) weightedStrategy(ctx context.Context, results chan *raceResult, cancelTimeout context.CancelFunc, cancelRace context.CancelFunc, raceParticipants []string, modelID string, virtualModelConfig *VirtualModelConfig) (types.ChatCompletionStream, error) {
+	// Collect ALL results, then pick best candidate using weighted selection
+	var candidates []*raceResult
 	raceLatencies := make(map[string]time.Duration)
-	var lastErr error
-	var winner *raceResult
 
 	for result := range results {
 		raceLatencies[result.provider.Name()] = result.latency
 
-		if result.err == nil && result.stream != nil && winner == nil {
-			winner = result
-			r.performance.RecordWin(result.provider.Name(), result.latency)
-			// Continue collecting results to get complete latencies
+		if result.err == nil && result.stream != nil {
+			candidates = append(candidates, result)
 		} else if result.err != nil {
 			r.performance.RecordLoss(result.provider.Name(), result.latency)
-			lastErr = result.err
 		}
 	}
 
-	if winner != nil {
-		r.emitRaceWinnerEvents(ctx, collector, winner, raceParticipants, raceLatencies, modelID, "race_winner")
-
-		// Record success for racing provider metrics
-		r.mu.Lock()
-		if r.metricsCollector != nil {
-			_ = r.metricsCollector.RecordEvent(ctx, types.MetricEvent{
-				Type:         types.MetricEventSuccess,
-				ProviderName: r.name,
-				ProviderType: r.Type(),
-				ModelID:      modelID,
-				Timestamp:    time.Now(),
-				Latency:      winner.latency,
-				Metadata: map[string]interface{}{
-					"racing_winner": winner.provider.Name(),
-				},
-			})
-		}
-		r.mu.Unlock()
-
-		// Prepare virtual model metadata for the stream
-		var virtualModelName, virtualModelDesc string
-		if virtualModelConfig != nil {
-			virtualModelName = virtualModelConfig.DisplayName
-			virtualModelDesc = virtualModelConfig.Description
-		}
-
-		return &racingStream{
-			inner:            winner.stream,
-			provider:         winner.provider.Name(),
-			latency:          winner.latency,
-			virtualModel:     virtualModelName,
-			virtualModelDesc: virtualModelDesc,
-			cancelTimeout:    cancelTimeout,
-			cancelRace:       cancelRace,
-		}, nil
-	}
-
-	// All providers failed
-	if collector != nil {
-		_ = collector.RecordEvent(ctx, types.MetricEvent{
-			Type:             types.MetricEventError,
-			ProviderName:     r.name,
-			ProviderType:     r.Type(),
-			ModelID:          modelID,
-			Timestamp:        time.Now(),
-			ErrorMessage:     "all providers failed",
-			ErrorType:        "race_all_failed",
-			RaceParticipants: raceParticipants,
-			RaceLatencies:    raceLatencies,
-		})
-	}
-
-	// Cancel contexts since we're not returning a stream
-	cancelRace()
-	cancelTimeout()
-
-	if lastErr != nil {
-		return nil, fmt.Errorf("all providers failed, last error: %w", lastErr)
-	}
-	return nil, fmt.Errorf("all providers failed")
+	// Use pickBestCandidate for weighted selection based on performance history
+	return r.pickBestCandidate(ctx, candidates, cancelTimeout, cancelRace, raceParticipants, raceLatencies, modelID, virtualModelConfig)
 }
 
-func (r *RacingProvider) weightedStrategy(ctx context.Context, results chan *raceResult, cancelTimeout context.CancelFunc, cancelRace context.CancelFunc, raceParticipants []string, modelID string, virtualModelConfig *VirtualModelConfig) (types.ChatCompletionStream, error) {
+func (r *RacingProvider) firstWinsStrategy(ctx context.Context, results chan *raceResult, cancelTimeout context.CancelFunc, cancelRace context.CancelFunc, raceParticipants []string, modelID string, virtualModelConfig *VirtualModelConfig) (types.ChatCompletionStream, error) {
 	gracePeriod := time.Duration(r.config.GracePeriodMS) * time.Millisecond
 	timer := time.NewTimer(gracePeriod)
 	defer timer.Stop()
@@ -326,7 +260,7 @@ func (r *RacingProvider) weightedStrategy(ctx context.Context, results chan *rac
 }
 
 func (r *RacingProvider) qualityStrategy(ctx context.Context, results chan *raceResult, cancelTimeout context.CancelFunc, cancelRace context.CancelFunc, raceParticipants []string, modelID string, virtualModelConfig *VirtualModelConfig) (types.ChatCompletionStream, error) {
-	return r.weightedStrategy(ctx, results, cancelTimeout, cancelRace, raceParticipants, modelID, virtualModelConfig)
+	return r.firstWinsStrategy(ctx, results, cancelTimeout, cancelRace, raceParticipants, modelID, virtualModelConfig)
 }
 
 func (r *RacingProvider) pickBestCandidate(ctx context.Context, candidates []*raceResult, cancelTimeout context.CancelFunc, cancelRace context.CancelFunc, raceParticipants []string, raceLatencies map[string]time.Duration, modelID string, virtualModelConfig *VirtualModelConfig) (types.ChatCompletionStream, error) {
@@ -520,11 +454,11 @@ func (r *RacingProvider) selectWinnerWithVirtualModel(ctx context.Context, resul
 
 	switch strategy {
 	case StrategyWeighted:
-		return r.firstWinsStrategy(ctx, results, cancelTimeout, cancelRace, raceParticipants, modelID, vmConfig)
+		return r.weightedStrategy(ctx, results, cancelTimeout, cancelRace, raceParticipants, modelID, vmConfig)
 	case StrategyQuality:
 		return r.qualityStrategy(ctx, results, cancelTimeout, cancelRace, raceParticipants, modelID, vmConfig)
 	default:
-		return r.weightedStrategy(ctx, results, cancelTimeout, cancelRace, raceParticipants, modelID, vmConfig)
+		return r.firstWinsStrategy(ctx, results, cancelTimeout, cancelRace, raceParticipants, modelID, vmConfig)
 	}
 }
 
