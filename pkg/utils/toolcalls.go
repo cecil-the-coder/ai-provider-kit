@@ -108,24 +108,122 @@ func GetPendingToolCalls(messages []types.ChatMessage) []types.ToolCall {
 
 // FixMissingToolResponses returns a new message slice with injected responses
 // for any tool calls that don't have corresponding tool responses.
+// Tool responses are inserted immediately after the assistant message containing
+// the tool_calls, not at the end of the message array.
 func FixMissingToolResponses(messages []types.ChatMessage, defaultResponse string) []types.ChatMessage {
 	pending := GetPendingToolCalls(messages)
 	if len(pending) == 0 {
 		return messages
 	}
 
-	// Copy original messages
-	result := make([]types.ChatMessage, len(messages))
-	copy(result, messages)
-
-	// Append missing tool responses
+	// Build a map of pending tool call IDs for quick lookup
+	pendingMap := make(map[string]bool)
 	for _, tc := range pending {
-		result = append(result, types.ChatMessage{
-			Role:       "tool",
-			Content:    defaultResponse,
-			ToolCallID: tc.ID,
-		})
+		pendingMap[tc.ID] = true
+	}
+
+	// Build result with missing tool responses inserted in correct positions
+	result := make([]types.ChatMessage, 0, len(messages)+len(pending))
+
+	for i := 0; i < len(messages); i++ {
+		msg := messages[i]
+		result = append(result, msg)
+
+		// If this is an assistant message with tool calls, inject missing responses
+		if len(msg.ToolCalls) > 0 {
+			missingToolCalls := collectMissingToolCalls(msg.ToolCalls, pendingMap)
+			if len(missingToolCalls) > 0 {
+				insertPos := findToolResponseInsertPosition(messages, i)
+				result, i = insertMissingResponses(result, messages, missingToolCalls, i, insertPos, defaultResponse)
+			}
+		}
 	}
 
 	return result
+}
+
+// collectMissingToolCalls returns the tool calls that are missing responses
+func collectMissingToolCalls(toolCalls []types.ToolCall, pendingMap map[string]bool) []types.ToolCall {
+	missingToolCalls := []types.ToolCall{}
+	for _, tc := range toolCalls {
+		if pendingMap[tc.ID] {
+			missingToolCalls = append(missingToolCalls, tc)
+		}
+	}
+	return missingToolCalls
+}
+
+// findToolResponseInsertPosition finds where to insert missing tool responses
+// by scanning forward from the assistant message to find existing tool responses
+func findToolResponseInsertPosition(messages []types.ChatMessage, assistantIdx int) int {
+	insertPos := assistantIdx + 1 // Default: right after assistant message
+
+	// Scan forward to find existing tool responses for this assistant's tool calls
+	for j := assistantIdx + 1; j < len(messages); j++ {
+		if isToolResponseForAssistant(messages[j], messages[assistantIdx].ToolCalls) {
+			insertPos = j + 1
+		} else {
+			// Stop scanning if we hit a non-tool-response message
+			break
+		}
+	}
+
+	return insertPos
+}
+
+// isToolResponseForAssistant checks if a message is a tool response for any of the given tool calls
+func isToolResponseForAssistant(msg types.ChatMessage, toolCalls []types.ToolCall) bool {
+	// Check legacy ToolCallID field
+	if msg.Role == "tool" && msg.ToolCallID != "" {
+		for _, tc := range toolCalls {
+			if msg.ToolCallID == tc.ID {
+				return true
+			}
+		}
+	}
+
+	// Check ContentParts for tool results
+	for _, part := range msg.Parts {
+		if part.Type == types.ContentTypeToolResult && part.ToolUseID != "" {
+			for _, tc := range toolCalls {
+				if part.ToolUseID == tc.ID {
+					return true
+				}
+			}
+		}
+	}
+
+	return false
+}
+
+// insertMissingResponses inserts missing tool responses at the correct position
+// and returns the updated result slice and the new loop index
+func insertMissingResponses(
+	result []types.ChatMessage,
+	messages []types.ChatMessage,
+	missingToolCalls []types.ToolCall,
+	currentIdx int,
+	insertPos int,
+	defaultResponse string,
+) ([]types.ChatMessage, int) {
+	// Create missing response messages
+	missingResponses := make([]types.ChatMessage, len(missingToolCalls))
+	for idx, tc := range missingToolCalls {
+		missingResponses[idx] = types.ChatMessage{
+			Role:       "tool",
+			Content:    defaultResponse,
+			ToolCallID: tc.ID,
+		}
+	}
+
+	// Add the remaining messages up to the insert position
+	for j := currentIdx + 1; j < insertPos && j < len(messages); j++ {
+		result = append(result, messages[j])
+	}
+
+	// Insert missing responses
+	result = append(result, missingResponses...)
+
+	// Return updated result and new index
+	return result, insertPos - 1
 }

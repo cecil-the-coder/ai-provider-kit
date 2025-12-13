@@ -655,6 +655,157 @@ func TestFixMissingToolResponses(t *testing.T) {
 				}
 			},
 		},
+		{
+			name: "multi-turn conversation: tool responses inserted immediately after assistant message",
+			messages: []types.ChatMessage{
+				{Role: "user", Content: "First user message"},
+				{
+					Role: "assistant",
+					ToolCalls: []types.ToolCall{
+						{ID: "call_1", Type: "function", Function: types.ToolCallFunction{Name: "tool1"}},
+					},
+				},
+				{Role: "user", Content: "Second user message"},
+				{Role: "assistant", Content: "Second assistant message"},
+			},
+			defaultResponse: "Tool not available",
+			validate: func(t *testing.T, result []types.ChatMessage) {
+				// Expected: [user, assistant+tool_calls, tool_response, user, assistant]
+				expectedLength := 5
+				if len(result) != expectedLength {
+					t.Errorf("Expected %d messages, got %d", expectedLength, len(result))
+					for i, msg := range result {
+						t.Logf("Message %d: Role=%s, Content=%s, ToolCalls=%d, ToolCallID=%s",
+							i, msg.Role, msg.Content, len(msg.ToolCalls), msg.ToolCallID)
+					}
+					return
+				}
+
+				// Verify message order
+				if result[0].Role != "user" || result[0].Content != "First user message" {
+					t.Errorf("Message 0 should be first user message")
+				}
+				if result[1].Role != "assistant" || len(result[1].ToolCalls) != 1 {
+					t.Errorf("Message 1 should be assistant with tool calls")
+				}
+				if result[2].Role != "tool" || result[2].ToolCallID != "call_1" {
+					t.Errorf("Message 2 should be injected tool response, got role=%s, toolCallID=%s", result[2].Role, result[2].ToolCallID)
+				}
+				if result[2].Content != "Tool not available" {
+					t.Errorf("Message 2 should have default response content, got %s", result[2].Content)
+				}
+				if result[3].Role != "user" || result[3].Content != "Second user message" {
+					t.Errorf("Message 3 should be second user message")
+				}
+				if result[4].Role != "assistant" || result[4].Content != "Second assistant message" {
+					t.Errorf("Message 4 should be second assistant message")
+				}
+			},
+		},
+		{
+			name: "multi-turn with multiple tool calls: responses inserted in correct positions",
+			messages: []types.ChatMessage{
+				{Role: "user", Content: "First request"},
+				{
+					Role: "assistant",
+					ToolCalls: []types.ToolCall{
+						{ID: "call_1", Type: "function", Function: types.ToolCallFunction{Name: "tool1"}},
+						{ID: "call_2", Type: "function", Function: types.ToolCallFunction{Name: "tool2"}},
+					},
+				},
+				{Role: "user", Content: "Second request"},
+				{
+					Role: "assistant",
+					ToolCalls: []types.ToolCall{
+						{ID: "call_3", Type: "function", Function: types.ToolCallFunction{Name: "tool3"}},
+					},
+				},
+			},
+			defaultResponse: "Default",
+			validate: func(t *testing.T, result []types.ChatMessage) {
+				// Expected: [user, assistant+2tools, tool_resp1, tool_resp2, user, assistant+1tool, tool_resp3]
+				expectedLength := 7
+				if len(result) != expectedLength {
+					t.Errorf("Expected %d messages, got %d", expectedLength, len(result))
+					for i, msg := range result {
+						t.Logf("Message %d: Role=%s, ToolCalls=%d, ToolCallID=%s",
+							i, msg.Role, len(msg.ToolCalls), msg.ToolCallID)
+					}
+					return
+				}
+
+				// Verify structure
+				if result[0].Role != "user" {
+					t.Errorf("Message 0 should be user")
+				}
+				if result[1].Role != "assistant" || len(result[1].ToolCalls) != 2 {
+					t.Errorf("Message 1 should be assistant with 2 tool calls")
+				}
+				// Tool responses should be immediately after first assistant message
+				if result[2].Role != "tool" || (result[2].ToolCallID != "call_1" && result[2].ToolCallID != "call_2") {
+					t.Errorf("Message 2 should be tool response for call_1 or call_2")
+				}
+				if result[3].Role != "tool" || (result[3].ToolCallID != "call_1" && result[3].ToolCallID != "call_2") {
+					t.Errorf("Message 3 should be tool response for call_1 or call_2")
+				}
+				if result[4].Role != "user" {
+					t.Errorf("Message 4 should be second user message")
+				}
+				if result[5].Role != "assistant" || len(result[5].ToolCalls) != 1 {
+					t.Errorf("Message 5 should be assistant with 1 tool call")
+				}
+				// Tool response should be immediately after second assistant message
+				if result[6].Role != "tool" || result[6].ToolCallID != "call_3" {
+					t.Errorf("Message 6 should be tool response for call_3")
+				}
+			},
+		},
+		{
+			name: "partial responses in multi-turn: only missing ones inserted at correct positions",
+			messages: []types.ChatMessage{
+				{Role: "user", Content: "First"},
+				{
+					Role: "assistant",
+					ToolCalls: []types.ToolCall{
+						{ID: "call_1", Type: "function", Function: types.ToolCallFunction{Name: "tool1"}},
+						{ID: "call_2", Type: "function", Function: types.ToolCallFunction{Name: "tool2"}},
+					},
+				},
+				{Role: "tool", ToolCallID: "call_1", Content: "Real response"},
+				{Role: "user", Content: "Second"},
+				{Role: "assistant", Content: "Done"},
+			},
+			defaultResponse: "Default",
+			validate: func(t *testing.T, result []types.ChatMessage) {
+				// Expected: [user, assistant+2tools, tool_resp_call1_REAL, tool_resp_call2_DEFAULT, user, assistant]
+				expectedLength := 6
+				if len(result) != expectedLength {
+					t.Errorf("Expected %d messages, got %d", expectedLength, len(result))
+					for i, msg := range result {
+						t.Logf("Message %d: Role=%s, Content=%s, ToolCallID=%s",
+							i, msg.Role, msg.Content, msg.ToolCallID)
+					}
+					return
+				}
+
+				// Verify the real response is still there
+				if result[2].ToolCallID != "call_1" || result[2].Content != "Real response" {
+					t.Errorf("Message 2 should be real response for call_1")
+				}
+				// Verify the default response was injected immediately after assistant message
+				if result[3].Role != "tool" || result[3].ToolCallID != "call_2" || result[3].Content != "Default" {
+					t.Errorf("Message 3 should be injected default response for call_2, got role=%s, toolCallID=%s, content=%s",
+						result[3].Role, result[3].ToolCallID, result[3].Content)
+				}
+				// Verify remaining messages are in correct order
+				if result[4].Role != "user" || result[4].Content != "Second" {
+					t.Errorf("Message 4 should be second user message")
+				}
+				if result[5].Role != "assistant" || result[5].Content != "Done" {
+					t.Errorf("Message 5 should be final assistant message")
+				}
+			},
+		},
 	}
 
 	for _, tt := range tests {
