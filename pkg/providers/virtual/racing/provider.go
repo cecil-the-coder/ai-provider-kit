@@ -130,7 +130,6 @@ func (r *RacingProvider) GenerateChatCompletion(ctx context.Context, opts types.
 	// Use virtual model specific timeout or fallback to default
 	timeout := time.Duration(r.config.GetEffectiveTimeout(opts.Model)) * time.Millisecond
 	ctx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
 
 	// Create a cancellable context for racing goroutines that we can cancel early
 	// when a winner is found, reducing resource waste
@@ -182,31 +181,29 @@ func (r *RacingProvider) GenerateChatCompletion(ctx context.Context, opts types.
 
 	// Use appropriate winner selection method
 	if virtualModelConfig != nil {
-		return r.selectWinnerWithVirtualModel(ctx, results, raceCancel, raceParticipants, opts.Model, virtualModelConfig)
+		return r.selectWinnerWithVirtualModel(ctx, results, cancel, raceCancel, raceParticipants, opts.Model, virtualModelConfig)
 	} else {
 		// Legacy mode: use standard selectWinner method with legacy virtual model info
 		legacyVMConfig := &VirtualModelConfig{
 			DisplayName: "legacy_mode",
 			Description: "Legacy racing mode using all providers",
 		}
-		return r.selectWinner(ctx, results, raceCancel, raceParticipants, opts.Model, legacyVMConfig)
+		return r.selectWinner(ctx, results, cancel, raceCancel, raceParticipants, opts.Model, legacyVMConfig)
 	}
 }
 
-func (r *RacingProvider) selectWinner(ctx context.Context, results chan *raceResult, cancelRace context.CancelFunc, raceParticipants []string, modelID string, virtualModelConfig *VirtualModelConfig) (types.ChatCompletionStream, error) {
-	defer cancelRace() // Always cancel racing context when winner is selected or error occurs
-
+func (r *RacingProvider) selectWinner(ctx context.Context, results chan *raceResult, cancelTimeout context.CancelFunc, cancelRace context.CancelFunc, raceParticipants []string, modelID string, virtualModelConfig *VirtualModelConfig) (types.ChatCompletionStream, error) {
 	switch r.config.Strategy {
 	case StrategyWeighted:
-		return r.weightedStrategy(ctx, results, raceParticipants, modelID, virtualModelConfig)
+		return r.weightedStrategy(ctx, results, cancelTimeout, cancelRace, raceParticipants, modelID, virtualModelConfig)
 	case StrategyQuality:
-		return r.qualityStrategy(ctx, results, raceParticipants, modelID, virtualModelConfig)
+		return r.qualityStrategy(ctx, results, cancelTimeout, cancelRace, raceParticipants, modelID, virtualModelConfig)
 	default:
-		return r.firstWinsStrategy(ctx, results, raceParticipants, modelID, virtualModelConfig)
+		return r.firstWinsStrategy(ctx, results, cancelTimeout, cancelRace, raceParticipants, modelID, virtualModelConfig)
 	}
 }
 
-func (r *RacingProvider) firstWinsStrategy(ctx context.Context, results chan *raceResult, raceParticipants []string, modelID string, virtualModelConfig *VirtualModelConfig) (types.ChatCompletionStream, error) {
+func (r *RacingProvider) firstWinsStrategy(ctx context.Context, results chan *raceResult, cancelTimeout context.CancelFunc, cancelRace context.CancelFunc, raceParticipants []string, modelID string, virtualModelConfig *VirtualModelConfig) (types.ChatCompletionStream, error) {
 	r.mu.RLock()
 	collector := r.metricsCollector
 	r.mu.RUnlock()
@@ -261,6 +258,8 @@ func (r *RacingProvider) firstWinsStrategy(ctx context.Context, results chan *ra
 			latency:          winner.latency,
 			virtualModel:     virtualModelName,
 			virtualModelDesc: virtualModelDesc,
+			cancelTimeout:    cancelTimeout,
+			cancelRace:       cancelRace,
 		}, nil
 	}
 
@@ -279,13 +278,17 @@ func (r *RacingProvider) firstWinsStrategy(ctx context.Context, results chan *ra
 		})
 	}
 
+	// Cancel contexts since we're not returning a stream
+	cancelRace()
+	cancelTimeout()
+
 	if lastErr != nil {
 		return nil, fmt.Errorf("all providers failed, last error: %w", lastErr)
 	}
 	return nil, fmt.Errorf("all providers failed")
 }
 
-func (r *RacingProvider) weightedStrategy(ctx context.Context, results chan *raceResult, raceParticipants []string, modelID string, virtualModelConfig *VirtualModelConfig) (types.ChatCompletionStream, error) {
+func (r *RacingProvider) weightedStrategy(ctx context.Context, results chan *raceResult, cancelTimeout context.CancelFunc, cancelRace context.CancelFunc, raceParticipants []string, modelID string, virtualModelConfig *VirtualModelConfig) (types.ChatCompletionStream, error) {
 	gracePeriod := time.Duration(r.config.GracePeriodMS) * time.Millisecond
 	timer := time.NewTimer(gracePeriod)
 	defer timer.Stop()
@@ -297,7 +300,7 @@ func (r *RacingProvider) weightedStrategy(ctx context.Context, results chan *rac
 		select {
 		case result, ok := <-results:
 			if !ok {
-				return r.pickBestCandidate(ctx, candidates, raceParticipants, raceLatencies, modelID, virtualModelConfig)
+				return r.pickBestCandidate(ctx, candidates, cancelTimeout, cancelRace, raceParticipants, raceLatencies, modelID, virtualModelConfig)
 			}
 			raceLatencies[result.provider.Name()] = result.latency
 			if result.err == nil && result.stream != nil {
@@ -308,22 +311,25 @@ func (r *RacingProvider) weightedStrategy(ctx context.Context, results chan *rac
 			}
 		case <-timer.C:
 			if len(candidates) > 0 {
-				return r.pickBestCandidate(ctx, candidates, raceParticipants, raceLatencies, modelID, virtualModelConfig)
+				return r.pickBestCandidate(ctx, candidates, cancelTimeout, cancelRace, raceParticipants, raceLatencies, modelID, virtualModelConfig)
 			}
 		case <-ctx.Done():
 			if len(candidates) > 0 {
-				return r.pickBestCandidate(ctx, candidates, raceParticipants, raceLatencies, modelID, virtualModelConfig)
+				return r.pickBestCandidate(ctx, candidates, cancelTimeout, cancelRace, raceParticipants, raceLatencies, modelID, virtualModelConfig)
 			}
+			// Cancel contexts since we're not returning a stream
+			cancelRace()
+			cancelTimeout()
 			return nil, ctx.Err()
 		}
 	}
 }
 
-func (r *RacingProvider) qualityStrategy(ctx context.Context, results chan *raceResult, raceParticipants []string, modelID string, virtualModelConfig *VirtualModelConfig) (types.ChatCompletionStream, error) {
-	return r.weightedStrategy(ctx, results, raceParticipants, modelID, virtualModelConfig)
+func (r *RacingProvider) qualityStrategy(ctx context.Context, results chan *raceResult, cancelTimeout context.CancelFunc, cancelRace context.CancelFunc, raceParticipants []string, modelID string, virtualModelConfig *VirtualModelConfig) (types.ChatCompletionStream, error) {
+	return r.weightedStrategy(ctx, results, cancelTimeout, cancelRace, raceParticipants, modelID, virtualModelConfig)
 }
 
-func (r *RacingProvider) pickBestCandidate(ctx context.Context, candidates []*raceResult, raceParticipants []string, raceLatencies map[string]time.Duration, modelID string, virtualModelConfig *VirtualModelConfig) (types.ChatCompletionStream, error) {
+func (r *RacingProvider) pickBestCandidate(ctx context.Context, candidates []*raceResult, cancelTimeout context.CancelFunc, cancelRace context.CancelFunc, raceParticipants []string, raceLatencies map[string]time.Duration, modelID string, virtualModelConfig *VirtualModelConfig) (types.ChatCompletionStream, error) {
 	r.mu.RLock()
 	collector := r.metricsCollector
 	r.mu.RUnlock()
@@ -343,6 +349,11 @@ func (r *RacingProvider) pickBestCandidate(ctx context.Context, candidates []*ra
 				RaceLatencies:    raceLatencies,
 			})
 		}
+
+		// Cancel contexts since we're not returning a stream
+		cancelRace()
+		cancelTimeout()
+
 		return nil, fmt.Errorf("no successful candidates")
 	}
 
@@ -377,6 +388,8 @@ func (r *RacingProvider) pickBestCandidate(ctx context.Context, candidates []*ra
 			latency:          best.latency,
 			virtualModel:     virtualModelName,
 			virtualModelDesc: virtualModelDesc,
+			cancelTimeout:    cancelTimeout,
+			cancelRace:       cancelRace,
 		}, nil
 	}
 
@@ -399,6 +412,8 @@ func (r *RacingProvider) pickBestCandidate(ctx context.Context, candidates []*ra
 			latency:          candidates[0].latency,
 			virtualModel:     virtualModelName,
 			virtualModelDesc: virtualModelDesc,
+			cancelTimeout:    cancelTimeout,
+			cancelRace:       cancelRace,
 		}, nil
 	}
 
@@ -496,9 +511,7 @@ func (r *RacingProvider) findProviderReference(providerName string, providerRefs
 }
 
 // selectWinnerWithVirtualModel selects the winner using the virtual model's strategy
-func (r *RacingProvider) selectWinnerWithVirtualModel(ctx context.Context, results chan *raceResult, cancelRace context.CancelFunc, raceParticipants []string, modelID string, vmConfig *VirtualModelConfig) (types.ChatCompletionStream, error) {
-	defer cancelRace() // Always cancel racing context when winner is selected or error occurs
-
+func (r *RacingProvider) selectWinnerWithVirtualModel(ctx context.Context, results chan *raceResult, cancelTimeout context.CancelFunc, cancelRace context.CancelFunc, raceParticipants []string, modelID string, vmConfig *VirtualModelConfig) (types.ChatCompletionStream, error) {
 	// Use virtual model specific strategy or fallback to default
 	strategy := vmConfig.Strategy
 	if strategy == "" {
@@ -507,11 +520,11 @@ func (r *RacingProvider) selectWinnerWithVirtualModel(ctx context.Context, resul
 
 	switch strategy {
 	case StrategyWeighted:
-		return r.weightedStrategy(ctx, results, raceParticipants, modelID, vmConfig)
+		return r.weightedStrategy(ctx, results, cancelTimeout, cancelRace, raceParticipants, modelID, vmConfig)
 	case StrategyQuality:
-		return r.qualityStrategy(ctx, results, raceParticipants, modelID, vmConfig)
+		return r.qualityStrategy(ctx, results, cancelTimeout, cancelRace, raceParticipants, modelID, vmConfig)
 	default:
-		return r.firstWinsStrategy(ctx, results, raceParticipants, modelID, vmConfig)
+		return r.firstWinsStrategy(ctx, results, cancelTimeout, cancelRace, raceParticipants, modelID, vmConfig)
 	}
 }
 
@@ -567,6 +580,8 @@ type racingStream struct {
 	latency          time.Duration
 	virtualModel     string
 	virtualModelDesc string
+	cancelTimeout    context.CancelFunc
+	cancelRace       context.CancelFunc
 }
 
 func (s *racingStream) Next() (types.ChatCompletionChunk, error) {
@@ -586,5 +601,12 @@ func (s *racingStream) Next() (types.ChatCompletionChunk, error) {
 }
 
 func (s *racingStream) Close() error {
+	// Cancel the contexts before closing the inner stream
+	if s.cancelRace != nil {
+		s.cancelRace()
+	}
+	if s.cancelTimeout != nil {
+		s.cancelTimeout()
+	}
 	return s.inner.Close()
 }
