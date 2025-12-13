@@ -243,13 +243,15 @@ func TestFirstWinsStrategy_FirstSuccessWins(t *testing.T) {
 		t.Errorf("expected 'success-provider' to win, got '%s'", winner)
 	}
 
-	// Verify performance stats
+	// Verify performance stats - with StrategyFirstWins (returns fast),
+	// only the winner's stats are guaranteed to be recorded
 	stats := rp.GetPerformanceStats()
-	if stats["error-provider"].Losses != 1 {
-		t.Errorf("expected error-provider to have 1 loss, got %d", stats["error-provider"].Losses)
-	}
-	if stats["success-provider"].Wins != 1 {
-		t.Errorf("expected success-provider to have 1 win, got %d", stats["success-provider"].Wins)
+	if stats["success-provider"] == nil || stats["success-provider"].Wins != 1 {
+		var wins int64
+		if stats["success-provider"] != nil {
+			wins = stats["success-provider"].Wins
+		}
+		t.Errorf("expected success-provider to have 1 win, got %d", wins)
 	}
 }
 
@@ -283,14 +285,17 @@ func TestFirstWinsStrategy_AllProvidersFail(t *testing.T) {
 		t.Fatal("expected error when all providers fail")
 	}
 
-	if !errors.Is(err, errors.New("error 2")) && err.Error() != "all providers failed, last error: error 2" {
+	// With corrected StrategyFirstWins (returns fast), error is "no successful candidates"
+	errStr := err.Error()
+	if !containsString(errStr, "all providers failed") && !containsString(errStr, "no successful candidates") {
 		t.Errorf("unexpected error: %v", err)
 	}
 }
 
-// TestWeightedStrategy_ScoreBasedSelection tests that the weighted strategy
-// selects the provider with the best performance score during the grace period,
+// TestWeightedStrategy_ScoreBasedSelection tests that score-based selection
+// picks the provider with the best performance score during the grace period,
 // even if a faster provider with worse history finishes first.
+// NOTE: After strategy name correction, score-based selection is in StrategyFirstWins.
 func TestWeightedStrategy_ScoreBasedSelection(t *testing.T) {
 	tests := []struct {
 		name             string
@@ -359,7 +364,7 @@ func TestWeightedStrategy_ScoreBasedSelection(t *testing.T) {
 			rp := NewRacingProvider("test", &Config{
 				TimeoutMS:     5000,
 				GracePeriodMS: tt.gracePeriodMS,
-				Strategy:      StrategyWeighted,
+				Strategy:      StrategyFirstWins, // Score-based selection is now in FirstWins
 			})
 
 			// Pre-seed performance stats
@@ -1683,7 +1688,9 @@ func TestVirtualModel_DifferentStrategies(t *testing.T) {
 			name:             "weighted strategy with history",
 			virtualModel:     "quality-model",
 			expectedStrategy: StrategyWeighted,
-			expectedWinner:   "quality-provider", // Should win due to performance history
+			// After strategy swap: StrategyWeighted now waits for all and picks first success
+			// (benchmark mode), not score-based. Score-based selection is in StrategyFirstWins.
+			expectedWinner: "fast-provider",
 			providers: []types.Provider{
 				&mockChatProvider{
 					name:     "fast-provider",
@@ -2822,10 +2829,12 @@ func TestBackwardCompatibility_ErrorHandling(t *testing.T) {
 		t.Fatal("expected error when provider fails")
 	}
 
-	// Error should be from the failing provider, not virtual model error
-	expectedError := "all providers failed"
-	if !containsString(err.Error(), expectedError) {
-		t.Errorf("expected error to contain '%s', got: %v", expectedError, err)
+	// Error should indicate failure, message varies by strategy implementation
+	// StrategyFirstWins (returns fast) uses "no successful candidates"
+	// StrategyWeighted (waits for all) uses "all providers failed"
+	errStr := err.Error()
+	if !containsString(errStr, "all providers failed") && !containsString(errStr, "no successful candidates") {
+		t.Errorf("expected error to indicate failure, got: %v", err)
 	}
 }
 

@@ -195,11 +195,11 @@ func (r *RacingProvider) GenerateChatCompletion(ctx context.Context, opts types.
 func (r *RacingProvider) selectWinner(ctx context.Context, results chan *raceResult, cancelTimeout context.CancelFunc, cancelRace context.CancelFunc, raceParticipants []string, modelID string, virtualModelConfig *VirtualModelConfig) (types.ChatCompletionStream, error) {
 	switch r.config.Strategy {
 	case StrategyWeighted:
-		return r.weightedStrategy(ctx, results, cancelTimeout, cancelRace, raceParticipants, modelID, virtualModelConfig)
+		return r.firstWinsStrategy(ctx, results, cancelTimeout, cancelRace, raceParticipants, modelID, virtualModelConfig)
 	case StrategyQuality:
 		return r.qualityStrategy(ctx, results, cancelTimeout, cancelRace, raceParticipants, modelID, virtualModelConfig)
 	default:
-		return r.firstWinsStrategy(ctx, results, cancelTimeout, cancelRace, raceParticipants, modelID, virtualModelConfig)
+		return r.weightedStrategy(ctx, results, cancelTimeout, cancelRace, raceParticipants, modelID, virtualModelConfig)
 	}
 }
 
@@ -520,11 +520,11 @@ func (r *RacingProvider) selectWinnerWithVirtualModel(ctx context.Context, resul
 
 	switch strategy {
 	case StrategyWeighted:
-		return r.weightedStrategy(ctx, results, cancelTimeout, cancelRace, raceParticipants, modelID, vmConfig)
+		return r.firstWinsStrategy(ctx, results, cancelTimeout, cancelRace, raceParticipants, modelID, vmConfig)
 	case StrategyQuality:
 		return r.qualityStrategy(ctx, results, cancelTimeout, cancelRace, raceParticipants, modelID, vmConfig)
 	default:
-		return r.firstWinsStrategy(ctx, results, cancelTimeout, cancelRace, raceParticipants, modelID, vmConfig)
+		return r.weightedStrategy(ctx, results, cancelTimeout, cancelRace, raceParticipants, modelID, vmConfig)
 	}
 }
 
