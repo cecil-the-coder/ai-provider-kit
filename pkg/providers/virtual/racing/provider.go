@@ -535,10 +535,12 @@ func (s *racingStream) Next() (types.ChatCompletionChunk, error) {
 }
 
 func (s *racingStream) Close() error {
-	// Cancel the contexts before closing the inner stream
-	if s.cancelRace != nil {
-		s.cancelRace()
-	}
+	// Only cancel the timeout context, not the race context
+	// The race context should not be cancelled here because:
+	// 1. The winner stream uses raceCtx (line 166)
+	// 2. Cancelling it would terminate the winner's stream prematurely
+	// 3. The race is already complete when a winner is selected
+	// The race context is only cancelled on error paths when no stream is returned
 	if s.cancelTimeout != nil {
 		s.cancelTimeout()
 	}
