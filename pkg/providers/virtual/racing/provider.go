@@ -129,11 +129,17 @@ func (r *RacingProvider) GenerateChatCompletion(ctx context.Context, opts types.
 
 	// Use virtual model specific timeout or fallback to default
 	timeout := time.Duration(r.config.GetEffectiveTimeout(opts.Model)) * time.Millisecond
+
+	// IMPORTANT: Store original parent context before creating timeout context.
+	// The race context must be derived from the original parent, NOT the timeout context.
+	// If raceCtx is a child of the timeout context, calling cancelTimeout() in Close()
+	// would also cancel raceCtx, terminating the winner's stream mid-flight.
+	originalParentCtx := ctx
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 
-	// Create a cancellable context for racing goroutines that we can cancel early
-	// when a winner is found, reducing resource waste
-	raceCtx, raceCancel := context.WithCancel(ctx)
+	// Create race context from the ORIGINAL parent context, not the timeout context.
+	// This ensures that cancelling the timeout doesn't affect the winner's stream.
+	raceCtx, raceCancel := context.WithCancel(originalParentCtx)
 
 	results := make(chan *raceResult, len(raceProviders))
 	var wg sync.WaitGroup
