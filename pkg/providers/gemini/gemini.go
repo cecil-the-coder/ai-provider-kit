@@ -866,23 +866,19 @@ func (p *GeminiProvider) executeStreamWithAuth(ctx context.Context, options type
 		return p.makeStreamingAPICallWithToken(ctx, options, model, contextToken)
 	}
 
-	// Try OAuth credentials first
+	// Try OAuth credentials first with token refresh support
 	if p.authHelper.OAuthManager != nil {
-		creds := p.authHelper.OAuthManager.GetCredentials()
-		var lastErr error
-		for _, cred := range creds {
-			stream, err := p.makeStreamingAPICallWithToken(ctx, options, model, cred.AccessToken)
-			if err == nil {
-				return stream, nil
-			}
-			// Log OAuth failure for debugging
-			log.Printf("Gemini OAuth streaming failed for credential %s: %v", cred.ID, err)
-			lastErr = err
+		stream, err := p.authHelper.OAuthManager.ExecuteWithFailoverStream(ctx,
+			func(ctx context.Context, cred *types.OAuthCredentialSet) (types.ChatCompletionStream, error) {
+				return p.makeStreamingAPICallWithToken(ctx, options, model, cred.AccessToken)
+			},
+		)
+		if err != nil {
+			return nil, types.NewAuthError(types.ProviderTypeGemini, err.Error()).
+				WithOperation("executeStreamWithAuth").
+				WithOriginalErr(err)
 		}
-		// If OAuth was configured, don't fall back to API keys - return the OAuth error
-		return nil, types.NewAuthError(types.ProviderTypeGemini, fmt.Sprintf("OAuth authentication failed (all %d credentials tried)", len(creds))).
-			WithOperation("executeStreamWithAuth").
-			WithOriginalErr(lastErr)
+		return stream, nil
 	}
 
 	// Try API keys

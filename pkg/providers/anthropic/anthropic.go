@@ -519,23 +519,19 @@ func (p *AnthropicProvider) executeStreamWithAuth(ctx context.Context, options t
 		return p.makeStreamingAPICallWithOAuth(ctx, requestData, contextToken)
 	}
 
-	// Try OAuth credentials
+	// Try OAuth credentials with token refresh support
 	if p.authHelper.OAuthManager != nil {
-		creds := p.authHelper.OAuthManager.GetCredentials()
-		var lastErr error
-		for _, cred := range creds {
-			stream, err := p.makeStreamingAPICallWithOAuth(ctx, requestData, cred.AccessToken)
-			if err == nil {
-				return stream, nil
-			}
-			// Log OAuth failure for debugging
-			log.Printf("Anthropic OAuth streaming failed for credential %s: %v", cred.ID, err)
-			lastErr = err
+		stream, err := p.authHelper.OAuthManager.ExecuteWithFailoverStream(ctx,
+			func(ctx context.Context, cred *types.OAuthCredentialSet) (types.ChatCompletionStream, error) {
+				return p.makeStreamingAPICallWithOAuth(ctx, requestData, cred.AccessToken)
+			},
+		)
+		if err != nil {
+			return nil, types.NewAuthError(types.ProviderTypeAnthropic, err.Error()).
+				WithOperation("executeStreamWithAuth").
+				WithOriginalErr(err)
 		}
-		// If OAuth was configured, don't fall back to API keys - return the OAuth error
-		return nil, types.NewAuthError(types.ProviderTypeAnthropic, fmt.Sprintf("OAuth authentication failed (all %d credentials tried)", len(creds))).
-			WithOperation("executeStreamWithAuth").
-			WithOriginalErr(lastErr)
+		return stream, nil
 	}
 
 	// Only try API keys if OAuth was not configured
