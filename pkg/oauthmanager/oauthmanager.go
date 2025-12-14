@@ -278,8 +278,10 @@ func (m *OAuthKeyManager) ReportFailure(credentialID string, err error) {
 	health.recordFailure()
 }
 
-// GetCredentials returns a copy of the credentials slice
+// GetCredentials returns a copy of the CACHED credentials slice
 // Returns clones to prevent external modification
+// WARNING: This returns cached credentials. For fresh credentials from a dynamic provider,
+// use GetCredentialsWithContext instead.
 func (m *OAuthKeyManager) GetCredentials() []*types.OAuthCredentialSet {
 	if m == nil {
 		return nil
@@ -293,6 +295,16 @@ func (m *OAuthKeyManager) GetCredentials() []*types.OAuthCredentialSet {
 		clones[i] = Clone(cred)
 	}
 	return clones
+}
+
+// GetCredentialsWithContext returns credentials from the provider if set, otherwise returns cached credentials
+// This method respects the dynamic credential provider and always fetches fresh credentials when available.
+// Use this method when you need up-to-date credentials (e.g., for connectivity testing).
+func (m *OAuthKeyManager) GetCredentialsWithContext(ctx context.Context) []*types.OAuthCredentialSet {
+	if m == nil {
+		return nil
+	}
+	return m.getCredentials(ctx)
 }
 
 // GetCredentialHealth returns the health status of a specific credential

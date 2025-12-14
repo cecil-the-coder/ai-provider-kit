@@ -390,7 +390,8 @@ func (p *GeminiProvider) TestConnectivity(ctx context.Context) error {
 
 	// Check if we have API keys configured
 	hasAPIKeys := p.authHelper.KeyManager != nil && len(p.authHelper.KeyManager.GetKeys()) > 0
-	hasOAuth := p.authHelper.OAuthManager != nil && len(p.authHelper.OAuthManager.GetCredentials()) > 0
+	// Use GetCredentialsWithContext to fetch fresh credentials from dynamic provider
+	hasOAuth := p.authHelper.OAuthManager != nil && len(p.authHelper.OAuthManager.GetCredentialsWithContext(ctx)) > 0
 	hasContextOAuth := contextToken != ""
 
 	if !hasAPIKeys && !hasOAuth && !hasContextOAuth {
@@ -411,7 +412,8 @@ func (p *GeminiProvider) TestConnectivity(ctx context.Context) error {
 		return p.testConnectivityWithOAuth(ctx, contextToken)
 	}
 	if hasOAuth {
-		creds := p.authHelper.OAuthManager.GetCredentials()
+		// Use GetCredentialsWithContext to fetch fresh credentials from dynamic provider
+		creds := p.authHelper.OAuthManager.GetCredentialsWithContext(ctx)
 		return p.testConnectivityWithOAuth(ctx, creds[0].AccessToken)
 	}
 

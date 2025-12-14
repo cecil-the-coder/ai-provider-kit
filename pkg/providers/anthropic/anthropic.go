@@ -1349,8 +1349,9 @@ func (p *AnthropicProvider) TestConnectivityWithOptions(ctx context.Context, byp
 func (p *AnthropicProvider) performConnectivityTest(ctx context.Context) error {
 	// For OAuth tokens starting with sk-ant-oat (Anthropic's OAuth prefix),
 	// the models endpoint doesn't work, so we need to test differently
-	if p.authHelper.OAuthManager != nil && len(p.authHelper.OAuthManager.GetCredentials()) > 0 {
-		creds := p.authHelper.OAuthManager.GetCredentials()
+	// Use GetCredentialsWithContext to fetch fresh credentials from dynamic provider
+	if p.authHelper.OAuthManager != nil && len(p.authHelper.OAuthManager.GetCredentialsWithContext(ctx)) > 0 {
+		creds := p.authHelper.OAuthManager.GetCredentialsWithContext(ctx)
 		if len(creds) > 0 && strings.HasPrefix(creds[0].AccessToken, "sk-ant-oat") {
 			// For Anthropic OAuth, test with a minimal messages API call
 			return p.testConnectivityWithMessagesAPI(ctx, creds[0].AccessToken, "oauth")
@@ -1360,7 +1361,8 @@ func (p *AnthropicProvider) performConnectivityTest(ctx context.Context) error {
 	// For API keys or non-Anthropic OAuth tokens, use the models endpoint
 	// Check if we have any authentication credentials
 	hasAPIKeys := p.authHelper.KeyManager != nil && len(p.authHelper.KeyManager.GetKeys()) > 0
-	hasOAuth := p.authHelper.OAuthManager != nil && len(p.authHelper.OAuthManager.GetCredentials()) > 0
+	// Use GetCredentialsWithContext to fetch fresh credentials from dynamic provider
+	hasOAuth := p.authHelper.OAuthManager != nil && len(p.authHelper.OAuthManager.GetCredentialsWithContext(ctx)) > 0
 
 	if !hasAPIKeys && !hasOAuth {
 		return types.NewAuthError(types.ProviderTypeAnthropic, "no API keys or OAuth credentials configured").
@@ -1377,7 +1379,8 @@ func (p *AnthropicProvider) performConnectivityTest(ctx context.Context) error {
 
 	// Try OAuth credentials
 	if hasOAuth {
-		creds := p.authHelper.OAuthManager.GetCredentials()
+		// Use GetCredentialsWithContext to fetch fresh credentials from dynamic provider
+		creds := p.authHelper.OAuthManager.GetCredentialsWithContext(ctx)
 		return p.testConnectivityWithModelsEndpoint(ctx, creds[0].AccessToken, "oauth")
 	}
 

@@ -598,7 +598,8 @@ func (p *QwenProvider) TestConnectivity(ctx context.Context) error {
 
 	// Check if we have API keys configured
 	hasAPIKeys := p.authHelper.KeyManager != nil && len(p.authHelper.KeyManager.GetKeys()) > 0
-	hasOAuth := p.authHelper.OAuthManager != nil && len(p.authHelper.OAuthManager.GetCredentials()) > 0
+	// Use GetCredentialsWithContext to fetch fresh credentials from dynamic provider
+	hasOAuth := p.authHelper.OAuthManager != nil && len(p.authHelper.OAuthManager.GetCredentialsWithContext(ctx)) > 0
 	hasContextOAuth := contextToken != ""
 
 	if !hasAPIKeys && !hasOAuth && !hasContextOAuth {
@@ -614,7 +615,8 @@ func (p *QwenProvider) TestConnectivity(ctx context.Context) error {
 		authToken = contextToken
 		authType = "oauth"
 	case hasOAuth:
-		creds := p.authHelper.OAuthManager.GetCredentials()
+		// Use GetCredentialsWithContext to fetch fresh credentials from dynamic provider
+		creds := p.authHelper.OAuthManager.GetCredentialsWithContext(ctx)
 		authToken = creds[0].AccessToken
 		authType = "oauth"
 	default:
