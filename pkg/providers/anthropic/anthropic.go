@@ -1240,6 +1240,15 @@ func (p *AnthropicProvider) IsAPIKeyConfigured() bool {
 	return p.authHelper.IsAPIKeyConfigured()
 }
 
+// SetCredentialProvider sets a dynamic credential provider for OAuth credentials
+// This allows external systems to manage credential storage and provide fresh
+// credentials on-demand, rather than relying on cached credentials.
+func (p *AnthropicProvider) SetCredentialProvider(provider types.CredentialProvider) {
+	if p.authHelper.OAuthManager != nil {
+		p.authHelper.OAuthManager.SetCredentialProvider(provider)
+	}
+}
+
 // GetAuthStatus provides detailed authentication status using shared helper
 func (p *AnthropicProvider) GetAuthStatus() map[string]interface{} {
 	return p.authHelper.GetAuthStatus()
