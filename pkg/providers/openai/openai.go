@@ -46,7 +46,7 @@ type OpenAIRequest struct {
 	Seed              *int                   `json:"seed,omitempty"`
 	ResponseFormat    map[string]interface{} `json:"response_format,omitempty"`
 	ParallelToolCalls *bool                  `json:"parallel_tool_calls,omitempty"`
-	Thinking          map[string]interface{} `json:"thinking,omitempty"`        // For GLM-4.6, DeepSeek thinking mode
+	Thinking          map[string]interface{} `json:"thinking,omitempty"`         // For GLM-4.6, DeepSeek thinking mode
 	ReasoningEffort   string                 `json:"reasoning_effort,omitempty"` // For OpenAI o1/o3 models
 }
 
@@ -573,6 +573,62 @@ func (p *OpenAIProvider) makeAPICall(ctx context.Context, requestData OpenAIRequ
 	return p.makeAPICallInternal(ctx, requestData, apiKey, false)
 }
 
+// handleOpenAIError converts an OpenAI error response to a typed error
+func handleOpenAIError(body []byte, statusCode int) error {
+	var errorResponse OpenAIErrorResponse
+	if parseErr := json.Unmarshal(body, &errorResponse); parseErr == nil {
+		switch errorResponse.Error.Type {
+		case "invalid_api_key":
+			return types.NewAuthError(types.ProviderTypeOpenAI, "invalid OpenAI API key").
+				WithOperation("makeAPICall").
+				WithStatusCode(statusCode)
+		case "insufficient_quota":
+			return &types.ProviderError{
+				Code:       types.ErrCodeRateLimit,
+				Message:    "OpenAI quota exceeded",
+				Provider:   types.ProviderTypeOpenAI,
+				StatusCode: statusCode,
+				Operation:  "makeAPICall",
+			}
+		case "rate_limit_exceeded":
+			return types.NewRateLimitError(types.ProviderTypeOpenAI, 0).
+				WithOperation("makeAPICall").
+				WithStatusCode(statusCode).
+				WithOriginalErr(fmt.Errorf("OpenAI rate limit exceeded"))
+		case "model_not_found":
+			return types.NewNotFoundError(types.ProviderTypeOpenAI, fmt.Sprintf("OpenAI model not found: %s", errorResponse.Error.Message)).
+				WithOperation("makeAPICall").
+				WithStatusCode(statusCode)
+		case "invalid_request_error":
+			return types.NewInvalidRequestError(types.ProviderTypeOpenAI, fmt.Sprintf("invalid OpenAI request: %s", errorResponse.Error.Message)).
+				WithOperation("makeAPICall").
+				WithStatusCode(statusCode)
+		default:
+			return types.NewServerError(types.ProviderTypeOpenAI, statusCode, fmt.Sprintf("OpenAI API error (%s): %s", errorResponse.Error.Type, errorResponse.Error.Message)).
+				WithOperation("makeAPICall")
+		}
+	}
+	return types.NewServerError(types.ProviderTypeOpenAI, statusCode, fmt.Sprintf("OpenAI API error: %s", string(body))).
+		WithOperation("makeAPICall")
+}
+
+// extractEffectiveContent extracts the effective content from an OpenAI message,
+// falling back to reasoning fields if content is empty
+func extractEffectiveContent(msg OpenAIMessage) string {
+	effectiveContent := ""
+	if contentStr, ok := msg.Content.(string); ok {
+		effectiveContent = contentStr
+	}
+	if effectiveContent == "" || effectiveContent == "\n" {
+		if msg.ReasoningContent != "" {
+			effectiveContent = msg.ReasoningContent
+		} else if msg.Reasoning != "" {
+			effectiveContent = msg.Reasoning
+		}
+	}
+	return effectiveContent
+}
+
 // makeAPICallInternal is the internal implementation that supports retry logic
 func (p *OpenAIProvider) makeAPICallInternal(ctx context.Context, requestData OpenAIRequest, apiKey string, isRetry bool) (types.ChatMessage, *types.Usage, error) {
 	// Serialize request
@@ -625,42 +681,7 @@ func (p *OpenAIProvider) makeAPICallInternal(ctx context.Context, requestData Op
 
 	// Check status code
 	if resp.StatusCode != http.StatusOK {
-		var errorResponse OpenAIErrorResponse
-		if parseErr := json.Unmarshal(body, &errorResponse); parseErr == nil {
-			// Handle specific error types
-			switch errorResponse.Error.Type {
-			case "invalid_api_key":
-				return types.ChatMessage{}, nil, types.NewAuthError(types.ProviderTypeOpenAI, "invalid OpenAI API key").
-					WithOperation("makeAPICall").
-					WithStatusCode(resp.StatusCode)
-			case "insufficient_quota":
-				return types.ChatMessage{}, nil, &types.ProviderError{
-					Code:       types.ErrCodeRateLimit,
-					Message:    "OpenAI quota exceeded",
-					Provider:   types.ProviderTypeOpenAI,
-					StatusCode: resp.StatusCode,
-					Operation:  "makeAPICall",
-				}
-			case "rate_limit_exceeded":
-				return types.ChatMessage{}, nil, types.NewRateLimitError(types.ProviderTypeOpenAI, 0).
-					WithOperation("makeAPICall").
-					WithStatusCode(resp.StatusCode).
-					WithOriginalErr(fmt.Errorf("OpenAI rate limit exceeded"))
-			case "model_not_found":
-				return types.ChatMessage{}, nil, types.NewNotFoundError(types.ProviderTypeOpenAI, fmt.Sprintf("OpenAI model not found: %s", errorResponse.Error.Message)).
-					WithOperation("makeAPICall").
-					WithStatusCode(resp.StatusCode)
-			case "invalid_request_error":
-				return types.ChatMessage{}, nil, types.NewInvalidRequestError(types.ProviderTypeOpenAI, fmt.Sprintf("invalid OpenAI request: %s", errorResponse.Error.Message)).
-					WithOperation("makeAPICall").
-					WithStatusCode(resp.StatusCode)
-			default:
-				return types.ChatMessage{}, nil, types.NewServerError(types.ProviderTypeOpenAI, resp.StatusCode, fmt.Sprintf("OpenAI API error (%s): %s", errorResponse.Error.Type, errorResponse.Error.Message)).
-					WithOperation("makeAPICall")
-			}
-		}
-		return types.ChatMessage{}, nil, types.NewServerError(types.ProviderTypeOpenAI, resp.StatusCode, fmt.Sprintf("OpenAI API error: %s", string(body))).
-			WithOperation("makeAPICall")
+		return types.ChatMessage{}, nil, handleOpenAIError(body, resp.StatusCode)
 	}
 
 	// Parse successful response
@@ -675,21 +696,7 @@ func (p *OpenAIProvider) makeAPICallInternal(ctx context.Context, requestData Op
 
 	// Extract message from response
 	openaiMsg := response.Choices[0].Message
-
-	// Determine effective content - fallback to reasoning fields if content is empty
-	effectiveContent := ""
-	if contentStr, ok := openaiMsg.Content.(string); ok {
-		effectiveContent = contentStr
-	}
-	if effectiveContent == "" || effectiveContent == "\n" {
-		// Try reasoning_content first (vLLM/Synthetic style)
-		if openaiMsg.ReasoningContent != "" {
-			effectiveContent = openaiMsg.ReasoningContent
-		} else if openaiMsg.Reasoning != "" {
-			// Fall back to reasoning field (GLM-4.6, OpenCode/Zen style)
-			effectiveContent = openaiMsg.Reasoning
-		}
-	}
+	effectiveContent := extractEffectiveContent(openaiMsg)
 
 	// GLM-4.6 "No response requested" retry logic
 	// When GLM models return this specific response, retry with thinking enabled
@@ -1143,17 +1150,17 @@ func isNoResponseRequested(content string) bool {
 
 // glmRetryStream wraps a stream to detect and retry on "No response requested" for GLM models
 type glmRetryStream struct {
-	inner        types.ChatCompletionStream
-	provider     *OpenAIProvider
-	ctx          context.Context
-	requestData  OpenAIRequest
-	apiKey       string
-	buffer       []types.ChatCompletionChunk
-	bufferIdx    int
-	accumulated  string
-	checked      bool
-	retried      bool
-	retryStream  types.ChatCompletionStream
+	inner       types.ChatCompletionStream
+	provider    *OpenAIProvider
+	ctx         context.Context
+	requestData OpenAIRequest
+	apiKey      string
+	buffer      []types.ChatCompletionChunk
+	bufferIdx   int
+	accumulated string
+	checked     bool
+	retried     bool
+	retryStream types.ChatCompletionStream
 }
 
 // newGLMRetryStream creates a new GLM retry stream wrapper

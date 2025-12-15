@@ -1895,7 +1895,7 @@ func TestIsNoResponseRequested(t *testing.T) {
 		{"No response requested.", true},
 		{"  No response requested.  ", true},
 		{"\nNo response requested.\n", true},
-		{"No response requested", false}, // Missing period
+		{"No response requested", false},  // Missing period
 		{"no response requested.", false}, // Lowercase
 		{"Hello world", false},
 		{"", false},
@@ -1907,6 +1907,37 @@ func TestIsNoResponseRequested(t *testing.T) {
 			assert.Equal(t, tt.expected, result)
 		})
 	}
+}
+
+// sendSSEStreamingResponse sends a complete SSE streaming response with content and done chunks
+func sendSSEStreamingResponse(w http.ResponseWriter, flusher http.Flusher, id, model, content string) {
+	chunk := map[string]interface{}{
+		"id":      id,
+		"object":  "chat.completion.chunk",
+		"created": time.Now().Unix(),
+		"model":   model,
+		"choices": []map[string]interface{}{
+			{"index": 0, "delta": map[string]interface{}{"content": content}, "finish_reason": nil},
+		},
+	}
+	data, _ := json.Marshal(chunk)
+	_, _ = fmt.Fprintf(w, "data: %s\n\n", data)
+	flusher.Flush()
+
+	doneChunk := map[string]interface{}{
+		"id":      id,
+		"object":  "chat.completion.chunk",
+		"created": time.Now().Unix(),
+		"model":   model,
+		"choices": []map[string]interface{}{
+			{"index": 0, "delta": map[string]interface{}{}, "finish_reason": "stop"},
+		},
+	}
+	doneData, _ := json.Marshal(doneChunk)
+	_, _ = fmt.Fprintf(w, "data: %s\n\n", doneData)
+	flusher.Flush()
+	_, _ = fmt.Fprintf(w, "data: [DONE]\n\n")
+	flusher.Flush()
 }
 
 // TestOpenAIProvider_GLMStreamingRetry tests the GLM "No response requested" streaming retry logic
@@ -1931,84 +1962,9 @@ func TestOpenAIProvider_GLMStreamingRetry(t *testing.T) {
 			}
 
 			if currentRequest == 0 {
-				// First request: return "No response requested." as streaming
-				chunk := map[string]interface{}{
-					"id":      "chatcmpl-test",
-					"object":  "chat.completion.chunk",
-					"created": time.Now().Unix(),
-					"model":   "glm-4.6",
-					"choices": []map[string]interface{}{
-						{
-							"index": 0,
-							"delta": map[string]interface{}{
-								"content": "No response requested.",
-							},
-							"finish_reason": nil,
-						},
-					},
-				}
-				data, _ := json.Marshal(chunk)
-				_, _ = fmt.Fprintf(w, "data: %s\n\n", data)
-				flusher.Flush()
-
-				// Send done chunk
-				doneChunk := map[string]interface{}{
-					"id":      "chatcmpl-test",
-					"object":  "chat.completion.chunk",
-					"created": time.Now().Unix(),
-					"model":   "glm-4.6",
-					"choices": []map[string]interface{}{
-						{
-							"index":         0,
-							"delta":         map[string]interface{}{},
-							"finish_reason": "stop",
-						},
-					},
-				}
-				doneData, _ := json.Marshal(doneChunk)
-				_, _ = fmt.Fprintf(w, "data: %s\n\n", doneData)
-				flusher.Flush()
-				_, _ = fmt.Fprintf(w, "data: [DONE]\n\n")
-				flusher.Flush()
+				sendSSEStreamingResponse(w, flusher, "chatcmpl-test", "glm-4.6", "No response requested.")
 			} else {
-				// Retry request: return actual content
-				chunk := map[string]interface{}{
-					"id":      "chatcmpl-retry",
-					"object":  "chat.completion.chunk",
-					"created": time.Now().Unix(),
-					"model":   "glm-4.6",
-					"choices": []map[string]interface{}{
-						{
-							"index": 0,
-							"delta": map[string]interface{}{
-								"content": "Here is the actual streaming response.",
-							},
-							"finish_reason": nil,
-						},
-					},
-				}
-				data, _ := json.Marshal(chunk)
-				_, _ = fmt.Fprintf(w, "data: %s\n\n", data)
-				flusher.Flush()
-
-				doneChunk := map[string]interface{}{
-					"id":      "chatcmpl-retry",
-					"object":  "chat.completion.chunk",
-					"created": time.Now().Unix(),
-					"model":   "glm-4.6",
-					"choices": []map[string]interface{}{
-						{
-							"index":         0,
-							"delta":         map[string]interface{}{},
-							"finish_reason": "stop",
-						},
-					},
-				}
-				doneData, _ := json.Marshal(doneChunk)
-				_, _ = fmt.Fprintf(w, "data: %s\n\n", doneData)
-				flusher.Flush()
-				_, _ = fmt.Fprintf(w, "data: [DONE]\n\n")
-				flusher.Flush()
+				sendSSEStreamingResponse(w, flusher, "chatcmpl-retry", "glm-4.6", "Here is the actual streaming response.")
 			}
 		}))
 		defer server.Close()
@@ -2029,7 +1985,7 @@ func TestOpenAIProvider_GLMStreamingRetry(t *testing.T) {
 			},
 		})
 		require.NoError(t, err)
-		defer stream.Close()
+		defer func() { _ = stream.Close() }()
 
 		// Collect all content from stream
 		var content string
