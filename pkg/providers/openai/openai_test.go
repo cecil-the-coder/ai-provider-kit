@@ -1908,3 +1908,146 @@ func TestIsNoResponseRequested(t *testing.T) {
 		})
 	}
 }
+
+// TestOpenAIProvider_GLMStreamingRetry tests the GLM "No response requested" streaming retry logic
+func TestOpenAIProvider_GLMStreamingRetry(t *testing.T) {
+	t.Run("StreamingRetryOnNoResponseRequested", func(t *testing.T) {
+		requestCount := 0
+		var mu sync.Mutex
+
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			mu.Lock()
+			currentRequest := requestCount
+			requestCount++
+			mu.Unlock()
+
+			w.Header().Set("Content-Type", "text/event-stream")
+			w.Header().Set("Cache-Control", "no-cache")
+			w.Header().Set("Connection", "keep-alive")
+
+			flusher, ok := w.(http.Flusher)
+			if !ok {
+				t.Fatal("Expected http.Flusher")
+			}
+
+			if currentRequest == 0 {
+				// First request: return "No response requested." as streaming
+				chunk := map[string]interface{}{
+					"id":      "chatcmpl-test",
+					"object":  "chat.completion.chunk",
+					"created": time.Now().Unix(),
+					"model":   "glm-4.6",
+					"choices": []map[string]interface{}{
+						{
+							"index": 0,
+							"delta": map[string]interface{}{
+								"content": "No response requested.",
+							},
+							"finish_reason": nil,
+						},
+					},
+				}
+				data, _ := json.Marshal(chunk)
+				_, _ = fmt.Fprintf(w, "data: %s\n\n", data)
+				flusher.Flush()
+
+				// Send done chunk
+				doneChunk := map[string]interface{}{
+					"id":      "chatcmpl-test",
+					"object":  "chat.completion.chunk",
+					"created": time.Now().Unix(),
+					"model":   "glm-4.6",
+					"choices": []map[string]interface{}{
+						{
+							"index":         0,
+							"delta":         map[string]interface{}{},
+							"finish_reason": "stop",
+						},
+					},
+				}
+				doneData, _ := json.Marshal(doneChunk)
+				_, _ = fmt.Fprintf(w, "data: %s\n\n", doneData)
+				flusher.Flush()
+				_, _ = fmt.Fprintf(w, "data: [DONE]\n\n")
+				flusher.Flush()
+			} else {
+				// Retry request: return actual content
+				chunk := map[string]interface{}{
+					"id":      "chatcmpl-retry",
+					"object":  "chat.completion.chunk",
+					"created": time.Now().Unix(),
+					"model":   "glm-4.6",
+					"choices": []map[string]interface{}{
+						{
+							"index": 0,
+							"delta": map[string]interface{}{
+								"content": "Here is the actual streaming response.",
+							},
+							"finish_reason": nil,
+						},
+					},
+				}
+				data, _ := json.Marshal(chunk)
+				_, _ = fmt.Fprintf(w, "data: %s\n\n", data)
+				flusher.Flush()
+
+				doneChunk := map[string]interface{}{
+					"id":      "chatcmpl-retry",
+					"object":  "chat.completion.chunk",
+					"created": time.Now().Unix(),
+					"model":   "glm-4.6",
+					"choices": []map[string]interface{}{
+						{
+							"index":         0,
+							"delta":         map[string]interface{}{},
+							"finish_reason": "stop",
+						},
+					},
+				}
+				doneData, _ := json.Marshal(doneChunk)
+				_, _ = fmt.Fprintf(w, "data: %s\n\n", doneData)
+				flusher.Flush()
+				_, _ = fmt.Fprintf(w, "data: [DONE]\n\n")
+				flusher.Flush()
+			}
+		}))
+		defer server.Close()
+
+		config := types.ProviderConfig{
+			Type:         types.ProviderTypeOpenAI,
+			APIKey:       "sk-test-key",
+			BaseURL:      server.URL,
+			DefaultModel: "glm-4.6",
+		}
+		provider := NewOpenAIProvider(config)
+
+		stream, err := provider.GenerateChatCompletion(context.Background(), types.GenerateOptions{
+			Model:  "glm-4.6",
+			Stream: true,
+			Messages: []types.ChatMessage{
+				{Role: "user", Content: "Hello"},
+			},
+		})
+		require.NoError(t, err)
+		defer stream.Close()
+
+		// Collect all content from stream
+		var content string
+		for {
+			chunk, err := stream.Next()
+			if err != nil {
+				break
+			}
+			content += chunk.Content
+			if chunk.Done {
+				break
+			}
+		}
+
+		assert.Equal(t, "Here is the actual streaming response.", content)
+
+		mu.Lock()
+		assert.Equal(t, 2, requestCount, "Expected 2 requests (initial + retry)")
+		mu.Unlock()
+	})
+}
