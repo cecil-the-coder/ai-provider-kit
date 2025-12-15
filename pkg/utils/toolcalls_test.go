@@ -1093,6 +1093,67 @@ func TestContentPartsToolResults(t *testing.T) {
 			expectValid: true,
 			expectError: nil,
 		},
+		{
+			name: "same ID in both ToolCallID and Parts should not double-count (regression test)",
+			messages: []types.ChatMessage{
+				{
+					Role: "assistant",
+					ToolCalls: []types.ToolCall{
+						{
+							ID:   "call_123",
+							Type: "function",
+							Function: types.ToolCallFunction{
+								Name: "get_weather",
+							},
+						},
+					},
+				},
+				{
+					// This message has BOTH ToolCallID (legacy/OpenAI format) AND
+					// Parts[].ToolUseID (modern/Anthropic format) set to the same ID.
+					// This happens when translating between formats.
+					Role:       "tool",
+					ToolCallID: "call_123",
+					Parts: []types.ContentPart{
+						{
+							Type:      types.ContentTypeToolResult,
+							ToolUseID: "call_123",
+							Content:   "Sunny, 72°F",
+						},
+					},
+				},
+			},
+			expectValid: true,
+			expectError: nil,
+		},
+		{
+			name: "multiple tool calls with same ID in both formats should not double-count",
+			messages: []types.ChatMessage{
+				{
+					Role: "assistant",
+					ToolCalls: []types.ToolCall{
+						{ID: "call_1", Type: "function", Function: types.ToolCallFunction{Name: "tool1"}},
+						{ID: "call_2", Type: "function", Function: types.ToolCallFunction{Name: "tool2"}},
+					},
+				},
+				{
+					Role:       "tool",
+					ToolCallID: "call_1",
+					Parts: []types.ContentPart{
+						{Type: types.ContentTypeToolResult, ToolUseID: "call_1", Content: "Result 1"},
+					},
+				},
+				{
+					Role:       "tool",
+					ToolCallID: "call_2",
+					Parts: []types.ContentPart{
+						{Type: types.ContentTypeToolResult, ToolUseID: "call_2", Content: "Result 2"},
+					},
+				},
+			},
+			expectValid: true,
+			expectError: nil,
+		},
 	}
 
 	for _, tt := range tests {

@@ -29,10 +29,15 @@ func ValidateToolCallSequence(messages []types.ChatMessage) []ToolCallValidation
 			}{tc.Function.Name, i}
 		}
 
+		// Track IDs matched in this message to avoid double-counting when both
+		// ToolCallID (legacy) and Parts[].ToolUseID (modern) reference the same ID
+		matchedInMessage := make(map[string]bool)
+
 		// Check tool responses from legacy ToolCallID field
 		if msg.ToolCallID != "" {
 			if _, exists := pendingCalls[msg.ToolCallID]; exists {
 				delete(pendingCalls, msg.ToolCallID)
+				matchedInMessage[msg.ToolCallID] = true
 			} else {
 				errors = append(errors, ToolCallValidationError{
 					ToolCallID:   msg.ToolCallID,
@@ -45,6 +50,10 @@ func ValidateToolCallSequence(messages []types.ChatMessage) []ToolCallValidation
 		// Also check tool responses in ContentParts (modern format)
 		for _, part := range msg.Parts {
 			if part.Type == types.ContentTypeToolResult && part.ToolUseID != "" {
+				// Skip if already matched via ToolCallID (avoids double-counting)
+				if matchedInMessage[part.ToolUseID] {
+					continue
+				}
 				if _, exists := pendingCalls[part.ToolUseID]; exists {
 					delete(pendingCalls, part.ToolUseID)
 				} else {
