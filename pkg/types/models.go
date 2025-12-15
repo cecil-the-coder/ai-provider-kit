@@ -93,6 +93,24 @@ type ToolChoice struct {
 	FunctionName string         `json:"function_name,omitempty"` // For "specific" mode
 }
 
+// ThinkingConfig controls extended thinking/reasoning mode for models that support it.
+// Used by: Claude (extended thinking), DeepSeek, GLM-4.6, Gemini.
+// Note: BudgetTokens is only supported by Claude; GLM-4.6 only supports Type.
+type ThinkingConfig struct {
+	Type         string `json:"type,omitempty"`          // "enabled" or "disabled"
+	BudgetTokens int    `json:"budget_tokens,omitempty"` // Max thinking tokens (Claude only)
+}
+
+// ReasoningEffort controls reasoning intensity for OpenAI o1/o3 models.
+// Valid values: "low", "medium", "high"
+type ReasoningEffort string
+
+const (
+	ReasoningEffortLow    ReasoningEffort = "low"
+	ReasoningEffortMedium ReasoningEffort = "medium"
+	ReasoningEffortHigh   ReasoningEffort = "high"
+)
+
 // ChatCompletionStream represents a streaming response
 type ChatCompletionStream interface {
 	Next() (ChatCompletionChunk, error)
@@ -135,21 +153,23 @@ type RunningModel struct {
 
 // GenerateOptions represents options for generating content
 type GenerateOptions struct {
-	Prompt         string                 `json:"prompt"`
-	Model          string                 `json:"model,omitempty"` // Per-request model override
-	Context        string                 `json:"context"`
-	ContextObj     context.Context        `json:"-"` // Internal context for operations
-	OutputFile     string                 `json:"output_file"`
-	Language       *string                `json:"language"`
-	ContextFiles   []string               `json:"context_files"`
-	Messages       []ChatMessage          `json:"messages"`
-	MaxTokens      int                    `json:"max_tokens,omitempty"`
-	Temperature    float64                `json:"temperature,omitempty"`
-	Stop           []string               `json:"stop,omitempty"`
-	Stream         bool                   `json:"stream"`
-	Tools          []Tool                 `json:"tools,omitempty"`
-	ToolChoice     *ToolChoice            `json:"tool_choice,omitempty"` // Fine-grained tool selection control
-	ResponseFormat string                 `json:"response_format,omitempty"`
-	Timeout        time.Duration          `json:"timeout,omitempty"`
-	Metadata       map[string]interface{} `json:"metadata,omitempty"`
+	Prompt          string                 `json:"prompt"`
+	Model           string                 `json:"model,omitempty"` // Per-request model override
+	Context         string                 `json:"context"`
+	ContextObj      context.Context        `json:"-"` // Internal context for operations
+	OutputFile      string                 `json:"output_file"`
+	Language        *string                `json:"language"`
+	ContextFiles    []string               `json:"context_files"`
+	Messages        []ChatMessage          `json:"messages"`
+	MaxTokens       int                    `json:"max_tokens,omitempty"`
+	Temperature     float64                `json:"temperature,omitempty"`
+	Stop            []string               `json:"stop,omitempty"`
+	Stream          bool                   `json:"stream"`
+	Tools           []Tool                 `json:"tools,omitempty"`
+	ToolChoice      *ToolChoice            `json:"tool_choice,omitempty"` // Fine-grained tool selection control
+	ResponseFormat  string                 `json:"response_format,omitempty"`
+	Timeout         time.Duration          `json:"timeout,omitempty"`
+	Metadata        map[string]interface{} `json:"metadata,omitempty"`
+	Thinking        *ThinkingConfig        `json:"thinking,omitempty"`         // Extended thinking (Claude, DeepSeek, GLM-4.6, Gemini)
+	ReasoningEffort ReasoningEffort        `json:"reasoning_effort,omitempty"` // Reasoning intensity (OpenAI o1/o3)
 }

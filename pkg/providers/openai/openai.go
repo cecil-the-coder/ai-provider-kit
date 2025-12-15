@@ -10,6 +10,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	pkghttp "github.com/cecil-the-coder/ai-provider-kit/internal/http"
@@ -45,6 +46,8 @@ type OpenAIRequest struct {
 	Seed              *int                   `json:"seed,omitempty"`
 	ResponseFormat    map[string]interface{} `json:"response_format,omitempty"`
 	ParallelToolCalls *bool                  `json:"parallel_tool_calls,omitempty"`
+	Thinking          map[string]interface{} `json:"thinking,omitempty"`        // For GLM-4.6, DeepSeek thinking mode
+	ReasoningEffort   string                 `json:"reasoning_effort,omitempty"` // For OpenAI o1/o3 models
 }
 
 // OpenAITool represents a tool in the OpenAI API
@@ -549,11 +552,29 @@ func (p *OpenAIProvider) buildOpenAIRequest(options types.GenerateOptions) OpenA
 		}
 	}
 
+	// Handle thinking mode (GLM-4.6, DeepSeek)
+	if options.Thinking != nil {
+		request.Thinking = map[string]interface{}{
+			"type": options.Thinking.Type,
+		}
+		// Note: BudgetTokens is Claude-specific, GLM only supports type
+	}
+
+	// Handle reasoning effort (OpenAI o1/o3 models)
+	if options.ReasoningEffort != "" {
+		request.ReasoningEffort = string(options.ReasoningEffort)
+	}
+
 	return request
 }
 
 // makeAPICall makes a single API call to OpenAI
 func (p *OpenAIProvider) makeAPICall(ctx context.Context, requestData OpenAIRequest, apiKey string) (types.ChatMessage, *types.Usage, error) {
+	return p.makeAPICallInternal(ctx, requestData, apiKey, false)
+}
+
+// makeAPICallInternal is the internal implementation that supports retry logic
+func (p *OpenAIProvider) makeAPICallInternal(ctx context.Context, requestData OpenAIRequest, apiKey string, isRetry bool) (types.ChatMessage, *types.Usage, error) {
 	// Serialize request
 	jsonBody, err := json.Marshal(requestData)
 	if err != nil {
@@ -668,6 +689,16 @@ func (p *OpenAIProvider) makeAPICall(ctx context.Context, requestData OpenAIRequ
 			// Fall back to reasoning field (GLM-4.6, OpenCode/Zen style)
 			effectiveContent = openaiMsg.Reasoning
 		}
+	}
+
+	// GLM-4.6 "No response requested" retry logic
+	// When GLM models return this specific response, retry with thinking enabled
+	// This is an intermittent issue with complex agentic prompts
+	if !isRetry && isGLMModel(requestData.Model) && isNoResponseRequested(effectiveContent) {
+		log.Printf("[WARN] GLM model returned 'No response requested', retrying with thinking enabled (model: %s)", requestData.Model)
+		retryRequest := requestData
+		retryRequest.Thinking = map[string]interface{}{"type": "enabled"}
+		return p.makeAPICallInternal(ctx, retryRequest, apiKey, true)
 	}
 
 	// Convert to universal format
@@ -1082,4 +1113,14 @@ func convertContentPartsToOpenAI(parts []types.ContentPart) interface{} {
 	}
 
 	return openaiParts
+}
+
+// isGLMModel returns true if the model name indicates a GLM model (case-insensitive)
+func isGLMModel(model string) bool {
+	return strings.Contains(strings.ToLower(model), "glm")
+}
+
+// isNoResponseRequested returns true if the response content is the GLM "No response requested" error
+func isNoResponseRequested(content string) bool {
+	return strings.TrimSpace(content) == "No response requested."
 }
