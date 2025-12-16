@@ -580,8 +580,8 @@ func (p *OpenRouterProvider) performConnectivityTest(ctx context.Context) error 
 		return fmt.Errorf("connectivity test failed: HTTP %d - %s", resp.StatusCode, string(body))
 	}
 
-	// Try to parse a small portion of the response to ensure it's valid JSON
-	decoder := json.NewDecoder(io.LimitReader(resp.Body, 1024))
+	// Try to parse the response to ensure it's valid JSON
+	decoder := json.NewDecoder(resp.Body)
 	var testResponse struct {
 		Data []interface{} `json:"data"`
 	}
