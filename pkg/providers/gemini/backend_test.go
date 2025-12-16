@@ -90,10 +90,8 @@ func TestClientConfig_Validate(t *testing.T) {
 				if err.Error() != tt.errorMsg {
 					t.Errorf("Expected error message '%s', got '%s'", tt.errorMsg, err.Error())
 				}
-			} else {
-				if err != nil {
-					t.Errorf("Expected no error but got: %v", err)
-				}
+			} else if err != nil {
+				t.Errorf("Expected no error but got: %v", err)
 			}
 		})
 	}
@@ -220,11 +218,11 @@ func TestDetectBackendFromEnv(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Set environment variable
 			if tt.envValue != "" {
-				os.Setenv("GOOGLE_GENAI_USE_VERTEXAI", tt.envValue)
+				_ = os.Setenv("GOOGLE_GENAI_USE_VERTEXAI", tt.envValue)
 			} else {
-				os.Unsetenv("GOOGLE_GENAI_USE_VERTEXAI")
+				_ = os.Unsetenv("GOOGLE_GENAI_USE_VERTEXAI")
 			}
-			defer os.Unsetenv("GOOGLE_GENAI_USE_VERTEXAI")
+			defer func() { _ = os.Unsetenv("GOOGLE_GENAI_USE_VERTEXAI") }()
 
 			got := DetectBackendFromEnv()
 			if got != tt.expected {
@@ -269,18 +267,18 @@ func TestNewClientConfigFromEnv(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Clear all relevant env vars first
-			os.Unsetenv("GOOGLE_GENAI_USE_VERTEXAI")
-			os.Unsetenv("GOOGLE_API_KEY")
-			os.Unsetenv("GEMINI_API_KEY")
-			os.Unsetenv("GOOGLE_CLOUD_PROJECT")
-			os.Unsetenv("GCP_PROJECT")
-			os.Unsetenv("GOOGLE_CLOUD_LOCATION")
-			os.Unsetenv("GCP_LOCATION")
+			_ = os.Unsetenv("GOOGLE_GENAI_USE_VERTEXAI")
+			_ = os.Unsetenv("GOOGLE_API_KEY")
+			_ = os.Unsetenv("GEMINI_API_KEY")
+			_ = os.Unsetenv("GOOGLE_CLOUD_PROJECT")
+			_ = os.Unsetenv("GCP_PROJECT")
+			_ = os.Unsetenv("GOOGLE_CLOUD_LOCATION")
+			_ = os.Unsetenv("GCP_LOCATION")
 
 			// Set environment variables
 			for k, v := range tt.envVars {
-				os.Setenv(k, v)
-				defer os.Unsetenv(k)
+				_ = os.Setenv(k, v)
+				defer func(key string) { _ = os.Unsetenv(key) }(k)
 			}
 
 			config, err := NewClientConfigFromEnv()
@@ -346,10 +344,10 @@ func TestBackendDetector_DetectBackend(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if tt.envValue != "" {
-				os.Setenv("GOOGLE_GENAI_USE_VERTEXAI", tt.envValue)
-				defer os.Unsetenv("GOOGLE_GENAI_USE_VERTEXAI")
+				_ = os.Setenv("GOOGLE_GENAI_USE_VERTEXAI", tt.envValue)
+				defer func() { _ = os.Unsetenv("GOOGLE_GENAI_USE_VERTEXAI") }()
 			} else {
-				os.Unsetenv("GOOGLE_GENAI_USE_VERTEXAI")
+				_ = os.Unsetenv("GOOGLE_GENAI_USE_VERTEXAI")
 			}
 
 			detector := NewBackendDetector(&tt.config)

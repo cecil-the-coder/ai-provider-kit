@@ -106,7 +106,7 @@ func TestCreateBatch(t *testing.T) {
 				}
 
 				w.WriteHeader(tt.mockStatusCode)
-				w.Write([]byte(tt.mockResponse))
+				_, _ = w.Write([]byte(tt.mockResponse))
 			}))
 			defer server.Close()
 
@@ -209,7 +209,7 @@ func TestGetBatch(t *testing.T) {
 				}
 
 				w.WriteHeader(tt.mockStatusCode)
-				w.Write([]byte(tt.mockResponse))
+				_, _ = w.Write([]byte(tt.mockResponse))
 			}))
 			defer server.Close()
 
@@ -307,9 +307,9 @@ func TestListBatches(t *testing.T) {
 			expectedCount:  2,
 		},
 		{
-			name:     "batch listing with pagination",
-			limit:    10,
-			afterID:  "msgbatch_01HkcTjaV5uDC8jWR4ZsDV8d",
+			name:    "batch listing with pagination",
+			limit:   10,
+			afterID: "msgbatch_01HkcTjaV5uDC8jWR4ZsDV8d",
 			mockResponse: `{
 				"data": [
 					{
@@ -361,7 +361,7 @@ func TestListBatches(t *testing.T) {
 				}
 
 				w.WriteHeader(tt.mockStatusCode)
-				w.Write([]byte(tt.mockResponse))
+				_, _ = w.Write([]byte(tt.mockResponse))
 			}))
 			defer server.Close()
 
@@ -386,10 +386,8 @@ func TestListBatches(t *testing.T) {
 				}
 				if response == nil {
 					t.Error("Expected response but got nil")
-				} else {
-					if len(response.Data) != tt.expectedCount {
-						t.Errorf("Expected %d batches, got %d", tt.expectedCount, len(response.Data))
-					}
+				} else if len(response.Data) != tt.expectedCount {
+					t.Errorf("Expected %d batches, got %d", tt.expectedCount, len(response.Data))
 				}
 			}
 		})
@@ -461,7 +459,7 @@ func TestCancelBatch(t *testing.T) {
 				}
 
 				w.WriteHeader(tt.mockStatusCode)
-				w.Write([]byte(tt.mockResponse))
+				_, _ = w.Write([]byte(tt.mockResponse))
 			}))
 			defer server.Close()
 
@@ -565,7 +563,7 @@ func TestStreamBatchResults(t *testing.T) {
 				}
 
 				w.WriteHeader(tt.mockStatusCode)
-				w.Write([]byte(tt.mockResponse))
+				_, _ = w.Write([]byte(tt.mockResponse))
 			}))
 			defer server.Close()
 

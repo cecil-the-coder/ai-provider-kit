@@ -5,8 +5,8 @@ package anthropic
 // CacheControl defines prompt caching behavior for request blocks
 // Supports ephemeral caching with 5-minute (default) or 1-hour TTL
 type CacheControl struct {
-	Type string `json:"type"`           // "ephemeral" - only supported type
-	TTL  string `json:"ttl,omitempty"`  // "5m" (default) or "1h"
+	Type string `json:"type"`          // "ephemeral" - only supported type
+	TTL  string `json:"ttl,omitempty"` // "5m" (default) or "1h"
 }
 
 // AnthropicRequest represents the request payload for Anthropic API
@@ -54,20 +54,20 @@ type AnthropicResponse struct {
 type AnthropicContentBlock struct {
 	Type         string                 `json:"type"` // "text", "tool_use", "tool_result"
 	Text         string                 `json:"text,omitempty"`
-	ID           string                 `json:"id,omitempty"`          // for tool_use
-	Name         string                 `json:"name,omitempty"`        // for tool_use
-	Input        map[string]interface{} `json:"input,omitempty"`       // for tool_use
-	ToolUseID    string                 `json:"tool_use_id,omitempty"` // for tool_result
-	Content      interface{}            `json:"content,omitempty"`     // for tool_result, can be string or array
+	ID           string                 `json:"id,omitempty"`            // for tool_use
+	Name         string                 `json:"name,omitempty"`          // for tool_use
+	Input        map[string]interface{} `json:"input,omitempty"`         // for tool_use
+	ToolUseID    string                 `json:"tool_use_id,omitempty"`   // for tool_result
+	Content      interface{}            `json:"content,omitempty"`       // for tool_result, can be string or array
 	CacheControl *CacheControl          `json:"cache_control,omitempty"` // for prompt caching
 }
 
 // AnthropicUsage represents token usage information
 type AnthropicUsage struct {
-	InputTokens              int                          `json:"input_tokens"`
-	OutputTokens             int                          `json:"output_tokens"`
-	CacheCreationInputTokens int                          `json:"cache_creation_input_tokens,omitempty"`
-	CacheReadInputTokens     int                          `json:"cache_read_input_tokens,omitempty"`
+	InputTokens              int                              `json:"input_tokens"`
+	OutputTokens             int                              `json:"output_tokens"`
+	CacheCreationInputTokens int                              `json:"cache_creation_input_tokens,omitempty"`
+	CacheReadInputTokens     int                              `json:"cache_read_input_tokens,omitempty"`
 	CacheCreation            *AnthropicCacheCreationBreakdown `json:"cache_creation,omitempty"`
 }
 

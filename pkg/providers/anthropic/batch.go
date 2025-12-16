@@ -17,15 +17,15 @@ import (
 
 // BatchRequest represents a single request in a message batch
 type BatchRequest struct {
-	CustomID string                 `json:"custom_id"` // Unique identifier for the request
-	Params   BatchRequestParams     `json:"params"`    // Standard Messages API parameters
+	CustomID string             `json:"custom_id"` // Unique identifier for the request
+	Params   BatchRequestParams `json:"params"`    // Standard Messages API parameters
 }
 
 // BatchRequestParams contains the parameters for a message request in a batch
 type BatchRequestParams struct {
 	Model         string             `json:"model"`
 	MaxTokens     int                `json:"max_tokens"`
-	System        interface{}        `json:"system,omitempty"`        // Can be string or []interface{}
+	System        interface{}        `json:"system,omitempty"` // Can be string or []interface{}
 	Messages      []AnthropicMessage `json:"messages"`
 	Tools         []AnthropicTool    `json:"tools,omitempty"`
 	ToolChoice    interface{}        `json:"tool_choice,omitempty"`
@@ -50,15 +50,15 @@ type BatchRequestCounts struct {
 
 // MessageBatch represents a batch of message requests
 type MessageBatch struct {
-	ID                string             `json:"id"`                           // Unique identifier for the batch
-	Type              string             `json:"type"`                         // Always "message_batch"
-	ProcessingStatus  string             `json:"processing_status"`            // "in_progress", "canceling", or "ended"
-	RequestCounts     BatchRequestCounts `json:"request_counts"`               // Count of requests in each state
-	EndedAt           *time.Time         `json:"ended_at"`                     // Time when processing ended
-	CreatedAt         time.Time          `json:"created_at"`                   // Time when batch was created
-	ExpiresAt         time.Time          `json:"expires_at"`                   // Time when batch expires (24 hours after creation)
-	CancelInitiatedAt *time.Time         `json:"cancel_initiated_at"`          // Time when cancellation was initiated
-	ResultsURL        *string            `json:"results_url"`                  // URL to download results (available when ended)
+	ID                string             `json:"id"`                  // Unique identifier for the batch
+	Type              string             `json:"type"`                // Always "message_batch"
+	ProcessingStatus  string             `json:"processing_status"`   // "in_progress", "canceling", or "ended"
+	RequestCounts     BatchRequestCounts `json:"request_counts"`      // Count of requests in each state
+	EndedAt           *time.Time         `json:"ended_at"`            // Time when processing ended
+	CreatedAt         time.Time          `json:"created_at"`          // Time when batch was created
+	ExpiresAt         time.Time          `json:"expires_at"`          // Time when batch expires (24 hours after creation)
+	CancelInitiatedAt *time.Time         `json:"cancel_initiated_at"` // Time when cancellation was initiated
+	ResultsURL        *string            `json:"results_url"`         // URL to download results (available when ended)
 }
 
 // BatchListResponse represents the response from listing batches
@@ -71,8 +71,8 @@ type BatchListResponse struct {
 
 // BatchResult represents the result of a single request in a batch
 type BatchResult struct {
-	CustomID string              `json:"custom_id"` // Custom ID from the request
-	Result   BatchResultType     `json:"result"`    // The result of the request
+	CustomID string          `json:"custom_id"` // Custom ID from the request
+	Result   BatchResultType `json:"result"`    // The result of the request
 }
 
 // BatchResultType represents the different types of batch results

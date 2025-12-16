@@ -201,10 +201,10 @@ func TestPromptCachingIntegration(t *testing.T) {
 
 		// Return mock response with cache metrics
 		response := AnthropicResponse{
-			ID:      "msg_test123",
-			Type:    "message",
-			Role:    "assistant",
-			Model:   "claude-sonnet-4-5",
+			ID:    "msg_test123",
+			Type:  "message",
+			Role:  "assistant",
+			Model: "claude-sonnet-4-5",
 			Content: []AnthropicContentBlock{
 				{
 					Type: "text",

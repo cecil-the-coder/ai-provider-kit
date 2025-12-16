@@ -53,7 +53,7 @@ func NewVertexAIAuthenticator(serviceAccountJSON string, client *http.Client) (*
 		credentials = &creds
 	} else if credsPath := os.Getenv("GOOGLE_APPLICATION_CREDENTIALS"); credsPath != "" {
 		// Load from file path
-		data, err := os.ReadFile(credsPath)
+		data, err := os.ReadFile(credsPath) // #nosec G304 -- File path from environment variable is acceptable for credential loading
 		if err != nil {
 			return nil, fmt.Errorf("failed to read service account file: %w", err)
 		}
@@ -117,9 +117,9 @@ func (v *VertexAIAuthenticator) refreshWithServiceAccount(ctx context.Context) e
 
 	// Create JWT assertion (simplified - in production use proper JWT library)
 	// For this implementation, we'll use the refresh token flow with service account
-	tokenURL := v.serviceAccount.TokenURI
+	tokenURL := v.serviceAccount.TokenURI // #nosec G101 -- Not a hardcoded credential, it's a URL field from config
 	if tokenURL == "" {
-		tokenURL = "https://oauth2.googleapis.com/token"
+		tokenURL = "https://oauth2.googleapis.com/token" // #nosec G101 -- OAuth2 endpoint URL, not a credential
 	}
 
 	// Prepare the request
@@ -139,7 +139,7 @@ func (v *VertexAIAuthenticator) refreshWithServiceAccount(ctx context.Context) e
 	if err != nil {
 		return fmt.Errorf("failed to get access token: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
@@ -178,7 +178,7 @@ func (v *VertexAIAuthenticator) refreshWithMetadataServer(ctx context.Context) e
 	if err != nil {
 		return fmt.Errorf("failed to get token from metadata server: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)

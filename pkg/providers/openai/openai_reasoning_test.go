@@ -74,7 +74,7 @@ func TestReasoningModelRequest(t *testing.T) {
 					},
 				}
 				w.Header().Set("Content-Type", "application/json")
-				json.NewEncoder(w).Encode(response)
+				_ = json.NewEncoder(w).Encode(response)
 			}))
 			defer server.Close()
 
@@ -131,7 +131,7 @@ func TestReasoningTokensTracking(t *testing.T) {
 			},
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(response)
+		_ = json.NewEncoder(w).Encode(response)
 	}))
 	defer server.Close()
 
@@ -162,7 +162,7 @@ func TestReasoningTokensTracking(t *testing.T) {
 	assert.Equal(t, 300, chunk.Usage.TotalTokens)
 	assert.Equal(t, 150, chunk.Usage.ReasoningTokens)
 
-	stream.Close()
+	_ = stream.Close()
 }
 
 // TestReasoningModels tests specific reasoning model configurations
@@ -193,7 +193,7 @@ func TestReasoningModels(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				var request OpenAIRequest
-				json.NewDecoder(r.Body).Decode(&request)
+				_ = json.NewDecoder(r.Body).Decode(&request)
 
 				// Verify model and reasoning effort
 				assert.Equal(t, tt.model, request.Model)
@@ -222,7 +222,7 @@ func TestReasoningModels(t *testing.T) {
 					},
 				}
 				w.Header().Set("Content-Type", "application/json")
-				json.NewEncoder(w).Encode(response)
+				_ = json.NewEncoder(w).Encode(response)
 			}))
 			defer server.Close()
 
@@ -247,7 +247,7 @@ func TestReasoningModels(t *testing.T) {
 			require.NoError(t, err)
 			assert.Equal(t, 75, chunk.Usage.ReasoningTokens)
 
-			stream.Close()
+			_ = stream.Close()
 		})
 	}
 }
@@ -274,7 +274,7 @@ func TestReasoningTokensInStreaming(t *testing.T) {
 		}
 
 		for _, chunk := range chunks {
-			w.Write([]byte(chunk + "\n\n"))
+			_, _ = w.Write([]byte(chunk + "\n\n"))
 			if f, ok := w.(http.Flusher); ok {
 				f.Flush()
 			}
@@ -331,7 +331,7 @@ func TestReasoningTokensInStreaming(t *testing.T) {
 		assert.Equal(t, 150, chunkWithUsage.Usage.ReasoningTokens, "Reasoning tokens mismatch")
 	}
 
-	stream.Close()
+	_ = stream.Close()
 }
 
 // TestBuildOpenAIRequestWithReasoningEffort tests the request building logic
@@ -417,7 +417,7 @@ func TestReasoningEffortConstants(t *testing.T) {
 func TestReasoningModelWithMessagesAPI(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var request OpenAIRequest
-		json.NewDecoder(r.Body).Decode(&request)
+		_ = json.NewDecoder(r.Body).Decode(&request)
 
 		// Verify messages format
 		assert.NotEmpty(t, request.Messages)
@@ -447,7 +447,7 @@ func TestReasoningModelWithMessagesAPI(t *testing.T) {
 			},
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(response)
+		_ = json.NewEncoder(w).Encode(response)
 	}))
 	defer server.Close()
 
@@ -477,7 +477,7 @@ func TestReasoningModelWithMessagesAPI(t *testing.T) {
 	assert.Equal(t, 300, chunk.Usage.ReasoningTokens)
 	assert.Equal(t, 600, chunk.Usage.TotalTokens)
 
-	stream.Close()
+	_ = stream.Close()
 }
 
 // TestReasoningTokensZeroValue tests that missing reasoning_tokens default to zero
@@ -507,7 +507,7 @@ func TestReasoningTokensZeroValue(t *testing.T) {
 			},
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(response)
+		_ = json.NewEncoder(w).Encode(response)
 	}))
 	defer server.Close()
 
@@ -533,5 +533,5 @@ func TestReasoningTokensZeroValue(t *testing.T) {
 	assert.Equal(t, 0, chunk.Usage.ReasoningTokens)
 	assert.Equal(t, 150, chunk.Usage.TotalTokens)
 
-	stream.Close()
+	_ = stream.Close()
 }

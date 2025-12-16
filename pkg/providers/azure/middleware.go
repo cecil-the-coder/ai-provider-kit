@@ -21,9 +21,12 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common/middleware"
 )
+
+// contextKey is a custom type for context keys to avoid collisions
+type contextKey string
+
+const baseTransportKey contextKey = "base_transport"
 
 // AzureConfig contains Azure-specific configuration for the middleware
 type AzureConfig struct {
@@ -82,11 +85,12 @@ type TokenProvider interface {
 // AzureTokenCredentialAdapter adapts Azure Identity SDK TokenCredential to TokenProvider
 // This allows seamless integration with github.com/Azure/azure-sdk-for-go/sdk/azidentity
 // Example:
-//   cred, _ := azidentity.NewDefaultAzureCredential(nil)
-//   provider := &AzureTokenCredentialAdapter{
-//       Credential: cred,
-//       Scope: "https://cognitiveservices.azure.com/.default",
-//   }
+//
+//	cred, _ := azidentity.NewDefaultAzureCredential(nil)
+//	provider := &AzureTokenCredentialAdapter{
+//	    Credential: cred,
+//	    Scope: "https://cognitiveservices.azure.com/.default",
+//	}
 type AzureTokenCredentialAdapter struct {
 	// Credential is the Azure Identity TokenCredential
 	// Example: azidentity.DefaultAzureCredential, azidentity.ManagedIdentityCredential
@@ -141,10 +145,10 @@ type AzureMiddleware struct {
 	config        *AzureConfig
 	tokenProvider TokenProvider
 	tokenCache    struct {
-		token      string
-		expiry     time.Time
+		token       string
+		expiry      time.Time
 		lastRefresh time.Time
-		mu         sync.RWMutex
+		mu          sync.RWMutex
 	}
 }
 
@@ -234,8 +238,12 @@ func (m *AzureMiddleware) ProcessRequest(ctx context.Context, req *http.Request)
 	req.Header.Del("OpenAI-Organization")
 	req.Header.Del("OpenAI-Beta")
 
+	// Define context key type for provider info
+	type contextKey string
+	const providerContextKey contextKey = "provider"
+
 	// Store provider info in context for response transformation
-	ctx = context.WithValue(ctx, middleware.ContextKeyProvider, "azure")
+	ctx = context.WithValue(ctx, providerContextKey, "azure")
 
 	if m.config.Debug {
 		fmt.Printf("azure: transformed request: %s %s\n", req.Method, req.URL.String())
@@ -247,8 +255,12 @@ func (m *AzureMiddleware) ProcessRequest(ctx context.Context, req *http.Request)
 // ProcessResponse implements middleware.ResponseMiddleware
 // Azure OpenAI uses the same response format as OpenAI, so minimal transformation is needed
 func (m *AzureMiddleware) ProcessResponse(ctx context.Context, req *http.Request, resp *http.Response) (context.Context, *http.Response, error) {
+	// Define context key type for provider info
+	type contextKey string
+	const providerContextKey contextKey = "provider"
+
 	// Check if this response came from Azure
-	provider := ctx.Value(middleware.ContextKeyProvider)
+	provider := ctx.Value(providerContextKey)
 	if provider != "azure" {
 		return ctx, resp, nil
 	}
@@ -448,7 +460,7 @@ type wrappedTransport struct {
 // RoundTrip implements http.RoundTripper
 func (wt *wrappedTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	// Store the base transport in context for middleware to use
-	ctx := context.WithValue(req.Context(), "base_transport", wt.base)
+	ctx := context.WithValue(req.Context(), baseTransportKey, wt.base)
 	newReq := req.WithContext(ctx)
 
 	// Apply middleware transformation

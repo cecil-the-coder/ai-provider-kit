@@ -655,7 +655,7 @@ func IsValidHarmBlockThreshold(threshold HarmBlockThreshold) bool {
 	}
 }
 
-// ValidateSafetySetting validates a single safety setting
+// Validate validates a single safety setting
 func (s *SafetySetting) Validate() error {
 	if !IsValidHarmCategory(s.Category) {
 		return fmt.Errorf("invalid harm category: %s", s.Category)

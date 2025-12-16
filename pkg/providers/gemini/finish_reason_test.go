@@ -48,7 +48,7 @@ func TestGetFinishReasonMessage(t *testing.T) {
 		},
 		{
 			name:         "SPII reason",
-			finishReason: string(string(FinishReasonSpii)),
+			finishReason: string(FinishReasonSpii),
 			want:         "content was blocked for potentially containing Sensitive Personally Identifiable Information (SPII)",
 		},
 		{
@@ -153,7 +153,7 @@ func TestIsErrorFinishReason(t *testing.T) {
 		},
 		{
 			name:         "SPII is error",
-			finishReason: string(FinishReasonSpii),
+			finishReason: FinishReasonSpii,
 			wantError:    true,
 		},
 		{

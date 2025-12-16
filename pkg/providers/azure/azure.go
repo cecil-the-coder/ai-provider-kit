@@ -207,7 +207,7 @@ func (p *AzureOpenAIProvider) InvokeServerTool(
 func (p *AzureOpenAIProvider) Authenticate(ctx context.Context, authConfig types.AuthConfig) error {
 	// Azure OpenAI supports API key and Azure AD authentication
 	if authConfig.Method != types.AuthMethodAPIKey && authConfig.Method != types.AuthMethodBearerToken {
-		return fmt.Errorf("Azure OpenAI supports API key and Azure AD (bearer token) authentication")
+		return fmt.Errorf("azure OpenAI supports API key and Azure AD (bearer token) authentication")
 	}
 
 	// Update config with new authentication
