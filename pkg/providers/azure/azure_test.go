@@ -168,7 +168,7 @@ func TestAzureOpenAIProvider_Authenticate(t *testing.T) {
 
 		err := provider.Authenticate(context.Background(), authConfig)
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "Azure OpenAI supports API key and Azure AD")
+		assert.Contains(t, err.Error(), "azure OpenAI supports API key and Azure AD")
 	})
 }
 
