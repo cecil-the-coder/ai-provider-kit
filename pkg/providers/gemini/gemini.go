@@ -644,7 +644,6 @@ func (p *GeminiProvider) InvokeServerTool(
 	return nil, fmt.Errorf("tool invocation not yet implemented for Gemini provider")
 }
 
-
 // Helper Methods
 
 // =============================================================================
