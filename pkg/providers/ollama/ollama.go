@@ -21,6 +21,7 @@ import (
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common/auth"
 	commonconfig "github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common/config"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common/models"
+	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common/telemetry"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 )
 
@@ -301,6 +302,8 @@ func (p *OllamaProvider) fetchModelsFromAPI(ctx context.Context) ([]types.Model,
 			WithOriginalErr(err)
 	}
 
+	req.Header.Set("User-Agent", telemetry.GetUserAgent())
+
 	// Add authentication header if using cloud endpoint
 	if p.isCloudEndpoint() && p.authHelper.KeyManager != nil && len(p.authHelper.KeyManager.GetKeys()) > 0 {
 		apiKey := p.authHelper.KeyManager.GetKeys()[0]
@@ -488,6 +491,8 @@ func (p *OllamaProvider) GetRunningModels(ctx context.Context) ([]types.RunningM
 			WithOriginalErr(err)
 	}
 
+	req.Header.Set("User-Agent", telemetry.GetUserAgent())
+
 	// Add authentication header if using cloud endpoint
 	if p.isCloudEndpoint() && p.authHelper.KeyManager != nil && len(p.authHelper.KeyManager.GetKeys()) > 0 {
 		apiKey := p.authHelper.KeyManager.GetKeys()[0]
@@ -608,6 +613,8 @@ func (p *OllamaProvider) performConnectivityTest(ctx context.Context) error {
 			WithOriginalErr(err)
 	}
 
+	req.Header.Set("User-Agent", telemetry.GetUserAgent())
+
 	// Add authentication header if using cloud endpoint
 	if p.isCloudEndpoint() && p.authHelper.KeyManager != nil && len(p.authHelper.KeyManager.GetKeys()) > 0 {
 		apiKey := p.authHelper.KeyManager.GetKeys()[0]
@@ -628,6 +635,8 @@ func (p *OllamaProvider) performConnectivityTest(ctx context.Context) error {
 				WithOperation("test_connectivity").
 				WithOriginalErr(err)
 		}
+
+		req2.Header.Set("User-Agent", telemetry.GetUserAgent())
 
 		if p.isCloudEndpoint() && p.authHelper.KeyManager != nil && len(p.authHelper.KeyManager.GetKeys()) > 0 {
 			apiKey := p.authHelper.KeyManager.GetKeys()[0]
@@ -722,6 +731,7 @@ func (p *OllamaProvider) executeStreamingModelOperation(ctx context.Context, mod
 
 	// Set headers
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", telemetry.GetUserAgent())
 
 	// Make the request
 	resp, err := p.httpClient.Do(req)
@@ -822,6 +832,7 @@ func (p *OllamaProvider) DeleteModel(ctx context.Context, model string) error {
 
 	// Set headers
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", telemetry.GetUserAgent())
 
 	// Make the request
 	resp, err := p.httpClient.Do(req)
@@ -889,6 +900,7 @@ func (p *OllamaProvider) CopyModel(ctx context.Context, source, destination stri
 
 	// Set headers
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", telemetry.GetUserAgent())
 
 	// Make the request
 	resp, err := p.httpClient.Do(req)
@@ -957,6 +969,7 @@ func (p *OllamaProvider) CreateModel(ctx context.Context, name string, modelfile
 
 	// Set headers
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", telemetry.GetUserAgent())
 
 	// Make the request
 	resp, err := p.httpClient.Do(req)

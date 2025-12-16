@@ -3,8 +3,6 @@
 package gemini
 
 import (
-	"fmt"
-
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 )
 
@@ -127,11 +125,13 @@ func (e *GeminiExtension) ProviderToStandard(response interface{}) (*types.Stand
 	case *CloudCodeResponseWrapper:
 		geminiResp = &resp.Response
 	default:
-		return nil, fmt.Errorf("response is not a Gemini response")
+		return nil, types.NewInvalidRequestError(types.ProviderTypeGemini, "response is not a Gemini response").
+			WithOperation("convert_response")
 	}
 
 	if len(geminiResp.Candidates) == 0 {
-		return nil, fmt.Errorf("no candidates in Gemini response")
+		return nil, types.NewServerError(types.ProviderTypeGemini, 0, "no candidates in Gemini response").
+			WithOperation("convert_response")
 	}
 
 	candidate := geminiResp.Candidates[0]
@@ -198,11 +198,13 @@ func (e *GeminiExtension) ProviderToStandardChunk(chunk interface{}) (*types.Sta
 	case *GeminiStreamResponse:
 		geminiChunk = c
 	default:
-		return nil, fmt.Errorf("chunk is not a Gemini stream response")
+		return nil, types.NewInvalidRequestError(types.ProviderTypeGemini, "chunk is not a Gemini stream response").
+			WithOperation("convert_response")
 	}
 
 	if len(geminiChunk.Candidates) == 0 {
-		return nil, fmt.Errorf("no candidates in Gemini stream chunk")
+		return nil, types.NewServerError(types.ProviderTypeGemini, 0, "no candidates in Gemini stream chunk").
+			WithOperation("convert_response")
 	}
 
 	candidate := geminiChunk.Candidates[0]
@@ -272,28 +274,32 @@ func (e *GeminiExtension) ValidateOptions(options map[string]interface{}) error 
 	// Validate top_p if provided
 	if topP, ok := options["top_p"].(float64); ok {
 		if topP < 0 || topP > 1 {
-			return fmt.Errorf("top_p must be between 0 and 1")
+			return types.NewInvalidRequestError(types.ProviderTypeGemini, "top_p must be between 0 and 1").
+				WithOperation("validate_options")
 		}
 	}
 
 	// Validate top_k if provided
 	if topK, ok := options["top_k"].(int); ok {
 		if topK < 0 {
-			return fmt.Errorf("top_k must be non-negative")
+			return types.NewInvalidRequestError(types.ProviderTypeGemini, "top_k must be non-negative").
+				WithOperation("validate_options")
 		}
 	}
 
 	// Validate max_tokens if provided
 	if maxTokens, ok := options["max_tokens"].(int); ok {
 		if maxTokens < 1 || maxTokens > 8192 {
-			return fmt.Errorf("max_tokens must be between 1 and 8192")
+			return types.NewInvalidRequestError(types.ProviderTypeGemini, "max_tokens must be between 1 and 8192").
+				WithOperation("validate_options")
 		}
 	}
 
 	// Validate temperature if provided
 	if temperature, ok := options["temperature"].(float64); ok {
 		if temperature < 0 || temperature > 2 {
-			return fmt.Errorf("temperature must be between 0 and 2")
+			return types.NewInvalidRequestError(types.ProviderTypeGemini, "temperature must be between 0 and 2").
+				WithOperation("validate_options")
 		}
 	}
 

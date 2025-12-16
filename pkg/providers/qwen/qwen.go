@@ -19,6 +19,7 @@ import (
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common/auth"
 	commonconfig "github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common/config"
+	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common/telemetry"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/ratelimit"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 	"github.com/google/uuid"
@@ -489,7 +490,7 @@ func (p *QwenProvider) refreshOAuthTokenForMulti(ctx context.Context, cred *type
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("x-request-id", uuid.New().String())
-	req.Header.Set("User-Agent", "AI-Provider-Kit/1.0")
+	req.Header.Set("User-Agent", telemetry.GetUserAgent())
 
 	// Create a fresh HTTP client for OAuth refresh
 	oauthClient := &http.Client{

@@ -21,6 +21,7 @@ import (
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common/auth"
 	commonconfig "github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common/config"
+	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common/telemetry"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/ratelimit"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 	"golang.org/x/time/rate"
@@ -477,6 +478,7 @@ func (p *GeminiProvider) testConnectivityWithAPIKey(ctx context.Context, apiKey 
 	}
 
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", telemetry.GetUserAgent())
 
 	// Make the request with a shorter timeout for connectivity testing
 	testClient := pkghttp.NewHTTPClient(pkghttp.HTTPClientConfig{
@@ -547,6 +549,7 @@ func (p *GeminiProvider) testConnectivityWithOAuth(ctx context.Context, accessTo
 	}
 
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", telemetry.GetUserAgent())
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", accessToken))
 
 	// Make the request with a shorter timeout for connectivity testing
@@ -795,6 +798,7 @@ func (p *GeminiProvider) executeStandardAPIRequest(ctx context.Context, model st
 
 	// Set headers
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", telemetry.GetUserAgent())
 
 	p.LogRequest("POST", url, map[string]string{
 		"Content-Type": "application/json",
@@ -822,14 +826,21 @@ func (p *GeminiProvider) executeStandardAPIRequest(ctx context.Context, model st
 		if info, err := p.rateLimitHelper.GetParser().Parse(resp.Header, model); err == nil && info.RetryAfter > 0 {
 			// Update tracker with retry info
 			p.rateLimitHelper.UpdateRateLimitInfo(info)
-			return nil, fmt.Errorf("rate limited, retry after %v", info.RetryAfter)
+			return nil, types.NewRateLimitError(types.ProviderTypeGemini, int(info.RetryAfter.Seconds())).
+				WithOperation("chat_completion")
 		}
-		return nil, fmt.Errorf("gemini API error: %d - %s", resp.StatusCode, string(responseBody))
+		errCode := types.ClassifyHTTPError(resp.StatusCode)
+		return nil, types.NewProviderError(types.ProviderTypeGemini, errCode, string(responseBody)).
+			WithOperation("chat_completion").
+			WithStatusCode(resp.StatusCode)
 	}
 
 	// Check status code
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("gemini API error: %d - %s", resp.StatusCode, string(responseBody))
+		errCode := types.ClassifyHTTPError(resp.StatusCode)
+		return nil, types.NewProviderError(types.ProviderTypeGemini, errCode, string(responseBody)).
+			WithOperation("chat_completion").
+			WithStatusCode(resp.StatusCode)
 	}
 
 	return responseBody, nil
@@ -843,24 +854,31 @@ func (p *GeminiProvider) makeStandardAPICallWithOAuth(ctx context.Context, model
 	// Use backend router to convert request if needed
 	convertedRequest, err := p.backendRouter.GetConverter().ConvertRequest(requestBody)
 	if err != nil {
-		return nil, fmt.Errorf("failed to convert request: %w", err)
+		return nil, types.NewInvalidRequestError(types.ProviderTypeGemini, "failed to convert request").
+			WithOperation("chat_completion").
+			WithOriginalErr(err)
 	}
 
 	// Serialize request
 	jsonBody, err := json.Marshal(convertedRequest)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal request: %w", err)
+		return nil, types.NewInvalidRequestError(types.ProviderTypeGemini, "failed to marshal request").
+			WithOperation("chat_completion").
+			WithOriginalErr(err)
 	}
 
 	// Use backend router to build the URL (no API key for OAuth)
 	url := p.backendRouter.BuildRequestURL(model, "generateContent", "")
 	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonBody))
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
+		return nil, types.NewInvalidRequestError(types.ProviderTypeGemini, "failed to create request").
+			WithOperation("chat_completion").
+			WithOriginalErr(err)
 	}
 
 	// Set headers with OAuth bearer token
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", telemetry.GetUserAgent())
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", accessToken))
 
 	p.LogRequest("POST", url, map[string]string{
@@ -890,14 +908,21 @@ func (p *GeminiProvider) makeStandardAPICallWithOAuth(ctx context.Context, model
 		if info, err := p.rateLimitHelper.GetParser().Parse(resp.Header, model); err == nil && info.RetryAfter > 0 {
 			// Update tracker with retry info
 			p.rateLimitHelper.UpdateRateLimitInfo(info)
-			return nil, fmt.Errorf("rate limited, retry after %v", info.RetryAfter)
+			return nil, types.NewRateLimitError(types.ProviderTypeGemini, int(info.RetryAfter.Seconds())).
+				WithOperation("chat_completion")
 		}
-		return nil, fmt.Errorf("gemini API error: %d - %s", resp.StatusCode, string(responseBody))
+		errCode := types.ClassifyHTTPError(resp.StatusCode)
+		return nil, types.NewProviderError(types.ProviderTypeGemini, errCode, string(responseBody)).
+			WithOperation("chat_completion").
+			WithStatusCode(resp.StatusCode)
 	}
 
 	// Check status code
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("gemini API error: %d - %s", resp.StatusCode, string(responseBody))
+		errCode := types.ClassifyHTTPError(resp.StatusCode)
+		return nil, types.NewProviderError(types.ProviderTypeGemini, errCode, string(responseBody)).
+			WithOperation("chat_completion").
+			WithStatusCode(resp.StatusCode)
 	}
 
 	return responseBody, nil
@@ -913,17 +938,21 @@ func (p *GeminiProvider) parseStandardGeminiResponse(responseBody []byte, _ stri
 
 	// Extract content
 	if len(apiResp.Candidates) == 0 {
-		return "", nil, fmt.Errorf("no candidates in Gemini response")
+		return "", nil, types.NewServerError(types.ProviderTypeGemini, 0, "no candidates in Gemini response").
+			WithOperation("convert_response")
 	}
 
 	candidate := apiResp.Candidates[0]
 	// Check for error finish reasons
 	if IsErrorFinishReason(candidate.FinishReason) {
-		return "", nil, fmt.Errorf("generation failed: %s", GetFinishReasonMessage(candidate.FinishReason))
+		return "", nil, types.NewServerError(types.ProviderTypeGemini, 0,
+			fmt.Sprintf("generation failed: %s", GetFinishReasonMessage(candidate.FinishReason))).
+			WithOperation("convert_response")
 	}
 
 	if len(candidate.Content.Parts) == 0 {
-		return "", nil, fmt.Errorf("no parts in candidate content")
+		return "", nil, types.NewServerError(types.ProviderTypeGemini, 0, "no parts in candidate content").
+			WithOperation("convert_response")
 	}
 
 	var fullText strings.Builder
@@ -935,7 +964,8 @@ func (p *GeminiProvider) parseStandardGeminiResponse(responseBody []byte, _ stri
 
 	result := fullText.String()
 	if result == "" {
-		return "", nil, fmt.Errorf("empty response from Gemini API")
+		return "", nil, types.NewServerError(types.ProviderTypeGemini, 0, "empty response from Gemini API").
+			WithOperation("convert_response")
 	}
 
 	// Extract usage information
@@ -961,17 +991,21 @@ func (p *GeminiProvider) parseStandardGeminiResponseMessage(responseBody []byte,
 
 	// Extract content
 	if len(apiResp.Candidates) == 0 {
-		return types.ChatMessage{}, nil, fmt.Errorf("no candidates in Gemini response")
+		return types.ChatMessage{}, nil, types.NewServerError(types.ProviderTypeGemini, 0, "no candidates in Gemini response").
+			WithOperation("convert_response")
 	}
 
 	candidate := apiResp.Candidates[0]
 	// Check for error finish reasons
 	if IsErrorFinishReason(candidate.FinishReason) {
-		return types.ChatMessage{}, nil, fmt.Errorf("generation failed: %s", GetFinishReasonMessage(candidate.FinishReason))
+		return types.ChatMessage{}, nil, types.NewServerError(types.ProviderTypeGemini, 0,
+			fmt.Sprintf("generation failed: %s", GetFinishReasonMessage(candidate.FinishReason))).
+			WithOperation("convert_response")
 	}
 
 	if len(candidate.Content.Parts) == 0 {
-		return types.ChatMessage{}, nil, fmt.Errorf("no parts in candidate content")
+		return types.ChatMessage{}, nil, types.NewServerError(types.ProviderTypeGemini, 0, "no parts in candidate content").
+			WithOperation("convert_response")
 	}
 
 	// Extract text content and tool calls
@@ -1020,12 +1054,14 @@ const (
 func (p *GeminiProvider) ValidateToken(ctx context.Context) (*types.TokenInfo, error) {
 	// Get current OAuth credentials
 	if p.authHelper.OAuthManager == nil {
-		return nil, fmt.Errorf("no OAuth manager configured")
+		return nil, types.NewAuthError(types.ProviderTypeGemini, "no OAuth manager configured").
+			WithOperation("validate_token")
 	}
 
 	creds := p.authHelper.OAuthManager.GetCredentials()
 	if len(creds) == 0 {
-		return nil, fmt.Errorf("no OAuth credentials available")
+		return nil, types.NewAuthError(types.ProviderTypeGemini, "no OAuth credentials available").
+			WithOperation("validate_token")
 	}
 
 	// Use the first available credential for validation
@@ -1037,18 +1073,27 @@ func (p *GeminiProvider) ValidateToken(ctx context.Context) (*types.TokenInfo, e
 
 	req, err := http.NewRequestWithContext(ctx, "GET", reqURL, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create token validation request: %w", err)
+		return nil, types.NewNetworkError(types.ProviderTypeGemini, "failed to create token validation request").
+			WithOperation("validate_token").
+			WithOriginalErr(err)
 	}
+
+	req.Header.Set("User-Agent", telemetry.GetUserAgent())
 
 	resp, err := p.client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to validate token: %w", err)
+		return nil, types.NewNetworkError(types.ProviderTypeGemini, "failed to validate token").
+			WithOperation("validate_token").
+			WithOriginalErr(err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("token validation failed with status %d: %s", resp.StatusCode, string(body))
+		return nil, types.NewAuthError(types.ProviderTypeGemini,
+			fmt.Sprintf("token validation failed: %s", string(body))).
+			WithOperation("validate_token").
+			WithStatusCode(resp.StatusCode)
 	}
 
 	// Parse tokeninfo response
@@ -1062,7 +1107,9 @@ func (p *GeminiProvider) ValidateToken(ctx context.Context) (*types.TokenInfo, e
 	}
 
 	if err := json.NewDecoder(resp.Body).Decode(&tokenInfoResponse); err != nil {
-		return nil, fmt.Errorf("failed to decode token info response: %w", err)
+		return nil, types.NewServerError(types.ProviderTypeGemini, 0, "failed to decode token info response").
+			WithOperation("validate_token").
+			WithOriginalErr(err)
 	}
 
 	// Parse scopes

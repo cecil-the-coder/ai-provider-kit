@@ -14,6 +14,7 @@ import (
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common/auth"
 	commonconfig "github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common/config"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common/models"
+	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common/telemetry"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/openai"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/ratelimit"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
@@ -363,6 +364,8 @@ func (p *AzureOpenAIProvider) performConnectivityTest(ctx context.Context) error
 			WithOperation("test_connectivity").
 			WithOriginalErr(err)
 	}
+
+	req.Header.Set("User-Agent", telemetry.GetUserAgent())
 
 	// Set authentication headers
 	if p.useAzureAD {

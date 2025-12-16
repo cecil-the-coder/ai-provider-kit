@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"os"
 	"strings"
+
+	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 )
 
 // BackendDetector handles automatic backend detection from environment variables and configuration
@@ -134,7 +136,9 @@ func (sc *SchemaConverter) ConvertResponse(responseBody []byte) (*GenerateConten
 	case BackendGeminiAPI:
 		// Gemini API returns direct response
 		if err := json.Unmarshal(responseBody, &response); err != nil {
-			return nil, fmt.Errorf("failed to parse Gemini API response: %w", err)
+			return nil, types.NewServerError(types.ProviderTypeGemini, 0, "failed to parse Gemini API response").
+				WithOperation("convert_response").
+				WithOriginalErr(err)
 		}
 		return &response, nil
 
@@ -147,18 +151,23 @@ func (sc *SchemaConverter) ConvertResponse(responseBody []byte) (*GenerateConten
 				Predictions []GenerateContentResponse `json:"predictions"`
 			}
 			if err2 := json.Unmarshal(responseBody, &vertexResponse); err2 != nil {
-				return nil, fmt.Errorf("failed to parse Vertex AI response: %w", err)
+				return nil, types.NewServerError(types.ProviderTypeGemini, 0, "failed to parse Vertex AI response").
+					WithOperation("convert_response").
+					WithOriginalErr(err)
 			}
 			if len(vertexResponse.Predictions) > 0 {
 				return &vertexResponse.Predictions[0], nil
 			}
-			return nil, fmt.Errorf("no predictions in Vertex AI response")
+			return nil, types.NewServerError(types.ProviderTypeGemini, 0, "no predictions in Vertex AI response").
+				WithOperation("convert_response")
 		}
 		return &response, nil
 
 	default:
 		if err := json.Unmarshal(responseBody, &response); err != nil {
-			return nil, fmt.Errorf("failed to parse response: %w", err)
+			return nil, types.NewServerError(types.ProviderTypeGemini, 0, "failed to parse response").
+				WithOperation("convert_response").
+				WithOriginalErr(err)
 		}
 		return &response, nil
 	}
@@ -171,20 +180,26 @@ func (sc *SchemaConverter) ConvertStreamResponse(responseBody []byte) (*GeminiSt
 	switch sc.backend {
 	case BackendGeminiAPI:
 		if err := json.Unmarshal(responseBody, &response); err != nil {
-			return nil, fmt.Errorf("failed to parse Gemini API stream chunk: %w", err)
+			return nil, types.NewServerError(types.ProviderTypeGemini, 0, "failed to parse Gemini API stream chunk").
+				WithOperation("convert_response").
+				WithOriginalErr(err)
 		}
 		return &response, nil
 
 	case BackendVertexAI:
 		// Vertex AI streaming uses the same format
 		if err := json.Unmarshal(responseBody, &response); err != nil {
-			return nil, fmt.Errorf("failed to parse Vertex AI stream chunk: %w", err)
+			return nil, types.NewServerError(types.ProviderTypeGemini, 0, "failed to parse Vertex AI stream chunk").
+				WithOperation("convert_response").
+				WithOriginalErr(err)
 		}
 		return &response, nil
 
 	default:
 		if err := json.Unmarshal(responseBody, &response); err != nil {
-			return nil, fmt.Errorf("failed to parse stream chunk: %w", err)
+			return nil, types.NewServerError(types.ProviderTypeGemini, 0, "failed to parse stream chunk").
+				WithOperation("convert_response").
+				WithOriginalErr(err)
 		}
 		return &response, nil
 	}

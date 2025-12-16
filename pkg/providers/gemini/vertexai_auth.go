@@ -4,13 +4,14 @@ package gemini
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 	"os"
 	"strings"
 	"time"
+
+	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 )
 
 // ServiceAccountCredentials represents a GCP service account JSON key file
@@ -48,25 +49,33 @@ func NewVertexAIAuthenticator(serviceAccountJSON string, client *http.Client) (*
 		// Parse explicit JSON
 		var creds ServiceAccountCredentials
 		if err := json.Unmarshal([]byte(serviceAccountJSON), &creds); err != nil {
-			return nil, fmt.Errorf("failed to parse service account JSON: %w", err)
+			return nil, types.NewAuthError(types.ProviderTypeGemini, "failed to parse service account JSON").
+				WithOperation("authenticate").
+				WithOriginalErr(err)
 		}
 		credentials = &creds
 	} else if credsPath := os.Getenv("GOOGLE_APPLICATION_CREDENTIALS"); credsPath != "" {
 		// Load from file path
 		data, err := os.ReadFile(credsPath) // #nosec G304 -- File path from environment variable is acceptable for credential loading
 		if err != nil {
-			return nil, fmt.Errorf("failed to read service account file: %w", err)
+			return nil, types.NewAuthError(types.ProviderTypeGemini, "failed to read service account file").
+				WithOperation("authenticate").
+				WithOriginalErr(err)
 		}
 		var creds ServiceAccountCredentials
 		if err := json.Unmarshal(data, &creds); err != nil {
-			return nil, fmt.Errorf("failed to parse service account file: %w", err)
+			return nil, types.NewAuthError(types.ProviderTypeGemini, "failed to parse service account file").
+				WithOperation("authenticate").
+				WithOriginalErr(err)
 		}
 		credentials = &creds
 	} else if credsJSON := os.Getenv("GOOGLE_SERVICE_ACCOUNT_JSON"); credsJSON != "" {
 		// Load from environment variable
 		var creds ServiceAccountCredentials
 		if err := json.Unmarshal([]byte(credsJSON), &creds); err != nil {
-			return nil, fmt.Errorf("failed to parse GOOGLE_SERVICE_ACCOUNT_JSON: %w", err)
+			return nil, types.NewAuthError(types.ProviderTypeGemini, "failed to parse GOOGLE_SERVICE_ACCOUNT_JSON").
+				WithOperation("authenticate").
+				WithOriginalErr(err)
 		}
 		credentials = &creds
 	} else {
@@ -130,20 +139,27 @@ func (v *VertexAIAuthenticator) refreshWithServiceAccount(ctx context.Context) e
 
 	req, err := http.NewRequestWithContext(ctx, "POST", tokenURL, strings.NewReader(data.Encode()))
 	if err != nil {
-		return fmt.Errorf("failed to create token request: %w", err)
+		return types.NewNetworkError(types.ProviderTypeGemini, "failed to create token request").
+			WithOperation("refresh_service_account_token").
+			WithOriginalErr(err)
 	}
 
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
 	resp, err := v.client.Do(req)
 	if err != nil {
-		return fmt.Errorf("failed to get access token: %w", err)
+		return types.NewNetworkError(types.ProviderTypeGemini, "failed to get access token").
+			WithOperation("refresh_service_account_token").
+			WithOriginalErr(err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("token request failed with status %d: %s", resp.StatusCode, string(body))
+		errCode := types.ClassifyHTTPError(resp.StatusCode)
+		return types.NewProviderError(types.ProviderTypeGemini, errCode, string(body)).
+			WithOperation("refresh_service_account_token").
+			WithStatusCode(resp.StatusCode)
 	}
 
 	var tokenResponse struct {
@@ -153,7 +169,9 @@ func (v *VertexAIAuthenticator) refreshWithServiceAccount(ctx context.Context) e
 	}
 
 	if err := json.NewDecoder(resp.Body).Decode(&tokenResponse); err != nil {
-		return fmt.Errorf("failed to decode token response: %w", err)
+		return types.NewServerError(types.ProviderTypeGemini, 0, "failed to decode token response").
+			WithOperation("refresh_service_account_token").
+			WithOriginalErr(err)
 	}
 
 	v.accessToken = tokenResponse.AccessToken
@@ -169,20 +187,27 @@ func (v *VertexAIAuthenticator) refreshWithMetadataServer(ctx context.Context) e
 
 	req, err := http.NewRequestWithContext(ctx, "GET", metadataURL, nil)
 	if err != nil {
-		return fmt.Errorf("failed to create metadata request: %w", err)
+		return types.NewNetworkError(types.ProviderTypeGemini, "failed to create metadata request").
+			WithOperation("refresh_service_account_token").
+			WithOriginalErr(err)
 	}
 
 	req.Header.Set("Metadata-Flavor", "Google")
 
 	resp, err := v.client.Do(req)
 	if err != nil {
-		return fmt.Errorf("failed to get token from metadata server: %w", err)
+		return types.NewNetworkError(types.ProviderTypeGemini, "failed to get token from metadata server").
+			WithOperation("refresh_service_account_token").
+			WithOriginalErr(err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("metadata server request failed with status %d: %s", resp.StatusCode, string(body))
+		errCode := types.ClassifyHTTPError(resp.StatusCode)
+		return types.NewProviderError(types.ProviderTypeGemini, errCode, string(body)).
+			WithOperation("refresh_service_account_token").
+			WithStatusCode(resp.StatusCode)
 	}
 
 	var tokenResponse struct {
@@ -192,7 +217,9 @@ func (v *VertexAIAuthenticator) refreshWithMetadataServer(ctx context.Context) e
 	}
 
 	if err := json.NewDecoder(resp.Body).Decode(&tokenResponse); err != nil {
-		return fmt.Errorf("failed to decode metadata response: %w", err)
+		return types.NewServerError(types.ProviderTypeGemini, 0, "failed to decode metadata response").
+			WithOperation("refresh_service_account_token").
+			WithOriginalErr(err)
 	}
 
 	v.accessToken = tokenResponse.AccessToken

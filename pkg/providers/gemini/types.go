@@ -5,6 +5,8 @@ package gemini
 import (
 	"fmt"
 	"os"
+
+	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 )
 
 // BackendType represents the type of backend being used (Gemini API or Vertex AI)
@@ -43,17 +45,21 @@ func (c *ClientConfig) Validate() error {
 	switch c.Backend {
 	case BackendGeminiAPI:
 		if c.APIKey == "" {
-			return fmt.Errorf("API key is required for Gemini API backend")
+			return types.NewInvalidRequestError(types.ProviderTypeGemini, "API key is required for Gemini API backend").
+				WithOperation("validate_options")
 		}
 	case BackendVertexAI:
 		if c.Project == "" {
-			return fmt.Errorf("project ID is required for Vertex AI backend")
+			return types.NewInvalidRequestError(types.ProviderTypeGemini, "project ID is required for Vertex AI backend").
+				WithOperation("validate_options")
 		}
 		if c.Location == "" {
-			return fmt.Errorf("location is required for Vertex AI backend")
+			return types.NewInvalidRequestError(types.ProviderTypeGemini, "location is required for Vertex AI backend").
+				WithOperation("validate_options")
 		}
 	default:
-		return fmt.Errorf("unknown backend: %v", c.Backend)
+		return types.NewInvalidRequestError(types.ProviderTypeGemini, fmt.Sprintf("unknown backend: %v", c.Backend)).
+			WithOperation("validate_options")
 	}
 	return nil
 }
@@ -136,7 +142,9 @@ func NewClientConfigFromEnv() (*ClientConfig, error) {
 	}
 
 	if err := config.Validate(); err != nil {
-		return nil, fmt.Errorf("invalid config from environment: %w", err)
+		return nil, types.NewInvalidRequestError(types.ProviderTypeGemini, "invalid config from environment").
+			WithOperation("validate_options").
+			WithOriginalErr(err)
 	}
 
 	return config, nil
@@ -658,10 +666,12 @@ func IsValidHarmBlockThreshold(threshold HarmBlockThreshold) bool {
 // Validate validates a single safety setting
 func (s *SafetySetting) Validate() error {
 	if !IsValidHarmCategory(s.Category) {
-		return fmt.Errorf("invalid harm category: %s", s.Category)
+		return types.NewInvalidRequestError(types.ProviderTypeGemini, fmt.Sprintf("invalid harm category: %s", s.Category)).
+			WithOperation("validate_options")
 	}
 	if !IsValidHarmBlockThreshold(s.Threshold) {
-		return fmt.Errorf("invalid harm block threshold: %s", s.Threshold)
+		return types.NewInvalidRequestError(types.ProviderTypeGemini, fmt.Sprintf("invalid harm block threshold: %s", s.Threshold)).
+			WithOperation("validate_options")
 	}
 	return nil
 }
@@ -671,10 +681,13 @@ func ValidateSafetySettings(settings []SafetySetting) error {
 	seen := make(map[HarmCategory]bool)
 	for i, setting := range settings {
 		if err := setting.Validate(); err != nil {
-			return fmt.Errorf("safety setting %d: %w", i, err)
+			return types.NewInvalidRequestError(types.ProviderTypeGemini, fmt.Sprintf("safety setting %d invalid", i)).
+				WithOperation("validate_options").
+				WithOriginalErr(err)
 		}
 		if seen[setting.Category] {
-			return fmt.Errorf("duplicate harm category in safety settings: %s", setting.Category)
+			return types.NewInvalidRequestError(types.ProviderTypeGemini, fmt.Sprintf("duplicate harm category in safety settings: %s", setting.Category)).
+				WithOperation("validate_options")
 		}
 		seen[setting.Category] = true
 	}

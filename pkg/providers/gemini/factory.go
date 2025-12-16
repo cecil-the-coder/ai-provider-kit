@@ -16,7 +16,8 @@ func RegisterGeminiFactory(factory types.ProviderFactory) {
 // CreateGeminiProvider creates a new Gemini provider instance
 func CreateGeminiProvider(config types.ProviderConfig) (types.Provider, error) {
 	if config.Type != types.ProviderTypeGemini {
-		return nil, fmt.Errorf("invalid provider type for Gemini: %s", config.Type)
+		return nil, types.NewInvalidRequestError(types.ProviderTypeGemini, fmt.Sprintf("invalid provider type for Gemini: %s", config.Type)).
+			WithOperation("validate_options")
 	}
 	return NewGeminiProvider(config), nil
 }

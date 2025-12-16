@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common/auth"
+	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common/telemetry"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 	"golang.org/x/time/rate"
 )
@@ -191,7 +192,9 @@ func (p *GeminiProvider) makeStreamingStandardAPICallWithOAuth(ctx context.Conte
 	p.rateLimitMutex.RUnlock()
 
 	if err := limiter.Wait(waitCtx); err != nil {
-		return nil, fmt.Errorf("rate limit wait: %w", err)
+		return nil, types.NewNetworkError(types.ProviderTypeGemini, "rate limit wait exceeded").
+			WithOperation("chat_completion_stream").
+			WithOriginalErr(err)
 	}
 
 	// Prepare standard request (same as API key path)
@@ -200,12 +203,16 @@ func (p *GeminiProvider) makeStreamingStandardAPICallWithOAuth(ctx context.Conte
 	// Use backend router to convert request if needed
 	convertedRequest, err := p.backendRouter.GetConverter().ConvertRequest(requestBody)
 	if err != nil {
-		return nil, fmt.Errorf("failed to convert request: %w", err)
+		return nil, types.NewInvalidRequestError(types.ProviderTypeGemini, "failed to convert request").
+			WithOperation("chat_completion_stream").
+			WithOriginalErr(err)
 	}
 
 	jsonBody, err := json.Marshal(convertedRequest)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal request: %w", err)
+		return nil, types.NewInvalidRequestError(types.ProviderTypeGemini, "failed to marshal request").
+			WithOperation("chat_completion_stream").
+			WithOriginalErr(err)
 	}
 
 	// Use backend router to build the URL (no API key for OAuth)
@@ -219,15 +226,20 @@ func (p *GeminiProvider) makeStreamingStandardAPICallWithOAuth(ctx context.Conte
 
 	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonBody))
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
+		return nil, types.NewInvalidRequestError(types.ProviderTypeGemini, "failed to create request").
+			WithOperation("chat_completion_stream").
+			WithOriginalErr(err)
 	}
 
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", telemetry.GetUserAgent())
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", accessToken))
 
 	resp, err := p.client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("request failed: %w", err)
+		return nil, types.NewNetworkError(types.ProviderTypeGemini, "request failed").
+			WithOperation("chat_completion_stream").
+			WithOriginalErr(err)
 	}
 
 	// Check for 429 status and parse retry-after
@@ -237,15 +249,22 @@ func (p *GeminiProvider) makeStreamingStandardAPICallWithOAuth(ctx context.Conte
 		if info, err := p.rateLimitHelper.GetParser().Parse(resp.Header, model); err == nil && info.RetryAfter > 0 {
 			// Update tracker with retry info
 			p.rateLimitHelper.UpdateRateLimitInfo(info)
-			return nil, fmt.Errorf("rate limited, retry after %v", info.RetryAfter)
+			return nil, types.NewRateLimitError(types.ProviderTypeGemini, int(info.RetryAfter.Seconds())).
+				WithOperation("chat_completion_stream")
 		}
-		return nil, fmt.Errorf("gemini API error: %d - %s", resp.StatusCode, string(body))
+		errCode := types.ClassifyHTTPError(resp.StatusCode)
+		return nil, types.NewProviderError(types.ProviderTypeGemini, errCode, string(body)).
+			WithOperation("chat_completion_stream").
+			WithStatusCode(resp.StatusCode)
 	}
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		func() { _ = resp.Body.Close() }() //nolint:staticcheck // Empty branch is intentional - we ignore close errors
-		return nil, fmt.Errorf("gemini API error: %d - %s", resp.StatusCode, string(body))
+		errCode := types.ClassifyHTTPError(resp.StatusCode)
+		return nil, types.NewProviderError(types.ProviderTypeGemini, errCode, string(body)).
+			WithOperation("chat_completion_stream").
+			WithStatusCode(resp.StatusCode)
 	}
 
 	return &GeminiStream{
@@ -266,7 +285,9 @@ func (p *GeminiProvider) makeStreamingAPICallWithAPIKey(ctx context.Context, opt
 	p.rateLimitMutex.RUnlock()
 
 	if err := limiter.Wait(waitCtx); err != nil {
-		return nil, fmt.Errorf("rate limit wait: %w", err)
+		return nil, types.NewNetworkError(types.ProviderTypeGemini, "rate limit wait exceeded").
+			WithOperation("chat_completion_stream").
+			WithOriginalErr(err)
 	}
 
 	// Prepare request contents
@@ -321,12 +342,16 @@ func (p *GeminiProvider) makeStreamingAPICallWithAPIKey(ctx context.Context, opt
 	// Use backend router to convert request if needed
 	convertedRequest, err := p.backendRouter.GetConverter().ConvertRequest(requestBody)
 	if err != nil {
-		return nil, fmt.Errorf("failed to convert request: %w", err)
+		return nil, types.NewInvalidRequestError(types.ProviderTypeGemini, "failed to convert request").
+			WithOperation("chat_completion_stream").
+			WithOriginalErr(err)
 	}
 
 	jsonBody, err := json.Marshal(convertedRequest)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal request: %w", err)
+		return nil, types.NewInvalidRequestError(types.ProviderTypeGemini, "failed to marshal request").
+			WithOperation("chat_completion_stream").
+			WithOriginalErr(err)
 	}
 
 	// Use backend router to build the URL
@@ -339,14 +364,19 @@ func (p *GeminiProvider) makeStreamingAPICallWithAPIKey(ctx context.Context, opt
 	}
 	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonBody))
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
+		return nil, types.NewInvalidRequestError(types.ProviderTypeGemini, "failed to create request").
+			WithOperation("chat_completion_stream").
+			WithOriginalErr(err)
 	}
 
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", telemetry.GetUserAgent())
 
 	resp, err := p.client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("request failed: %w", err)
+		return nil, types.NewNetworkError(types.ProviderTypeGemini, "request failed").
+			WithOperation("chat_completion_stream").
+			WithOriginalErr(err)
 	}
 
 	// Check for 429 status and parse retry-after
@@ -356,15 +386,22 @@ func (p *GeminiProvider) makeStreamingAPICallWithAPIKey(ctx context.Context, opt
 		if info, err := p.rateLimitHelper.GetParser().Parse(resp.Header, model); err == nil && info.RetryAfter > 0 {
 			// Update tracker with retry info
 			p.rateLimitHelper.UpdateRateLimitInfo(info)
-			return nil, fmt.Errorf("rate limited, retry after %v", info.RetryAfter)
+			return nil, types.NewRateLimitError(types.ProviderTypeGemini, int(info.RetryAfter.Seconds())).
+				WithOperation("chat_completion_stream")
 		}
-		return nil, fmt.Errorf("gemini API error: %d - %s", resp.StatusCode, string(body))
+		errCode := types.ClassifyHTTPError(resp.StatusCode)
+		return nil, types.NewProviderError(types.ProviderTypeGemini, errCode, string(body)).
+			WithOperation("chat_completion_stream").
+			WithStatusCode(resp.StatusCode)
 	}
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		func() { _ = resp.Body.Close() }() //nolint:staticcheck // Empty branch is intentional - we ignore close errors
-		return nil, fmt.Errorf("gemini API error: %d - %s", resp.StatusCode, string(body))
+		errCode := types.ClassifyHTTPError(resp.StatusCode)
+		return nil, types.NewProviderError(types.ProviderTypeGemini, errCode, string(body)).
+			WithOperation("chat_completion_stream").
+			WithStatusCode(resp.StatusCode)
 	}
 
 	return &GeminiStream{

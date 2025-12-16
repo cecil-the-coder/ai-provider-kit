@@ -9,6 +9,9 @@ import (
 	"net/http"
 	"os"
 	"time"
+
+	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common/telemetry"
+	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 )
 
 // SetupUserProject performs the full onboarding flow and returns the Google Cloud project ID that
@@ -24,7 +27,9 @@ func (p *GeminiProvider) SetupUserProject(ctx context.Context) (string, error) {
 	// Load current state
 	loadRes, err := p.loadCodeAssist(ctx, projectID, metadata)
 	if err != nil {
-		return "", fmt.Errorf("loadCodeAssist failed: %w", err)
+		return "", types.NewServerError(types.ProviderTypeGemini, 0, "loadCodeAssist failed").
+			WithOperation("onboard_user").
+			WithOriginalErr(err)
 	}
 
 	// Debug logging
@@ -48,18 +53,25 @@ func (p *GeminiProvider) loadCodeAssist(ctx context.Context, projectID *string, 
 	}
 	resp, err := p.makeOnboardingRequest(ctx, "POST", loadCodeAssistRoute, reqBody)
 	if err != nil {
-		return nil, fmt.Errorf("request error: %w", err)
+		return nil, types.NewNetworkError(types.ProviderTypeGemini, "request error").
+			WithOperation("onboard_user").
+			WithOriginalErr(err)
 	}
 	defer func() { _ = resp.Body.Close() }() //nolint:staticcheck // Empty branch is intentional - we ignore close errors
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("loadCodeAssist returned %d: %s", resp.StatusCode, string(body))
+		errCode := types.ClassifyHTTPError(resp.StatusCode)
+		return nil, types.NewProviderError(types.ProviderTypeGemini, errCode, string(body)).
+			WithOperation("onboard_user").
+			WithStatusCode(resp.StatusCode)
 	}
 
 	var loadRes LoadCodeAssistResponse
 	if err := json.NewDecoder(resp.Body).Decode(&loadRes); err != nil {
-		return nil, fmt.Errorf("failed to decode loadCodeAssist response: %w", err)
+		return nil, types.NewServerError(types.ProviderTypeGemini, 0, "failed to decode loadCodeAssist response").
+			WithOperation("onboard_user").
+			WithOriginalErr(err)
 	}
 	return &loadRes, nil
 }
@@ -69,18 +81,25 @@ func (p *GeminiProvider) onboardUser(ctx context.Context, req OnboardUserRequest
 	fmt.Printf("Gemini: Calling onboardUser\n")
 	resp, err := p.makeOnboardingRequest(ctx, "POST", onboardUserRoute, req)
 	if err != nil {
-		return nil, fmt.Errorf("request error: %w", err)
+		return nil, types.NewNetworkError(types.ProviderTypeGemini, "request error").
+			WithOperation("onboard_user").
+			WithOriginalErr(err)
 	}
 	defer func() { _ = resp.Body.Close() }() //nolint:staticcheck // Empty branch is intentional - we ignore close errors
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("onboardUser returned %d: %s", resp.StatusCode, string(body))
+		errCode := types.ClassifyHTTPError(resp.StatusCode)
+		return nil, types.NewProviderError(types.ProviderTypeGemini, errCode, string(body)).
+			WithOperation("onboard_user").
+			WithStatusCode(resp.StatusCode)
 	}
 
 	var lroResp LongRunningOperationResponse
 	if err := json.NewDecoder(resp.Body).Decode(&lroResp); err != nil {
-		return nil, fmt.Errorf("failed to decode onboardUser response: %w", err)
+		return nil, types.NewServerError(types.ProviderTypeGemini, 0, "failed to decode onboardUser response").
+			WithOperation("onboard_user").
+			WithOriginalErr(err)
 	}
 	return &lroResp, nil
 }
@@ -89,12 +108,14 @@ func (p *GeminiProvider) onboardUser(ctx context.Context, req OnboardUserRequest
 func (p *GeminiProvider) makeOnboardingRequest(ctx context.Context, method, endpoint string, body interface{}) (*http.Response, error) {
 	// Get first available OAuth credential for onboarding
 	if p.authHelper.OAuthManager == nil {
-		return nil, fmt.Errorf("no OAuth credentials available for onboarding")
+		return nil, types.NewAuthError(types.ProviderTypeGemini, "no OAuth credentials available for onboarding").
+			WithOperation("onboard_user")
 	}
 
 	creds := p.authHelper.OAuthManager.GetCredentials()
 	if len(creds) == 0 {
-		return nil, fmt.Errorf("no OAuth credentials available")
+		return nil, types.NewAuthError(types.ProviderTypeGemini, "no OAuth credentials available").
+			WithOperation("onboard_user")
 	}
 
 	// Use first credential for onboarding
@@ -103,18 +124,23 @@ func (p *GeminiProvider) makeOnboardingRequest(ctx context.Context, method, endp
 	// Serialize request
 	jsonBody, err := json.Marshal(body)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal request: %w", err)
+		return nil, types.NewInvalidRequestError(types.ProviderTypeGemini, "failed to marshal request").
+			WithOperation("onboard_user").
+			WithOriginalErr(err)
 	}
 
 	// Create HTTP request
 	url := fmt.Sprintf("%s/%s", cloudcodeBaseURL, endpoint)
 	req, err := http.NewRequestWithContext(ctx, method, url, bytes.NewBuffer(jsonBody))
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
+		return nil, types.NewInvalidRequestError(types.ProviderTypeGemini, "failed to create request").
+			WithOperation("onboard_user").
+			WithOriginalErr(err)
 	}
 
 	// Set headers
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", telemetry.GetUserAgent())
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", cred.AccessToken))
 
 	return p.client.Do(req)
@@ -213,7 +239,8 @@ func (p *GeminiProvider) performOnboarding(ctx context.Context, loadRes *LoadCod
 	// No current tier, determine which tier to onboard
 	tier := getOnboardTier(loadRes)
 	if tier == nil {
-		return "", fmt.Errorf("no onboard tier found")
+		return "", types.NewServerError(types.ProviderTypeGemini, 0, "no onboard tier found").
+			WithOperation("onboard_user")
 	}
 
 	if tier.UserDefinedCloudaicompanionProject != nil && *tier.UserDefinedCloudaicompanionProject && projectID == nil {
@@ -226,7 +253,9 @@ func (p *GeminiProvider) performOnboarding(ctx context.Context, loadRes *LoadCod
 	// Call onboardUser and poll until done
 	lro, err := p.pollOnboardUser(ctx, onboardReq)
 	if err != nil {
-		return "", fmt.Errorf("onboardUser failed: %w", err)
+		return "", types.NewServerError(types.ProviderTypeGemini, 0, "onboardUser failed").
+			WithOperation("onboard_user").
+			WithOriginalErr(err)
 	}
 
 	// Extract project ID from response
@@ -259,7 +288,9 @@ func (p *GeminiProvider) prepareOnboardRequest(tier *GeminiUserTier, projectID *
 func (p *GeminiProvider) pollOnboardUser(ctx context.Context, onboardReq OnboardUserRequest) (*LongRunningOperationResponse, error) {
 	lro, err := p.onboardUser(ctx, onboardReq)
 	if err != nil {
-		return nil, fmt.Errorf("onboardUser failed: %w", err)
+		return nil, types.NewServerError(types.ProviderTypeGemini, 0, "onboardUser failed").
+			WithOperation("onboard_user").
+			WithOriginalErr(err)
 	}
 
 	for !lro.Done {
@@ -267,7 +298,9 @@ func (p *GeminiProvider) pollOnboardUser(ctx context.Context, onboardReq Onboard
 		time.Sleep(pollInterval)
 		lro, err = p.onboardUser(ctx, onboardReq)
 		if err != nil {
-			return nil, fmt.Errorf("while polling onboardUser: %w", err)
+			return nil, types.NewServerError(types.ProviderTypeGemini, 0, "while polling onboardUser").
+				WithOperation("onboard_user").
+				WithOriginalErr(err)
 		}
 	}
 

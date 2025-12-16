@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common"
+	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common/telemetry"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 )
 
@@ -294,6 +295,7 @@ func (p *OllamaProvider) makeHTTPStreamRequest(ctx context.Context, url string, 
 
 	// Set headers
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", telemetry.GetUserAgent())
 
 	// Add authentication header if using cloud endpoint
 	if p.isCloudEndpoint() && p.authHelper.KeyManager != nil && len(p.authHelper.KeyManager.GetKeys()) > 0 {
@@ -416,6 +418,7 @@ func (p *OllamaProvider) GenerateEmbeddings(ctx context.Context, model string, t
 
 	// Set headers
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", telemetry.GetUserAgent())
 
 	// Add authentication header if using cloud endpoint
 	if p.isCloudEndpoint() && p.authHelper.KeyManager != nil && len(p.authHelper.KeyManager.GetKeys()) > 0 {
@@ -613,6 +616,7 @@ func (p *OllamaProvider) generateEmbeddingsWithEmbedEndpoint(ctx context.Context
 
 	// Set headers
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", telemetry.GetUserAgent())
 
 	// Add authentication header if using cloud endpoint
 	if p.isCloudEndpoint() && p.authHelper.KeyManager != nil && len(p.authHelper.KeyManager.GetKeys()) > 0 {
@@ -738,6 +742,7 @@ func (p *OllamaProvider) generateSingleEmbeddingLegacy(ctx context.Context, mode
 
 	// Set headers
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", telemetry.GetUserAgent())
 
 	// Add authentication header if using cloud endpoint
 	if p.isCloudEndpoint() && p.authHelper.KeyManager != nil && len(p.authHelper.KeyManager.GetKeys()) > 0 {
