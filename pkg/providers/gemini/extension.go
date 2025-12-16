@@ -153,13 +153,8 @@ func (e *GeminiExtension) ProviderToStandard(response interface{}) (*types.Stand
 		ToolCalls: toolCalls,
 	}
 
-	// Determine finish reason
-	finishReason := "stop"
-	if candidate.FinishReason == "SAFETY" {
-		finishReason = "content_filtered"
-	} else if len(toolCalls) > 0 {
-		finishReason = "tool_calls"
-	}
+	// Determine finish reason - map to OpenAI-compatible reasons
+	finishReason := mapGeminiFinishReasonToStandard(candidate.FinishReason, len(toolCalls) > 0)
 
 	choices := []types.StandardChoice{
 		{
@@ -229,19 +224,10 @@ func (e *GeminiExtension) ProviderToStandardChunk(chunk interface{}) (*types.Sta
 		ToolCalls: toolCalls,
 	}
 
-	// Determine finish reason
+	// Determine finish reason - map to OpenAI-compatible reasons
 	finishReason := ""
 	if candidate.FinishReason != "" {
-		switch candidate.FinishReason {
-		case "SAFETY":
-			finishReason = "content_filtered"
-		default:
-			if len(toolCalls) > 0 {
-				finishReason = "tool_calls"
-			} else {
-				finishReason = candidate.FinishReason
-			}
-		}
+		finishReason = mapGeminiFinishReasonToStandard(candidate.FinishReason, len(toolCalls) > 0)
 	}
 
 	choices := []types.StandardStreamChoice{
@@ -313,6 +299,38 @@ func (e *GeminiExtension) ValidateOptions(options map[string]interface{}) error 
 
 	// Call base validation
 	return e.BaseExtension.ValidateOptions(options)
+}
+
+// mapGeminiFinishReasonToStandard maps Gemini finish reasons to OpenAI-compatible reasons
+func mapGeminiFinishReasonToStandard(geminiReason string, hasToolCalls bool) string {
+	switch geminiReason {
+	case string(FinishReasonStop):
+		if hasToolCalls {
+			return "tool_calls"
+		}
+		return "stop"
+	case string(FinishReasonMaxTokens):
+		return "length"
+	case string(FinishReasonSafety),
+		string(FinishReasonRecitation),
+		string(FinishReasonLanguage),
+		string(FinishReasonBlocklist),
+		string(FinishReasonProhibitedContent),
+		string(FinishReasonSpii),
+		string(FinishReasonImageSafety),
+		string(FinishReasonImageProhibitedContent):
+		return "content_filter"
+	case string(FinishReasonMalformedFunctionCall),
+		string(FinishReasonUnexpectedToolCall),
+		string(FinishReasonTooManyToolCalls):
+		return "tool_calls" // Keep tool_calls but the error will be in metadata
+	case string(FinishReasonNoImage),
+		string(FinishReasonImageOther),
+		string(FinishReasonOther):
+		return "stop" // Map other reasons to stop
+	default:
+		return "stop"
+	}
 }
 
 // Register the Gemini extension with the default registry

@@ -737,9 +737,11 @@ func (p *AnthropicProvider) makeAPICallWithKey(ctx context.Context, requestData 
 
 	// Convert usage to standard format
 	usage := &types.Usage{
-		PromptTokens:     response.Usage.InputTokens,
-		CompletionTokens: response.Usage.OutputTokens,
-		TotalTokens:      response.Usage.InputTokens + response.Usage.OutputTokens,
+		PromptTokens:             response.Usage.InputTokens,
+		CompletionTokens:         response.Usage.OutputTokens,
+		TotalTokens:              response.Usage.InputTokens + response.Usage.OutputTokens,
+		CacheCreationInputTokens: response.Usage.CacheCreationInputTokens,
+		CacheReadInputTokens:     response.Usage.CacheReadInputTokens,
 	}
 
 	return &response, usage, nil
@@ -853,9 +855,11 @@ func (p *AnthropicProvider) makeAPICallWithOAuthMessage(ctx context.Context, req
 	message.ToolCalls = convertAnthropicContentToToolCalls(response.Content)
 
 	usage := &types.Usage{
-		PromptTokens:     response.Usage.InputTokens,
-		CompletionTokens: response.Usage.OutputTokens,
-		TotalTokens:      response.Usage.InputTokens + response.Usage.OutputTokens,
+		PromptTokens:             response.Usage.InputTokens,
+		CompletionTokens:         response.Usage.OutputTokens,
+		TotalTokens:              response.Usage.InputTokens + response.Usage.OutputTokens,
+		CacheCreationInputTokens: response.Usage.CacheCreationInputTokens,
+		CacheReadInputTokens:     response.Usage.CacheReadInputTokens,
 	}
 
 	return message, usage, nil

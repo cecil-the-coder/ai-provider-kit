@@ -2,6 +2,13 @@
 // It includes request/response structures, streaming types, and model definitions.
 package anthropic
 
+// CacheControl defines prompt caching behavior for request blocks
+// Supports ephemeral caching with 5-minute (default) or 1-hour TTL
+type CacheControl struct {
+	Type string `json:"type"`           // "ephemeral" - only supported type
+	TTL  string `json:"ttl,omitempty"`  // "5m" (default) or "1h"
+}
+
 // AnthropicRequest represents the request payload for Anthropic API
 type AnthropicRequest struct {
 	Model          string             `json:"model"`
@@ -19,9 +26,10 @@ type AnthropicRequest struct {
 
 // AnthropicTool represents a tool definition in the Anthropic API
 type AnthropicTool struct {
-	Name        string                 `json:"name"`
-	Description string                 `json:"description"`
-	InputSchema map[string]interface{} `json:"input_schema"`
+	Name         string                 `json:"name"`
+	Description  string                 `json:"description"`
+	InputSchema  map[string]interface{} `json:"input_schema"`
+	CacheControl *CacheControl          `json:"cache_control,omitempty"`
 }
 
 // AnthropicMessage represents a message in the conversation
@@ -42,21 +50,31 @@ type AnthropicResponse struct {
 	StopSequence string                  `json:"stop_sequence,omitempty"`
 }
 
-// AnthropicContentBlock represents a content block in the response
+// AnthropicContentBlock represents a content block in the response or request
 type AnthropicContentBlock struct {
-	Type      string                 `json:"type"` // "text", "tool_use", "tool_result"
-	Text      string                 `json:"text,omitempty"`
-	ID        string                 `json:"id,omitempty"`          // for tool_use
-	Name      string                 `json:"name,omitempty"`        // for tool_use
-	Input     map[string]interface{} `json:"input,omitempty"`       // for tool_use
-	ToolUseID string                 `json:"tool_use_id,omitempty"` // for tool_result
-	Content   interface{}            `json:"content,omitempty"`     // for tool_result, can be string or array
+	Type         string                 `json:"type"` // "text", "tool_use", "tool_result"
+	Text         string                 `json:"text,omitempty"`
+	ID           string                 `json:"id,omitempty"`          // for tool_use
+	Name         string                 `json:"name,omitempty"`        // for tool_use
+	Input        map[string]interface{} `json:"input,omitempty"`       // for tool_use
+	ToolUseID    string                 `json:"tool_use_id,omitempty"` // for tool_result
+	Content      interface{}            `json:"content,omitempty"`     // for tool_result, can be string or array
+	CacheControl *CacheControl          `json:"cache_control,omitempty"` // for prompt caching
 }
 
 // AnthropicUsage represents token usage information
 type AnthropicUsage struct {
-	InputTokens  int `json:"input_tokens"`
-	OutputTokens int `json:"output_tokens"`
+	InputTokens              int                          `json:"input_tokens"`
+	OutputTokens             int                          `json:"output_tokens"`
+	CacheCreationInputTokens int                          `json:"cache_creation_input_tokens,omitempty"`
+	CacheReadInputTokens     int                          `json:"cache_read_input_tokens,omitempty"`
+	CacheCreation            *AnthropicCacheCreationBreakdown `json:"cache_creation,omitempty"`
+}
+
+// AnthropicCacheCreationBreakdown provides detailed breakdown of cache writes by TTL
+type AnthropicCacheCreationBreakdown struct {
+	Ephemeral5mInputTokens int `json:"ephemeral_5m_input_tokens,omitempty"`
+	Ephemeral1hInputTokens int `json:"ephemeral_1h_input_tokens,omitempty"`
 }
 
 // AnthropicErrorResponse represents an error response

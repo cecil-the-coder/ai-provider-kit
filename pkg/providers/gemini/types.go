@@ -2,6 +2,146 @@
 // It includes request/response structures, streaming types, and function calling definitions.
 package gemini
 
+import (
+	"fmt"
+	"os"
+)
+
+// BackendType represents the type of backend being used (Gemini API or Vertex AI)
+type BackendType string
+
+const (
+	// BackendGeminiAPI uses the standard Gemini API (generativelanguage.googleapis.com)
+	BackendGeminiAPI BackendType = "gemini-api"
+	// BackendVertexAI uses the Vertex AI API (PROJECT-LOCATION.aiplatform.googleapis.com)
+	BackendVertexAI BackendType = "vertex-ai"
+)
+
+// ClientConfig represents configuration for the Gemini client with backend selection
+type ClientConfig struct {
+	// Backend type - either BackendGeminiAPI or BackendVertexAI
+	Backend BackendType `json:"backend,omitempty"`
+
+	// For Vertex AI backend - GCP project ID
+	Project string `json:"project,omitempty"`
+
+	// For Vertex AI backend - GCP region (e.g., "us-central1", "europe-west4")
+	Location string `json:"location,omitempty"`
+
+	// API Key for Gemini API backend
+	APIKey string `json:"api_key,omitempty"`
+
+	// Service account JSON for Vertex AI backend
+	ServiceAccountJSON string `json:"service_account_json,omitempty"`
+
+	// Base URL override (optional)
+	BaseURL string `json:"base_url,omitempty"`
+}
+
+// Validate checks if the ClientConfig is valid for the selected backend
+func (c *ClientConfig) Validate() error {
+	switch c.Backend {
+	case BackendGeminiAPI:
+		if c.APIKey == "" {
+			return fmt.Errorf("API key is required for Gemini API backend")
+		}
+	case BackendVertexAI:
+		if c.Project == "" {
+			return fmt.Errorf("project ID is required for Vertex AI backend")
+		}
+		if c.Location == "" {
+			return fmt.Errorf("location is required for Vertex AI backend")
+		}
+	default:
+		return fmt.Errorf("unknown backend: %v", c.Backend)
+	}
+	return nil
+}
+
+// GetBaseURL returns the appropriate base URL for the backend
+func (c *ClientConfig) GetBaseURL() string {
+	if c.BaseURL != "" {
+		return c.BaseURL
+	}
+
+	switch c.Backend {
+	case BackendGeminiAPI:
+		return "https://generativelanguage.googleapis.com/v1beta"
+	case BackendVertexAI:
+		return fmt.Sprintf("https://%s-aiplatform.googleapis.com", c.Location)
+	default:
+		return ""
+	}
+}
+
+// GetEndpoint returns the full endpoint URL for a given model
+func (c *ClientConfig) GetEndpoint(model string, streaming bool) string {
+	baseURL := c.GetBaseURL()
+
+	switch c.Backend {
+	case BackendGeminiAPI:
+		if streaming {
+			return fmt.Sprintf("%s/models/%s:streamGenerateContent", baseURL, model)
+		}
+		return fmt.Sprintf("%s/models/%s:generateContent", baseURL, model)
+	case BackendVertexAI:
+		if streaming {
+			return fmt.Sprintf("%s/v1/projects/%s/locations/%s/publishers/google/models/%s:streamGenerateContent",
+				baseURL, c.Project, c.Location, model)
+		}
+		return fmt.Sprintf("%s/v1/projects/%s/locations/%s/publishers/google/models/%s:generateContent",
+			baseURL, c.Project, c.Location, model)
+	default:
+		return ""
+	}
+}
+
+// DetectBackendFromEnv detects the backend from environment variables
+func DetectBackendFromEnv() BackendType {
+	// Check GOOGLE_GENAI_USE_VERTEXAI environment variable
+	useVertexAI := os.Getenv("GOOGLE_GENAI_USE_VERTEXAI")
+	if useVertexAI == "true" || useVertexAI == "1" {
+		return BackendVertexAI
+	}
+	return BackendGeminiAPI
+}
+
+// NewClientConfigFromEnv creates a ClientConfig from environment variables
+func NewClientConfigFromEnv() (*ClientConfig, error) {
+	backend := DetectBackendFromEnv()
+
+	config := &ClientConfig{
+		Backend: backend,
+	}
+
+	switch backend {
+	case BackendGeminiAPI:
+		config.APIKey = os.Getenv("GOOGLE_API_KEY")
+		if config.APIKey == "" {
+			config.APIKey = os.Getenv("GEMINI_API_KEY")
+		}
+	case BackendVertexAI:
+		config.Project = os.Getenv("GOOGLE_CLOUD_PROJECT")
+		if config.Project == "" {
+			config.Project = os.Getenv("GCP_PROJECT")
+		}
+		config.Location = os.Getenv("GOOGLE_CLOUD_LOCATION")
+		if config.Location == "" {
+			config.Location = os.Getenv("GCP_LOCATION")
+		}
+		// Default location if not specified
+		if config.Location == "" {
+			config.Location = "us-central1"
+		}
+	}
+
+	if err := config.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid config from environment: %w", err)
+	}
+
+	return config, nil
+}
+
 // Request/Response types for Gemini API
 
 // GenerateContentRequest represents a request to generate content
@@ -9,6 +149,7 @@ type GenerateContentRequest struct {
 	Contents         []Content         `json:"contents"`
 	GenerationConfig *GenerationConfig `json:"generationConfig,omitempty"`
 	Tools            []GeminiTool      `json:"tools,omitempty"`
+	SafetySettings   []SafetySetting   `json:"safetySettings,omitempty"`
 }
 
 // Content represents message content
@@ -62,8 +203,9 @@ type GenerateContentResponse struct {
 
 // Candidate represents a response candidate
 type Candidate struct {
-	Content      Content `json:"content"`
-	FinishReason string  `json:"finishReason,omitempty"`
+	Content       Content        `json:"content"`
+	FinishReason  string         `json:"finishReason,omitempty"`
+	SafetyRatings []SafetyRating `json:"safetyRatings,omitempty"`
 }
 
 // UsageMetadata represents usage metadata
@@ -72,6 +214,162 @@ type UsageMetadata struct {
 	CandidatesTokenCount int `json:"candidatesTokenCount"`
 	TotalTokenCount      int `json:"totalTokenCount"`
 }
+
+// Safety Settings Types
+
+// HarmCategory represents a harm category for safety filtering
+type HarmCategory string
+
+const (
+	// HarmCategoryUnspecified is an unspecified harm category
+	HarmCategoryUnspecified HarmCategory = "HARM_CATEGORY_UNSPECIFIED"
+	// HarmCategoryHarassment includes negative or harmful comments targeting identity and/or protected attributes
+	HarmCategoryHarassment HarmCategory = "HARM_CATEGORY_HARASSMENT"
+	// HarmCategoryHateSpeech includes content that is rude, disrespectful, or profane
+	HarmCategoryHateSpeech HarmCategory = "HARM_CATEGORY_HATE_SPEECH"
+	// HarmCategorySexuallyExplicit includes references to sexual acts or other lewd content
+	HarmCategorySexuallyExplicit HarmCategory = "HARM_CATEGORY_SEXUALLY_EXPLICIT"
+	// HarmCategoryDangerousContent promotes, facilitates, or encourages harmful acts
+	HarmCategoryDangerousContent HarmCategory = "HARM_CATEGORY_DANGEROUS_CONTENT"
+	// HarmCategoryCivicIntegrity includes election-related queries (PaLM 2 legacy)
+	HarmCategoryCivicIntegrity HarmCategory = "HARM_CATEGORY_CIVIC_INTEGRITY"
+	// HarmCategoryDerogatory includes negative or harmful comments targeting identity and/or protected attributes (legacy)
+	HarmCategoryDerogatory HarmCategory = "HARM_CATEGORY_DEROGATORY"
+	// HarmCategoryToxicity includes content that is rude, disrespectful, or profane (legacy)
+	HarmCategoryToxicity HarmCategory = "HARM_CATEGORY_TOXICITY"
+	// HarmCategoryViolence includes describes scenarios depicting violence or bloody/gory content (legacy)
+	HarmCategoryViolence HarmCategory = "HARM_CATEGORY_VIOLENCE"
+	// HarmCategorySexual includes references to sexual acts or other lewd content (legacy)
+	HarmCategorySexual HarmCategory = "HARM_CATEGORY_SEXUAL"
+	// HarmCategoryMedical includes content promoting medical advice or procedures (legacy)
+	HarmCategoryMedical HarmCategory = "HARM_CATEGORY_MEDICAL"
+	// HarmCategoryDangerous promotes or enables access to harmful goods, services, and activities (legacy)
+	HarmCategoryDangerous HarmCategory = "HARM_CATEGORY_DANGEROUS"
+)
+
+// HarmBlockThreshold represents the threshold for blocking content
+type HarmBlockThreshold string
+
+const (
+	// HarmBlockThresholdUnspecified uses the default threshold
+	HarmBlockThresholdUnspecified HarmBlockThreshold = "HARM_BLOCK_THRESHOLD_UNSPECIFIED"
+	// HarmBlockThresholdBlockLowAndAbove blocks when probability or severity is LOW, MEDIUM, or HIGH
+	HarmBlockThresholdBlockLowAndAbove HarmBlockThreshold = "BLOCK_LOW_AND_ABOVE"
+	// HarmBlockThresholdBlockMediumAndAbove blocks when probability or severity is MEDIUM or HIGH
+	HarmBlockThresholdBlockMediumAndAbove HarmBlockThreshold = "BLOCK_MEDIUM_AND_ABOVE"
+	// HarmBlockThresholdBlockOnlyHigh blocks when probability or severity is HIGH
+	HarmBlockThresholdBlockOnlyHigh HarmBlockThreshold = "BLOCK_ONLY_HIGH"
+	// HarmBlockThresholdBlockNone allows all content regardless of probability (returns safety scores)
+	HarmBlockThresholdBlockNone HarmBlockThreshold = "BLOCK_NONE"
+	// HarmBlockThresholdOff disables automated response blocking and no metadata is returned
+	HarmBlockThresholdOff HarmBlockThreshold = "OFF"
+)
+
+// HarmProbability represents the probability that content is harmful
+type HarmProbability string
+
+const (
+	// HarmProbabilityUnspecified means probability is unspecified
+	HarmProbabilityUnspecified HarmProbability = "HARM_PROBABILITY_UNSPECIFIED"
+	// HarmProbabilityNegligible means content has negligible probability of being unsafe
+	HarmProbabilityNegligible HarmProbability = "NEGLIGIBLE"
+	// HarmProbabilityLow means content has low probability of being unsafe
+	HarmProbabilityLow HarmProbability = "LOW"
+	// HarmProbabilityMedium means content has medium probability of being unsafe
+	HarmProbabilityMedium HarmProbability = "MEDIUM"
+	// HarmProbabilityHigh means content has high probability of being unsafe
+	HarmProbabilityHigh HarmProbability = "HIGH"
+)
+
+// HarmSeverity represents the severity of harm in content
+type HarmSeverity string
+
+const (
+	// HarmSeverityUnspecified means severity is unspecified
+	HarmSeverityUnspecified HarmSeverity = "HARM_SEVERITY_UNSPECIFIED"
+	// HarmSeverityNegligible means content has negligible severity
+	HarmSeverityNegligible HarmSeverity = "HARM_SEVERITY_NEGLIGIBLE"
+	// HarmSeverityLow means content has low severity
+	HarmSeverityLow HarmSeverity = "HARM_SEVERITY_LOW"
+	// HarmSeverityMedium means content has medium severity
+	HarmSeverityMedium HarmSeverity = "HARM_SEVERITY_MEDIUM"
+	// HarmSeverityHigh means content has high severity
+	HarmSeverityHigh HarmSeverity = "HARM_SEVERITY_HIGH"
+)
+
+// SafetySetting represents a safety setting for a specific harm category
+type SafetySetting struct {
+	Category  HarmCategory       `json:"category"`
+	Threshold HarmBlockThreshold `json:"threshold"`
+}
+
+// SafetyRating represents the safety rating for a specific harm category in a response
+type SafetyRating struct {
+	Category         HarmCategory    `json:"category"`
+	Probability      HarmProbability `json:"probability"`
+	Severity         HarmSeverity    `json:"severity,omitempty"`
+	ProbabilityScore float64         `json:"probabilityScore,omitempty"`
+	SeverityScore    float64         `json:"severityScore,omitempty"`
+	Blocked          bool            `json:"blocked,omitempty"`
+}
+
+// Finish Reason Constants for Gemini API responses
+// These indicate why token generation stopped
+const (
+	// FinishReasonUnspecified is the default value (unused)
+	FinishReasonUnspecified = "FINISH_REASON_UNSPECIFIED"
+
+	// FinishReasonStop indicates natural stop point or provided stop sequence
+	FinishReasonStop = "STOP"
+
+	// FinishReasonMaxTokens indicates the maximum number of tokens was reached
+	FinishReasonMaxTokens = "MAX_TOKENS"
+
+	// FinishReasonSafety indicates content was flagged for safety reasons
+	FinishReasonSafety = "SAFETY"
+
+	// FinishReasonRecitation indicates content was flagged for recitation reasons
+	FinishReasonRecitation = "RECITATION"
+
+	// FinishReasonLanguage indicates content was flagged for using an unsupported language
+	FinishReasonLanguage = "LANGUAGE"
+
+	// FinishReasonOther indicates unknown reason
+	FinishReasonOther = "OTHER"
+
+	// FinishReasonBlocklist indicates content contains forbidden terms
+	FinishReasonBlocklist = "BLOCKLIST"
+
+	// FinishReasonProhibitedContent indicates potentially prohibited content
+	FinishReasonProhibitedContent = "PROHIBITED_CONTENT"
+
+	// FinishReasonSPII indicates content potentially contains Sensitive Personally Identifiable Information
+	FinishReasonSPII = "SPII"
+
+	// FinishReasonSpii is an alias for FinishReasonSPII for backwards compatibility
+	FinishReasonSpii = FinishReasonSPII
+
+	// FinishReasonMalformedFunctionCall indicates the function call generated by the model is invalid
+	FinishReasonMalformedFunctionCall = "MALFORMED_FUNCTION_CALL"
+
+	// FinishReasonImageSafety indicates generated images contain safety violations
+	FinishReasonImageSafety = "IMAGE_SAFETY"
+
+	// FinishReasonUnexpectedToolCall indicates model generated a tool call but no tools were enabled
+	FinishReasonUnexpectedToolCall = "UNEXPECTED_TOOL_CALL"
+
+	// FinishReasonTooManyToolCalls indicates model called too many tools consecutively
+	FinishReasonTooManyToolCalls = "TOO_MANY_TOOL_CALLS"
+
+	// FinishReasonImageProhibitedContent indicates generated images have prohibited content
+	FinishReasonImageProhibitedContent = "IMAGE_PROHIBITED_CONTENT"
+
+	// FinishReasonImageOther indicates image generation stopped for other miscellaneous issue
+	FinishReasonImageOther = "IMAGE_OTHER"
+
+	// FinishReasonNoImage indicates model was expected to generate an image but none was generated
+	FinishReasonNoImage = "NO_IMAGE"
+)
 
 // CloudCode API types
 
@@ -253,4 +551,208 @@ type GeminiProperty struct {
 type GeminiFunctionCall struct {
 	Name string                 `json:"name"`
 	Args map[string]interface{} `json:"args"`
+}
+
+// GetFinishReasonMessage returns a human-readable error message for a finish reason
+func GetFinishReasonMessage(finishReason string) string {
+	switch finishReason {
+	case FinishReasonStop:
+		return "response completed successfully"
+	case FinishReasonMaxTokens:
+		return "maximum token limit reached"
+	case FinishReasonSafety:
+		return "content was flagged for safety concerns"
+	case FinishReasonRecitation:
+		return "content was flagged for potential recitation of copyrighted material"
+	case FinishReasonLanguage:
+		return "content was flagged for using an unsupported language"
+	case FinishReasonBlocklist:
+		return "content contains forbidden terms from blocklist"
+	case FinishReasonProhibitedContent:
+		return "content was blocked for potentially containing prohibited content"
+	case FinishReasonSPII:
+		return "content was blocked for potentially containing Sensitive Personally Identifiable Information (SPII)"
+	case FinishReasonMalformedFunctionCall:
+		return "function call generated by the model is invalid (consider using function calling mode ANY for constrained decoding)"
+	case FinishReasonImageSafety:
+		return "generated images contain safety violations"
+	case FinishReasonUnexpectedToolCall:
+		return "model generated a tool call but no tools were enabled in the request"
+	case FinishReasonTooManyToolCalls:
+		return "model called too many tools consecutively"
+	case FinishReasonImageProhibitedContent:
+		return "generated images contain prohibited content"
+	case FinishReasonImageOther:
+		return "image generation stopped due to miscellaneous issue"
+	case FinishReasonNoImage:
+		return "model was expected to generate an image but none was generated"
+	case FinishReasonOther:
+		return "generation stopped for unknown reason"
+	case FinishReasonUnspecified, "":
+		return "finish reason unspecified"
+	default:
+		return "generation stopped with reason: " + finishReason
+	}
+}
+
+// IsErrorFinishReason returns true if the finish reason indicates an error condition
+func IsErrorFinishReason(finishReason string) bool {
+	switch finishReason {
+	case string(FinishReasonSafety),
+		string(FinishReasonRecitation),
+		string(FinishReasonLanguage),
+		string(FinishReasonBlocklist),
+		string(FinishReasonProhibitedContent),
+		string(FinishReasonSpii),
+		string(FinishReasonMalformedFunctionCall),
+		string(FinishReasonImageSafety),
+		string(FinishReasonUnexpectedToolCall),
+		string(FinishReasonTooManyToolCalls),
+		string(FinishReasonImageProhibitedContent),
+		string(FinishReasonImageOther),
+		string(FinishReasonNoImage):
+		return true
+	default:
+		return false
+	}
+}
+
+// Safety Settings Helper Functions
+
+// IsValidHarmCategory checks if a harm category is valid
+func IsValidHarmCategory(category HarmCategory) bool {
+	switch category {
+	case HarmCategoryUnspecified,
+		HarmCategoryHarassment,
+		HarmCategoryHateSpeech,
+		HarmCategorySexuallyExplicit,
+		HarmCategoryDangerousContent,
+		HarmCategoryCivicIntegrity,
+		HarmCategoryDerogatory,
+		HarmCategoryToxicity,
+		HarmCategoryViolence,
+		HarmCategorySexual,
+		HarmCategoryMedical,
+		HarmCategoryDangerous:
+		return true
+	default:
+		return false
+	}
+}
+
+// IsValidHarmBlockThreshold checks if a harm block threshold is valid
+func IsValidHarmBlockThreshold(threshold HarmBlockThreshold) bool {
+	switch threshold {
+	case HarmBlockThresholdUnspecified,
+		HarmBlockThresholdBlockLowAndAbove,
+		HarmBlockThresholdBlockMediumAndAbove,
+		HarmBlockThresholdBlockOnlyHigh,
+		HarmBlockThresholdBlockNone,
+		HarmBlockThresholdOff:
+		return true
+	default:
+		return false
+	}
+}
+
+// ValidateSafetySetting validates a single safety setting
+func (s *SafetySetting) Validate() error {
+	if !IsValidHarmCategory(s.Category) {
+		return fmt.Errorf("invalid harm category: %s", s.Category)
+	}
+	if !IsValidHarmBlockThreshold(s.Threshold) {
+		return fmt.Errorf("invalid harm block threshold: %s", s.Threshold)
+	}
+	return nil
+}
+
+// ValidateSafetySettings validates a slice of safety settings
+func ValidateSafetySettings(settings []SafetySetting) error {
+	seen := make(map[HarmCategory]bool)
+	for i, setting := range settings {
+		if err := setting.Validate(); err != nil {
+			return fmt.Errorf("safety setting %d: %w", i, err)
+		}
+		if seen[setting.Category] {
+			return fmt.Errorf("duplicate harm category in safety settings: %s", setting.Category)
+		}
+		seen[setting.Category] = true
+	}
+	return nil
+}
+
+// NewSafetySetting creates a new safety setting with validation
+func NewSafetySetting(category HarmCategory, threshold HarmBlockThreshold) (*SafetySetting, error) {
+	setting := &SafetySetting{
+		Category:  category,
+		Threshold: threshold,
+	}
+	if err := setting.Validate(); err != nil {
+		return nil, err
+	}
+	return setting, nil
+}
+
+// DefaultSafetySettings returns default safety settings for common harm categories
+// Default is BLOCK_MEDIUM_AND_ABOVE for all core categories
+func DefaultSafetySettings() []SafetySetting {
+	return []SafetySetting{
+		{Category: HarmCategoryHarassment, Threshold: HarmBlockThresholdBlockMediumAndAbove},
+		{Category: HarmCategoryHateSpeech, Threshold: HarmBlockThresholdBlockMediumAndAbove},
+		{Category: HarmCategorySexuallyExplicit, Threshold: HarmBlockThresholdBlockMediumAndAbove},
+		{Category: HarmCategoryDangerousContent, Threshold: HarmBlockThresholdBlockMediumAndAbove},
+	}
+}
+
+// PermissiveSafetySettings returns safety settings that block only high-probability content
+func PermissiveSafetySettings() []SafetySetting {
+	return []SafetySetting{
+		{Category: HarmCategoryHarassment, Threshold: HarmBlockThresholdBlockOnlyHigh},
+		{Category: HarmCategoryHateSpeech, Threshold: HarmBlockThresholdBlockOnlyHigh},
+		{Category: HarmCategorySexuallyExplicit, Threshold: HarmBlockThresholdBlockOnlyHigh},
+		{Category: HarmCategoryDangerousContent, Threshold: HarmBlockThresholdBlockOnlyHigh},
+	}
+}
+
+// StrictSafetySettings returns safety settings that block low and above probability content
+func StrictSafetySettings() []SafetySetting {
+	return []SafetySetting{
+		{Category: HarmCategoryHarassment, Threshold: HarmBlockThresholdBlockLowAndAbove},
+		{Category: HarmCategoryHateSpeech, Threshold: HarmBlockThresholdBlockLowAndAbove},
+		{Category: HarmCategorySexuallyExplicit, Threshold: HarmBlockThresholdBlockLowAndAbove},
+		{Category: HarmCategoryDangerousContent, Threshold: HarmBlockThresholdBlockLowAndAbove},
+	}
+}
+
+// NoSafetySettings returns safety settings that don't block any content but return safety scores
+func NoSafetySettings() []SafetySetting {
+	return []SafetySetting{
+		{Category: HarmCategoryHarassment, Threshold: HarmBlockThresholdBlockNone},
+		{Category: HarmCategoryHateSpeech, Threshold: HarmBlockThresholdBlockNone},
+		{Category: HarmCategorySexuallyExplicit, Threshold: HarmBlockThresholdBlockNone},
+		{Category: HarmCategoryDangerousContent, Threshold: HarmBlockThresholdBlockNone},
+	}
+}
+
+// IsSafetyBlocked checks if a response was blocked due to safety concerns
+func (c *Candidate) IsSafetyBlocked() bool {
+	if c.FinishReason == "SAFETY" {
+		return true
+	}
+	for _, rating := range c.SafetyRatings {
+		if rating.Blocked {
+			return true
+		}
+	}
+	return false
+}
+
+// GetSafetyRating returns the safety rating for a specific harm category
+func (c *Candidate) GetSafetyRating(category HarmCategory) *SafetyRating {
+	for i := range c.SafetyRatings {
+		if c.SafetyRatings[i].Category == category {
+			return &c.SafetyRatings[i]
+		}
+	}
+	return nil
 }

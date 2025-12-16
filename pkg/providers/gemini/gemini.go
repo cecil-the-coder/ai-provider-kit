@@ -52,6 +52,7 @@ type GeminiProvider struct {
 	rateLimitHelper   *common.RateLimitHelper
 	rateLimitMutex    sync.RWMutex
 	clientSideLimiter *rate.Limiter
+	backendRouter     *BackendRouter // Backend router for Gemini API vs Vertex AI
 }
 
 // GeminiConfig represents Gemini-specific configuration
@@ -65,6 +66,14 @@ type GeminiConfig struct {
 
 	// Cloud Code API project ID
 	ProjectID string `json:"project_id,omitempty"`
+
+	// Backend configuration (Gemini API vs Vertex AI)
+	Backend  BackendType `json:"backend,omitempty"`  // "gemini-api" or "vertex-ai"
+	Project  string      `json:"project,omitempty"`  // GCP project ID for Vertex AI
+	Location string      `json:"location,omitempty"` // GCP region for Vertex AI (e.g., "us-central1")
+
+	// Service account for Vertex AI
+	ServiceAccountJSON string `json:"service_account_json,omitempty"`
 }
 
 // NewGeminiProvider creates a new Gemini provider
@@ -106,6 +115,17 @@ func NewGeminiProvider(config types.ProviderConfig) *GeminiProvider {
 	refreshFactory := auth.NewRefreshFuncFactory("gemini", client)
 	authHelper.SetupOAuth(refreshFactory.CreateGeminiRefreshFunc())
 
+	// Initialize backend router with auto-detection
+	clientConfig := &ClientConfig{
+		Backend:            geminiConfig.Backend,
+		Project:            geminiConfig.Project,
+		Location:           geminiConfig.Location,
+		APIKey:             geminiConfig.APIKey,
+		ServiceAccountJSON: geminiConfig.ServiceAccountJSON,
+		BaseURL:            geminiConfig.BaseURL,
+	}
+	backendRouter := NewBackendRouter(clientConfig)
+
 	provider := &GeminiProvider{
 		BaseProvider:    base.NewBaseProvider("gemini", mergedConfig, client, log.Default()),
 		authHelper:      authHelper,
@@ -116,6 +136,7 @@ func NewGeminiProvider(config types.ProviderConfig) *GeminiProvider {
 		// Client-side limits (free tier: 15 RPM, pay-as-you-go: 360 RPM)
 		// Default to free tier - can be updated with UpdateRateLimitTier
 		clientSideLimiter: rate.NewLimiter(rate.Every(time.Minute/15), 15),
+		backendRouter:     backendRouter,
 	}
 
 	// Set project ID if available
@@ -422,12 +443,8 @@ func (p *GeminiProvider) TestConnectivity(ctx context.Context) error {
 
 // testConnectivityWithAPIKey tests connectivity using an API key
 func (p *GeminiProvider) testConnectivityWithAPIKey(ctx context.Context, apiKey string) error {
-	// Use a minimal generateContent request with the smallest model
-	baseURL := p.config.BaseURL
-	if baseURL == "" {
-		baseURL = standardGeminiBaseURL
-	}
-	url := fmt.Sprintf("%s/models/%s:generateContent?key=%s", baseURL, geminiDefaultModel, apiKey)
+	// Use backend router to build the URL
+	url := p.backendRouter.BuildRequestURL(geminiDefaultModel, "generateContent", apiKey)
 
 	// Create a minimal request for connectivity testing
 	minimalRequest := map[string]interface{}{
@@ -496,13 +513,8 @@ func (p *GeminiProvider) testConnectivityWithAPIKey(ctx context.Context, apiKey 
 
 // testConnectivityWithOAuth tests connectivity using OAuth credentials
 func (p *GeminiProvider) testConnectivityWithOAuth(ctx context.Context, accessToken string) error {
-	// Make a minimal generateContent request to the standard Gemini API
-	// This tests actual API connectivity and proves the full auth flow works
-	baseURL := p.config.BaseURL
-	if baseURL == "" {
-		baseURL = standardGeminiBaseURL
-	}
-	url := fmt.Sprintf("%s/models/%s:generateContent", baseURL, geminiDefaultModel)
+	// Use backend router to build the URL (no API key for OAuth)
+	url := p.backendRouter.BuildRequestURL(geminiDefaultModel, "generateContent", "")
 
 	// Create a minimal request for connectivity testing
 	minimalRequest := map[string]interface{}{
@@ -611,6 +623,17 @@ func (p *GeminiProvider) Configure(config types.ProviderConfig) error {
 	if geminiConfig.ProjectID != "" {
 		p.projectID = geminiConfig.ProjectID
 	}
+
+	// Reinitialize backend router with new configuration
+	clientConfig := &ClientConfig{
+		Backend:            geminiConfig.Backend,
+		Project:            geminiConfig.Project,
+		Location:           geminiConfig.Location,
+		APIKey:             geminiConfig.APIKey,
+		ServiceAccountJSON: geminiConfig.ServiceAccountJSON,
+		BaseURL:            geminiConfig.BaseURL,
+	}
+	p.backendRouter = NewBackendRouter(clientConfig)
 
 	return p.BaseProvider.Configure(mergedConfig)
 }
@@ -739,18 +762,20 @@ func (p *GeminiProvider) prepareStandardRequest(options types.GenerateOptions) G
 
 // executeStandardAPIRequest executes a standard Gemini API request
 func (p *GeminiProvider) executeStandardAPIRequest(ctx context.Context, model string, apiKey string, requestBody GenerateContentRequest) ([]byte, error) {
+	// Use backend router to convert request if needed
+	convertedRequest, err := p.backendRouter.GetConverter().ConvertRequest(requestBody)
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert request: %w", err)
+	}
+
 	// Serialize request
-	jsonBody, err := json.Marshal(requestBody)
+	jsonBody, err := json.Marshal(convertedRequest)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
-	// Create HTTP request using standard Gemini API
-	baseURL := standardGeminiBaseURL
-	if p.config.BaseURL != "" {
-		baseURL = p.config.BaseURL
-	}
-	url := fmt.Sprintf("%s/models/%s:generateContent?key=%s", baseURL, model, apiKey)
+	// Use backend router to build the URL
+	url := p.backendRouter.BuildRequestURL(model, "generateContent", apiKey)
 	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonBody))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
@@ -799,18 +824,20 @@ func (p *GeminiProvider) makeStandardAPICallWithOAuth(ctx context.Context, model
 	// Prepare standard request
 	requestBody := p.prepareStandardRequest(options)
 
+	// Use backend router to convert request if needed
+	convertedRequest, err := p.backendRouter.GetConverter().ConvertRequest(requestBody)
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert request: %w", err)
+	}
+
 	// Serialize request
-	jsonBody, err := json.Marshal(requestBody)
+	jsonBody, err := json.Marshal(convertedRequest)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
-	// Create HTTP request using standard Gemini API with OAuth
-	baseURL := standardGeminiBaseURL
-	if p.config.BaseURL != "" {
-		baseURL = p.config.BaseURL
-	}
-	url := fmt.Sprintf("%s/models/%s:generateContent", baseURL, model)
+	// Use backend router to build the URL (no API key for OAuth)
+	url := p.backendRouter.BuildRequestURL(model, "generateContent", "")
 	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonBody))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
@@ -858,10 +885,10 @@ func (p *GeminiProvider) makeStandardAPICallWithOAuth(ctx context.Context, model
 
 // parseStandardGeminiResponse parses a standard Gemini API response
 func (p *GeminiProvider) parseStandardGeminiResponse(responseBody []byte, _ string) (string, *types.Usage, error) {
-	// Parse response (standard Gemini API returns direct response)
-	var apiResp GenerateContentResponse
-	if err := json.Unmarshal(responseBody, &apiResp); err != nil {
-		return "", nil, fmt.Errorf("failed to parse Gemini response: %w", err)
+	// Use backend router to convert response if needed
+	apiResp, err := p.backendRouter.GetConverter().ConvertResponse(responseBody)
+	if err != nil {
+		return "", nil, err
 	}
 
 	// Extract content
@@ -870,8 +897,9 @@ func (p *GeminiProvider) parseStandardGeminiResponse(responseBody []byte, _ stri
 	}
 
 	candidate := apiResp.Candidates[0]
-	if candidate.FinishReason == "SAFETY" {
-		return "", nil, fmt.Errorf("content was filtered due to safety concerns")
+	// Check for error finish reasons
+	if IsErrorFinishReason(candidate.FinishReason) {
+		return "", nil, fmt.Errorf("generation failed: %s", GetFinishReasonMessage(candidate.FinishReason))
 	}
 
 	if len(candidate.Content.Parts) == 0 {
@@ -905,10 +933,10 @@ func (p *GeminiProvider) parseStandardGeminiResponse(responseBody []byte, _ stri
 
 // parseStandardGeminiResponseMessage parses standard Gemini response and returns ChatMessage
 func (p *GeminiProvider) parseStandardGeminiResponseMessage(responseBody []byte, _ string) (types.ChatMessage, *types.Usage, error) {
-	// Parse response (standard Gemini API returns direct response)
-	var apiResp GenerateContentResponse
-	if err := json.Unmarshal(responseBody, &apiResp); err != nil {
-		return types.ChatMessage{}, nil, fmt.Errorf("failed to parse Gemini response: %w", err)
+	// Use backend router to convert response if needed
+	apiResp, err := p.backendRouter.GetConverter().ConvertResponse(responseBody)
+	if err != nil {
+		return types.ChatMessage{}, nil, err
 	}
 
 	// Extract content
@@ -917,8 +945,9 @@ func (p *GeminiProvider) parseStandardGeminiResponseMessage(responseBody []byte,
 	}
 
 	candidate := apiResp.Candidates[0]
-	if candidate.FinishReason == "SAFETY" {
-		return types.ChatMessage{}, nil, fmt.Errorf("content was filtered due to safety concerns")
+	// Check for error finish reasons
+	if IsErrorFinishReason(candidate.FinishReason) {
+		return types.ChatMessage{}, nil, fmt.Errorf("generation failed: %s", GetFinishReasonMessage(candidate.FinishReason))
 	}
 
 	if len(candidate.Content.Parts) == 0 {

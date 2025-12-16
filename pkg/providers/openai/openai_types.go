@@ -94,6 +94,7 @@ type OpenAIUsage struct {
 	PromptTokens     int `json:"prompt_tokens"`
 	CompletionTokens int `json:"completion_tokens"`
 	TotalTokens      int `json:"total_tokens"`
+	ReasoningTokens  int `json:"reasoning_tokens,omitempty"` // For o1/o3 reasoning models
 }
 
 // OpenAIStreamResponse represents a streaming response chunk

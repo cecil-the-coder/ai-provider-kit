@@ -370,6 +370,7 @@ func (p *OpenAIProvider) makeAPICallInternal(ctx context.Context, requestData Op
 		PromptTokens:     response.Usage.PromptTokens,
 		CompletionTokens: response.Usage.CompletionTokens,
 		TotalTokens:      response.Usage.TotalTokens,
+		ReasoningTokens:  response.Usage.ReasoningTokens,
 	}
 
 	return message, usage, nil

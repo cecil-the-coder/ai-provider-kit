@@ -98,9 +98,11 @@ func convertAnthropicResponseToChunk(response *AnthropicResponse) types.ChatComp
 		Done:    true,
 		Content: textContent,
 		Usage: types.Usage{
-			PromptTokens:     response.Usage.InputTokens,
-			CompletionTokens: response.Usage.OutputTokens,
-			TotalTokens:      response.Usage.InputTokens + response.Usage.OutputTokens,
+			PromptTokens:             response.Usage.InputTokens,
+			CompletionTokens:         response.Usage.OutputTokens,
+			TotalTokens:              response.Usage.InputTokens + response.Usage.OutputTokens,
+			CacheCreationInputTokens: response.Usage.CacheCreationInputTokens,
+			CacheReadInputTokens:     response.Usage.CacheReadInputTokens,
 		},
 		Choices: []types.ChatChoice{
 			{

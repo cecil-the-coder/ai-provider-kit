@@ -17,6 +17,7 @@ func TestProviderTypeConstants(t *testing.T) {
 		expected string
 	}{
 		{"OpenAI", ProviderTypeOpenAI, "openai"},
+		{"AzureOpenAI", ProviderTypeAzureOpenAI, "azure-openai"},
 		{"Anthropic", ProviderTypeAnthropic, "anthropic"},
 		{"Gemini", ProviderTypeGemini, "gemini"},
 		{"Qwen", ProviderTypeQwen, "qwen"},
@@ -52,7 +53,7 @@ func TestProviderTypeConstants(t *testing.T) {
 // TestProviderTypeValidation tests provider type validation
 func TestProviderTypeValidation(t *testing.T) {
 	validProviders := []ProviderType{
-		ProviderTypeOpenAI, ProviderTypeAnthropic, ProviderTypeGemini,
+		ProviderTypeOpenAI, ProviderTypeAzureOpenAI, ProviderTypeAnthropic, ProviderTypeGemini,
 		ProviderTypeQwen, ProviderTypeCerebras, ProviderTypeOpenRouter,
 		ProviderTypeSynthetic, ProviderTypexAI, ProviderTypeFireworks,
 		ProviderTypeDeepseek, ProviderTypeMistral, ProviderTypeLMStudio,

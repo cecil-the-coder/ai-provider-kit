@@ -257,7 +257,7 @@ func TestGeminiProvider_GenerateChatCompletion_SafetyFilter(t *testing.T) {
 					Content: Content{
 						Parts: []Part{},
 					},
-					FinishReason: "SAFETY",
+					FinishReason: string(FinishReasonSafety),
 				},
 			},
 		}

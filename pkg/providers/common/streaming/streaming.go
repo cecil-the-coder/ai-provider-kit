@@ -245,6 +245,9 @@ func (p *StandardStreamParser) ParseLine(data string) (types.ChatCompletionChunk
 			if totalTokens, ok := usageMap["total_tokens"].(float64); ok {
 				chunk.Usage.TotalTokens = int(totalTokens)
 			}
+			if reasoningTokens, ok := usageMap["reasoning_tokens"].(float64); ok {
+				chunk.Usage.ReasoningTokens = int(reasoningTokens)
+			}
 		}
 	}
 

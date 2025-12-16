@@ -197,17 +197,25 @@ func (p *GeminiProvider) makeStreamingStandardAPICallWithOAuth(ctx context.Conte
 	// Prepare standard request (same as API key path)
 	requestBody := p.prepareStandardRequest(options)
 
-	jsonBody, err := json.Marshal(requestBody)
+	// Use backend router to convert request if needed
+	convertedRequest, err := p.backendRouter.GetConverter().ConvertRequest(requestBody)
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert request: %w", err)
+	}
+
+	jsonBody, err := json.Marshal(convertedRequest)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
-	// Use standard Gemini API endpoint with OAuth bearer token
-	baseURL := standardGeminiBaseURL
-	if p.config.BaseURL != "" {
-		baseURL = p.config.BaseURL
+	// Use backend router to build the URL (no API key for OAuth)
+	url := p.backendRouter.BuildRequestURL(model, "streamGenerateContent", "")
+	// Add SSE parameter
+	if !strings.Contains(url, "?") {
+		url += "?alt=sse"
+	} else {
+		url += "&alt=sse"
 	}
-	url := fmt.Sprintf("%s/models/%s:streamGenerateContent?alt=sse", baseURL, model)
 
 	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonBody))
 	if err != nil {
@@ -310,16 +318,25 @@ func (p *GeminiProvider) makeStreamingAPICallWithAPIKey(ctx context.Context, opt
 		requestBody.Tools = convertToGeminiTools(options.Tools)
 	}
 
-	jsonBody, err := json.Marshal(requestBody)
+	// Use backend router to convert request if needed
+	convertedRequest, err := p.backendRouter.GetConverter().ConvertRequest(requestBody)
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert request: %w", err)
+	}
+
+	jsonBody, err := json.Marshal(convertedRequest)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
-	baseURL := standardGeminiBaseURL
-	if p.config.BaseURL != "" {
-		baseURL = p.config.BaseURL
+	// Use backend router to build the URL
+	url := p.backendRouter.BuildRequestURL(model, "streamGenerateContent", apiKey)
+	// Add SSE parameter
+	if !strings.Contains(url, "?") {
+		url += "?alt=sse"
+	} else {
+		url += "&alt=sse"
 	}
-	url := fmt.Sprintf("%s/models/%s:streamGenerateContent?key=%s&alt=sse", baseURL, model, apiKey)
 	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonBody))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)

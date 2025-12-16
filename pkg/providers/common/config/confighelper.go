@@ -186,6 +186,19 @@ func (h *ConfigHelper) ExtractStringSliceField(config types.ProviderConfig, fiel
 	return nil
 }
 
+// ExtractBoolField extracts a boolean field from provider config with fallback
+func (h *ConfigHelper) ExtractBoolField(config types.ProviderConfig, fieldName string, fallback bool) bool {
+	if config.ProviderConfig == nil {
+		return fallback
+	}
+
+	if value, ok := config.ProviderConfig[fieldName].(bool); ok {
+		return value
+	}
+
+	return fallback
+}
+
 // ApplyTopLevelOverrides applies top-level config fields to provider-specific config
 func (h *ConfigHelper) ApplyTopLevelOverrides(config types.ProviderConfig, providerConfig interface{}) error {
 	// Use reflection or type assertion to apply overrides

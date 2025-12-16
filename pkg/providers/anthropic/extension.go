@@ -160,9 +160,11 @@ func (e *AnthropicExtension) ProviderToStandard(response interface{}) (*types.St
 
 	// Convert usage
 	usage := types.Usage{
-		PromptTokens:     anthropicResp.Usage.InputTokens,
-		CompletionTokens: anthropicResp.Usage.OutputTokens,
-		TotalTokens:      anthropicResp.Usage.InputTokens + anthropicResp.Usage.OutputTokens,
+		PromptTokens:             anthropicResp.Usage.InputTokens,
+		CompletionTokens:         anthropicResp.Usage.OutputTokens,
+		TotalTokens:              anthropicResp.Usage.InputTokens + anthropicResp.Usage.OutputTokens,
+		CacheCreationInputTokens: anthropicResp.Usage.CacheCreationInputTokens,
+		CacheReadInputTokens:     anthropicResp.Usage.CacheReadInputTokens,
 	}
 
 	// Create provider metadata
@@ -226,9 +228,11 @@ func (e *AnthropicExtension) ProviderToStandardChunk(chunk interface{}) (*types.
 	var usage *types.Usage
 	if anthropicChunk.Usage != nil {
 		usage = &types.Usage{
-			PromptTokens:     anthropicChunk.Usage.InputTokens,
-			CompletionTokens: anthropicChunk.Usage.OutputTokens,
-			TotalTokens:      anthropicChunk.Usage.InputTokens + anthropicChunk.Usage.OutputTokens,
+			PromptTokens:             anthropicChunk.Usage.InputTokens,
+			CompletionTokens:         anthropicChunk.Usage.OutputTokens,
+			TotalTokens:              anthropicChunk.Usage.InputTokens + anthropicChunk.Usage.OutputTokens,
+			CacheCreationInputTokens: anthropicChunk.Usage.CacheCreationInputTokens,
+			CacheReadInputTokens:     anthropicChunk.Usage.CacheReadInputTokens,
 		}
 	}
 

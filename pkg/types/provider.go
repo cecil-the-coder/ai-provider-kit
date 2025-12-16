@@ -10,6 +10,7 @@ type ProviderType string
 
 const (
 	ProviderTypeOpenAI     ProviderType = "openai"
+	ProviderTypeAzureOpenAI ProviderType = "azure-openai"
 	ProviderTypeAnthropic  ProviderType = "anthropic"
 	ProviderTypeGemini     ProviderType = "gemini"
 	ProviderTypeQwen       ProviderType = "qwen"
