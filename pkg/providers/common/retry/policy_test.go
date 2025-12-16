@@ -159,7 +159,7 @@ func TestParseRetryAfter(t *testing.T) {
 		},
 		{
 			name:   "http-date format (future)",
-			header: time.Now().Add(5 * time.Minute).Format(http.TimeFormat),
+			header: time.Now().UTC().Add(5 * time.Minute).Format(http.TimeFormat),
 			want:   5 * time.Minute, // Approximate
 		},
 	}
@@ -185,8 +185,8 @@ func TestParseRetryAfter(t *testing.T) {
 }
 
 func TestParseRetryAfter_HTTPDate(t *testing.T) {
-	// Test with a specific HTTP date
-	futureTime := time.Now().Add(10 * time.Second)
+	// Test with a specific HTTP date (must use UTC for correct GMT formatting)
+	futureTime := time.Now().UTC().Add(10 * time.Second)
 	headers := http.Header{}
 	headers.Set("Retry-After", futureTime.Format(http.TimeFormat))
 
@@ -198,8 +198,8 @@ func TestParseRetryAfter_HTTPDate(t *testing.T) {
 }
 
 func TestParseRetryAfter_PastHTTPDate(t *testing.T) {
-	// Test with a past HTTP date (should return 0)
-	pastTime := time.Now().Add(-10 * time.Second)
+	// Test with a past HTTP date (should return 0, must use UTC for correct GMT formatting)
+	pastTime := time.Now().UTC().Add(-10 * time.Second)
 	headers := http.Header{}
 	headers.Set("Retry-After", pastTime.Format(http.TimeFormat))
 

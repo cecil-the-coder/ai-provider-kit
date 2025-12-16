@@ -1,0 +1,80 @@
+package ollama
+
+import (
+	"context"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+
+	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
+	"github.com/stretchr/testify/assert"
+)
+
+func TestOllamaProvider_HealthCheck(t *testing.T) {
+	// Create mock server that responds to /api/version
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/version" {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"version":"0.1.0"}`))
+		} else {
+			w.WriteHeader(http.StatusOK)
+		}
+	}))
+	defer server.Close()
+
+	config := types.ProviderConfig{
+		Type:    types.ProviderTypeOllama,
+		Name:    "ollama-test",
+		BaseURL: server.URL,
+	}
+
+	provider := NewOllamaProvider(config)
+	ctx := context.Background()
+
+	// Health check should succeed
+	err := provider.HealthCheck(ctx)
+	assert.NoError(t, err)
+}
+
+func TestOllamaProvider_HealthCheck_Failure(t *testing.T) {
+	config := types.ProviderConfig{
+		Type:    types.ProviderTypeOllama,
+		Name:    "ollama-test",
+		BaseURL: "http://localhost:99999", // Invalid port
+	}
+
+	provider := NewOllamaProvider(config)
+	ctx := context.Background()
+
+	// Health check should fail
+	err := provider.HealthCheck(ctx)
+	assert.Error(t, err)
+}
+
+func TestOllamaProvider_TestConnectivity_CloudEndpoint(t *testing.T) {
+	// Create mock server
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Check for auth header
+		auth := r.Header.Get("Authorization")
+		if auth == "Bearer valid-key" {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"version":"0.1.0"}`))
+		} else {
+			w.WriteHeader(http.StatusUnauthorized)
+		}
+	}))
+	defer server.Close()
+
+	// Test with valid key
+	config := types.ProviderConfig{
+		Type:    types.ProviderTypeOllama,
+		Name:    "ollama-test",
+		BaseURL: "https://api.ollama.com", // Cloud endpoint
+		APIKey:  "valid-key",
+	}
+
+	provider := NewOllamaProvider(config)
+
+	// Test connectivity should check authentication
+	assert.True(t, provider.IsAuthenticated())
+}
