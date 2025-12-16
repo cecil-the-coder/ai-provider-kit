@@ -100,7 +100,3 @@ func (m *mockHealthCheckProvider) HealthCheck(ctx context.Context) error {
 func containsString(s, substr string) bool {
 	return strings.Contains(s, substr)
 }
-
-func findSubstring(s, substr string) bool {
-	return strings.Contains(s, substr)
-}

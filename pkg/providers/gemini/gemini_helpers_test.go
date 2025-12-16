@@ -1,7 +1,6 @@
 package gemini
 
 import (
-	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -46,31 +45,6 @@ func createProviderWithMockServer(mockServerURL string) *GeminiProvider {
 	provider := NewGeminiProvider(config)
 	provider.config.BaseURL = mockServerURL
 	return provider
-}
-
-// standardMockHandler returns an HTTP handler that provides a basic successful response
-func standardMockHandler(responseText string) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		response := createStandardMockResponse(responseText)
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(response)
-	}
-}
-
-// streamingMockHandler returns an HTTP handler that simulates SSE streaming
-func streamingMockHandler(chunks []string) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/event-stream")
-		w.WriteHeader(http.StatusOK)
-
-		for _, chunk := range chunks {
-			_, _ = w.Write([]byte(chunk))
-			_, _ = w.Write([]byte("\n\n"))
-			if f, ok := w.(http.Flusher); ok {
-				f.Flush()
-			}
-		}
-	}
 }
 
 // errorMockHandler returns an HTTP handler that simulates an error response

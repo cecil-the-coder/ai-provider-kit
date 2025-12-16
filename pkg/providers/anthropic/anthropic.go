@@ -504,7 +504,6 @@ func (p *AnthropicProvider) GenerateChatCompletion(
 	return streaming.NewMockStream([]types.ChatCompletionChunk{chunk}), nil
 }
 
-
 // prepareRequest prepares the API request payload
 func (p *AnthropicProvider) prepareRequest(options types.GenerateOptions, model string, maxTokens int) AnthropicRequest {
 	log.Printf("🔧 [Anthropic] prepareRequest ENTRY - model=%s, Messages count=%d, Prompt=%q", model, len(options.Messages), options.Prompt)
