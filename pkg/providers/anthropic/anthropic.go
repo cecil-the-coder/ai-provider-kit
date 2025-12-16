@@ -887,7 +887,6 @@ func (p *AnthropicProvider) makeAPICallWithKeyMessage(ctx context.Context, reque
 	return message, usage, nil
 }
 
-
 // InvokeServerTool invokes a server tool (not yet implemented for Anthropic)
 func (p *AnthropicProvider) InvokeServerTool(
 	ctx context.Context,
