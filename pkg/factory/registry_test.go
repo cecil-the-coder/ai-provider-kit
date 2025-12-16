@@ -1,6 +1,7 @@
 package factory
 
 import (
+	"github.com/cecil-the-coder/ai-provider-kit/pkg/testutil"
 	"context"
 	"fmt"
 	"sync"
@@ -223,7 +224,7 @@ func TestRegisterDefaultProviders_MixedWithCustomProviders(t *testing.T) {
 	// Register a custom provider first
 	customProviderType := types.ProviderType("custom-provider")
 	factory.RegisterProvider(customProviderType, func(config types.ProviderConfig) types.Provider {
-		return &MockProvider{name: "custom", providerType: customProviderType}
+		return testutil.NewMockProvider("custom", customProviderType)
 	})
 
 	// Register default providers
@@ -488,12 +489,9 @@ func registerMockProvidersForConsistencyTests(factory *DefaultProviderFactory) {
 	}
 
 	for _, providerType := range providerTypes {
+		pt := providerType // Capture variable for closure
 		factory.RegisterProvider(providerType, func(config types.ProviderConfig) types.Provider {
-			return &MockProvider{
-				name:         config.Name,
-				providerType: providerType,
-				config:       config,
-			}
+			return testutil.NewMockProvider(config.Name, pt)
 		})
 	}
 }

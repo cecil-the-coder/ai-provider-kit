@@ -1,6 +1,7 @@
 package factory
 
 import (
+	"github.com/cecil-the-coder/ai-provider-kit/pkg/testutil"
 	"testing"
 	"time"
 
@@ -156,7 +157,7 @@ func TestCreateProviderFromConfig_ValidConfig(t *testing.T) {
 	// Register a test provider
 	testProviderType := types.ProviderType("config-test")
 	factory.RegisterProvider(testProviderType, func(config types.ProviderConfig) types.Provider {
-		return &MockProvider{name: config.Name, providerType: testProviderType}
+		return testutil.NewMockProvider(config.Name, testProviderType)
 	})
 
 	testCases := []struct {
@@ -237,7 +238,7 @@ func TestCreateProviderFromConfig_ValidConfig(t *testing.T) {
 			assert.NoError(t, err)
 			assert.NotNil(t, provider)
 
-			mockProvider, ok := provider.(*MockProvider)
+			mockProvider, ok := provider.(*testutil.MockProvider)
 			require.True(t, ok)
 			assert.Equal(t, tc.expected.Name, mockProvider.Name())
 		})
@@ -320,7 +321,7 @@ func TestCreateProviderFromConfig_EdgeCases(t *testing.T) {
 	// Register a test provider
 	testProviderType := types.ProviderType("edge-test")
 	factory.RegisterProvider(testProviderType, func(config types.ProviderConfig) types.Provider {
-		return &MockProvider{name: config.Name, providerType: testProviderType}
+		return testutil.NewMockProvider(config.Name, testProviderType)
 	})
 
 	testCases := []struct {

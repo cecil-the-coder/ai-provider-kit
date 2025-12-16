@@ -6,6 +6,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/cecil-the-coder/ai-provider-kit/pkg/testutil"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -29,7 +30,7 @@ func TestDefaultProviderFactory_RegisterProvider(t *testing.T) {
 	// Test registering a provider
 	providerType := types.ProviderType("test-provider")
 	factoryFunc := func(config types.ProviderConfig) types.Provider {
-		return &MockProvider{name: "test", providerType: providerType}
+		return testutil.NewMockProvider("test", providerType)
 	}
 
 	factory.RegisterProvider(providerType, factoryFunc)
@@ -53,7 +54,7 @@ func TestDefaultProviderFactory_RegisterProvider_ConcurrentAccess(t *testing.T) 
 			defer wg.Done()
 			providerType := types.ProviderType(fmt.Sprintf("provider-%d", i))
 			factoryFunc := func(config types.ProviderConfig) types.Provider {
-				return &MockProvider{name: fmt.Sprintf("test-%d", i), providerType: providerType}
+				return testutil.NewMockProvider(fmt.Sprintf("test-%d", i), providerType)
 			}
 			factory.RegisterProvider(providerType, factoryFunc)
 		}(i)
@@ -72,7 +73,7 @@ func TestDefaultProviderFactory_CreateProvider(t *testing.T) {
 
 	// Register a test provider
 	providerType := types.ProviderType("test-provider")
-	expectedProvider := &MockProvider{name: "test", providerType: providerType}
+	expectedProvider := testutil.NewMockProvider("test", providerType)
 	factoryFunc := func(config types.ProviderConfig) types.Provider {
 		return expectedProvider
 	}
@@ -121,7 +122,7 @@ func TestDefaultProviderFactory_CreateProvider_ConcurrentAccess(t *testing.T) {
 	// Register a test provider
 	providerType := types.ProviderType("concurrent-test-provider")
 	factoryFunc := func(config types.ProviderConfig) types.Provider {
-		return &MockProvider{name: config.Name, providerType: providerType}
+		return testutil.NewMockProvider(config.Name, providerType)
 	}
 	factory.RegisterProvider(providerType, factoryFunc)
 
@@ -159,9 +160,9 @@ func TestDefaultProviderFactory_CreateProvider_ConcurrentAccess(t *testing.T) {
 
 	for i, provider := range providers {
 		assert.NotNil(t, provider, "Provider %d should not be nil", i)
-		mockProvider, ok := provider.(*MockProvider)
+		mockProvider, ok := provider.(*testutil.MockProvider)
 		require.True(t, ok, "Provider should be of type MockProvider")
-		assert.Equal(t, fmt.Sprintf("provider-%d", i), mockProvider.name)
+		assert.Equal(t, fmt.Sprintf("provider-%d", i), mockProvider.Name())
 	}
 }
 
@@ -181,8 +182,9 @@ func TestDefaultProviderFactory_GetSupportedProviders(t *testing.T) {
 	}
 
 	for _, providerType := range providerTypes {
+		pt := providerType // Capture variable for closure
 		factory.RegisterProvider(providerType, func(config types.ProviderConfig) types.Provider {
-			return &MockProvider{name: string(providerType), providerType: providerType}
+			return testutil.NewMockProvider(string(pt), pt)
 		})
 	}
 
@@ -202,8 +204,9 @@ func TestDefaultProviderFactory_GetSupportedProviders_ConcurrentAccess(t *testin
 	// Register initial providers
 	for i := 0; i < 10; i++ {
 		providerType := types.ProviderType(fmt.Sprintf("provider-%d", i))
+		pt := providerType // Capture variable for closure
 		factory.RegisterProvider(providerType, func(config types.ProviderConfig) types.Provider {
-			return &MockProvider{name: string(providerType), providerType: providerType}
+			return testutil.NewMockProvider(string(pt), pt)
 		})
 	}
 
@@ -388,7 +391,7 @@ func BenchmarkRegisterProvider(b *testing.B) {
 	factory := NewProviderFactory()
 	providerType := types.ProviderType("benchmark-provider")
 	factoryFunc := func(config types.ProviderConfig) types.Provider {
-		return &MockProvider{name: "benchmark", providerType: providerType}
+		return testutil.NewMockProvider("benchmark", providerType)
 	}
 
 	b.ResetTimer()
@@ -405,7 +408,7 @@ func BenchmarkCreateProvider(b *testing.B) {
 	factory := NewProviderFactory()
 	providerType := types.ProviderType("benchmark-provider")
 	factoryFunc := func(config types.ProviderConfig) types.Provider {
-		return &MockProvider{name: "benchmark", providerType: providerType}
+		return testutil.NewMockProvider("benchmark", providerType)
 	}
 	factory.RegisterProvider(providerType, factoryFunc)
 
@@ -431,8 +434,10 @@ func BenchmarkGetSupportedProviders(b *testing.B) {
 	// Register multiple providers
 	for i := 0; i < 100; i++ {
 		providerType := types.ProviderType(fmt.Sprintf("provider-%d", i))
+		name := fmt.Sprintf("provider-%d", i)
+		pt := providerType // Capture variable for closure
 		factoryFunc := func(config types.ProviderConfig) types.Provider {
-			return &MockProvider{name: fmt.Sprintf("provider-%d", i), providerType: providerType}
+			return testutil.NewMockProvider(name, pt)
 		}
 		factory.RegisterProvider(providerType, factoryFunc)
 	}
@@ -443,42 +448,4 @@ func BenchmarkGetSupportedProviders(b *testing.B) {
 	}
 }
 
-// MockProvider is a mock implementation of types.Provider for testing
-type MockProvider struct {
-	name         string
-	providerType types.ProviderType
-	config       types.ProviderConfig
-}
-
-func (m *MockProvider) Name() string             { return m.name }
-func (m *MockProvider) Type() types.ProviderType { return m.providerType }
-func (m *MockProvider) Description() string      { return fmt.Sprintf("Mock provider: %s", m.name) }
-func (m *MockProvider) GetModels(ctx context.Context) ([]types.Model, error) {
-	return []types.Model{{ID: "mock-model", Name: "Mock Model"}}, nil
-}
-func (m *MockProvider) GetDefaultModel() string         { return "mock-default-model" }
-func (m *MockProvider) SupportsToolCalling() bool       { return true }
-func (m *MockProvider) SupportsStreaming() bool         { return true }
-func (m *MockProvider) SupportsResponsesAPI() bool      { return false }
-func (m *MockProvider) GetToolFormat() types.ToolFormat { return types.ToolFormatOpenAI }
-func (m *MockProvider) Authenticate(ctx context.Context, authConfig types.AuthConfig) error {
-	return nil
-}
-func (m *MockProvider) IsAuthenticated() bool                       { return true }
-func (m *MockProvider) Logout(ctx context.Context) error            { return nil }
-func (m *MockProvider) Configure(config types.ProviderConfig) error { m.config = config; return nil }
-func (m *MockProvider) GetConfig() types.ProviderConfig             { return m.config }
-func (m *MockProvider) GenerateChatCompletion(ctx context.Context, options types.GenerateOptions) (types.ChatCompletionStream, error) {
-	return &FactoryMockStream{}, nil
-}
-func (m *MockProvider) InvokeServerTool(ctx context.Context, toolName string, params interface{}) (interface{}, error) {
-	return nil, fmt.Errorf("tool calling not implemented in mock")
-}
-func (m *MockProvider) HealthCheck(ctx context.Context) error { return nil }
-func (m *MockProvider) GetMetrics() types.ProviderMetrics {
-	return types.ProviderMetrics{
-		RequestCount: 0,
-		SuccessCount: 0,
-		ErrorCount:   0,
-	}
-}
+// Note: MockProvider has been moved to pkg/testutil

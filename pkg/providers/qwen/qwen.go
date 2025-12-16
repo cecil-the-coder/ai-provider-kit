@@ -101,7 +101,8 @@ func (p *QwenProvider) Description() string {
 // GetModels returns available Qwen models
 func (p *QwenProvider) GetModels(ctx context.Context) ([]types.Model, error) {
 	if !p.IsAuthenticated() {
-		return nil, fmt.Errorf("not authenticated")
+		return nil, types.NewAuthError(types.ProviderTypeQwen, "not authenticated").
+			WithOperation("list_models")
 	}
 
 	// Return static list of known Qwen models
@@ -161,7 +162,9 @@ func (p *QwenProvider) GenerateChatCompletion(
 
 	if err := limiter.Wait(waitCtx); err != nil {
 		p.RecordError(err)
-		return nil, fmt.Errorf("rate limit wait: %w", err)
+		return nil, types.NewRateLimitError(types.ProviderTypeQwen, 0).
+			WithOperation("chat_completion").
+			WithOriginalErr(err)
 	}
 
 	// Check if streaming is requested
@@ -352,7 +355,8 @@ func (p *QwenProvider) makeAPICallWithMessage(ctx context.Context, url string, r
 	}
 
 	if len(response.Choices) == 0 {
-		return types.ChatMessage{}, nil, fmt.Errorf("no choices in Qwen API response")
+		return types.ChatMessage{}, nil, types.NewInvalidRequestError(types.ProviderTypeQwen, "no choices in Qwen API response").
+			WithOperation("chat_completion")
 	}
 
 	// Extract message from response
@@ -391,12 +395,16 @@ func (p *QwenProvider) makeAPICallWithMessage(ctx context.Context, url string, r
 func (p *QwenProvider) makeAPICall(ctx context.Context, url string, request QwenRequest, authToken string) (*QwenResponse, error) {
 	jsonBody, err := json.Marshal(request)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal request: %w", err)
+		return nil, types.NewInvalidRequestError(types.ProviderTypeQwen, "failed to marshal request").
+			WithOperation("chat_completion").
+			WithOriginalErr(err)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonBody))
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
+		return nil, types.NewInvalidRequestError(types.ProviderTypeQwen, "failed to create request").
+			WithOperation("chat_completion").
+			WithOriginalErr(err)
 	}
 
 	req.Header.Set("Content-Type", "application/json")
@@ -411,7 +419,9 @@ func (p *QwenProvider) makeAPICall(ctx context.Context, url string, request Qwen
 	startTime := time.Now()
 	resp, err := p.client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("request failed: %w", err)
+		return nil, types.NewNetworkError(types.ProviderTypeQwen, "request failed").
+			WithOperation("chat_completion").
+			WithOriginalErr(err)
 	}
 	defer func() { _ = resp.Body.Close() }() //nolint:staticcheck // Empty branch is intentional - we ignore close errors
 
@@ -423,16 +433,23 @@ func (p *QwenProvider) makeAPICall(ctx context.Context, url string, request Qwen
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read response body: %w", err)
+		return nil, types.NewNetworkError(types.ProviderTypeQwen, "failed to read response body").
+			WithOperation("chat_completion").
+			WithOriginalErr(err)
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(body))
+		errCode := types.ClassifyHTTPError(resp.StatusCode)
+		return nil, types.NewProviderError(types.ProviderTypeQwen, errCode, string(body)).
+			WithOperation("chat_completion").
+			WithStatusCode(resp.StatusCode)
 	}
 
 	var response QwenResponse
 	if err := json.Unmarshal(body, &response); err != nil {
-		return nil, fmt.Errorf("failed to parse API response: %w", err)
+		return nil, types.NewInvalidRequestError(types.ProviderTypeQwen, "failed to parse API response").
+			WithOperation("chat_completion").
+			WithOriginalErr(err)
 	}
 
 	return &response, nil
@@ -463,7 +480,9 @@ func (p *QwenProvider) refreshOAuthTokenForMulti(ctx context.Context, cred *type
 	// Create request
 	req, err := http.NewRequest("POST", tokenURL, strings.NewReader(data))
 	if err != nil {
-		return nil, fmt.Errorf("failed to create token refresh request: %w", err)
+		return nil, types.NewInvalidRequestError(types.ProviderTypeQwen, "failed to create token refresh request").
+			WithOperation("refresh_oauth_token").
+			WithOriginalErr(err)
 	}
 
 	// Add headers
@@ -479,13 +498,18 @@ func (p *QwenProvider) refreshOAuthTokenForMulti(ctx context.Context, cred *type
 
 	resp, err := oauthClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to refresh token: %w", err)
+		return nil, types.NewNetworkError(types.ProviderTypeQwen, "failed to refresh token").
+			WithOperation("refresh_oauth_token").
+			WithOriginalErr(err)
 	}
 	defer func() { _ = resp.Body.Close() }() //nolint:staticcheck // Empty branch is intentional - we ignore close errors
 
 	if resp.StatusCode != http.StatusOK {
 		bodyBytes, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("token refresh failed with status %d: %s", resp.StatusCode, string(bodyBytes))
+		errCode := types.ClassifyHTTPError(resp.StatusCode)
+		return nil, types.NewProviderError(types.ProviderTypeQwen, errCode, string(bodyBytes)).
+			WithOperation("refresh_oauth_token").
+			WithStatusCode(resp.StatusCode)
 	}
 
 	var refreshResponse struct {
@@ -496,11 +520,14 @@ func (p *QwenProvider) refreshOAuthTokenForMulti(ctx context.Context, cred *type
 	}
 
 	if err := json.NewDecoder(resp.Body).Decode(&refreshResponse); err != nil {
-		return nil, fmt.Errorf("failed to decode token response: %w", err)
+		return nil, types.NewInvalidRequestError(types.ProviderTypeQwen, "failed to decode token response").
+			WithOperation("refresh_oauth_token").
+			WithOriginalErr(err)
 	}
 
 	if refreshResponse.AccessToken == "" {
-		return nil, fmt.Errorf("refresh response missing access token")
+		return nil, types.NewAuthError(types.ProviderTypeQwen, "refresh response missing access token").
+			WithOperation("refresh_oauth_token")
 	}
 
 	// Create updated credential set
@@ -529,7 +556,8 @@ func (p *QwenProvider) Authenticate(ctx context.Context, authConfig types.AuthCo
 	if authConfig.Method == types.AuthMethodAPIKey {
 		// Handle API key authentication
 		if authConfig.APIKey == "" {
-			return fmt.Errorf("API key is required")
+			return types.NewAuthError(types.ProviderTypeQwen, "API key is required").
+				WithOperation("authenticate")
 		}
 		newConfig := p.GetConfig()
 		newConfig.APIKey = authConfig.APIKey
@@ -538,10 +566,12 @@ func (p *QwenProvider) Authenticate(ctx context.Context, authConfig types.AuthCo
 
 	// Handle OAuth authentication
 	if authConfig.Method == types.AuthMethodOAuth {
-		return fmt.Errorf("legacy OAuth authentication not supported - use multi-OAuth via OAuthCredentials")
+		return types.NewAuthError(types.ProviderTypeQwen, "legacy OAuth authentication not supported - use multi-OAuth via OAuthCredentials").
+			WithOperation("authenticate")
 	}
 
-	return fmt.Errorf("unknown authentication method: %s", authConfig.Method)
+	return types.NewInvalidRequestError(types.ProviderTypeQwen, fmt.Sprintf("unknown authentication method: %s", authConfig.Method)).
+		WithOperation("authenticate")
 }
 
 // IsAuthenticated checks if the provider is authenticated
@@ -690,7 +720,8 @@ func (p *QwenProvider) TestConnectivity(ctx context.Context) error {
 // Configure updates the provider configuration
 func (p *QwenProvider) Configure(config types.ProviderConfig) error {
 	if config.Type != types.ProviderTypeQwen {
-		return fmt.Errorf("invalid provider type for Qwen: %s", config.Type)
+		return types.NewInvalidRequestError(types.ProviderTypeQwen, fmt.Sprintf("invalid provider type for Qwen: %s", config.Type)).
+			WithOperation("configure")
 	}
 
 	p.mu.Lock()
@@ -733,7 +764,8 @@ func (p *QwenProvider) InvokeServerTool(
 	toolName string,
 	params interface{},
 ) (interface{}, error) {
-	return nil, fmt.Errorf("tool invocation not yet implemented for Qwen provider")
+	return nil, types.NewInvalidRequestError(types.ProviderTypeQwen, "tool invocation not yet implemented for Qwen provider").
+		WithOperation("invoke_tool")
 }
 
 // executeStreamWithAuth, makeStreamingAPICall, and related streaming functions

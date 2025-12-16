@@ -11,6 +11,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -28,15 +29,59 @@ const (
 	ollamaDefaultModel = "llama3.1:8b" // Default model for chat completions
 )
 
+// EmbeddingsEndpoint represents the embeddings API endpoint to use
+type EmbeddingsEndpoint string
+
+const (
+	// EmbeddingsEndpointEmbed uses the new /api/embed endpoint (supports batching)
+	EmbeddingsEndpointEmbed EmbeddingsEndpoint = "embed"
+	// EmbeddingsEndpointLegacy uses the legacy /api/embeddings endpoint (single text only)
+	EmbeddingsEndpointLegacy EmbeddingsEndpoint = "embeddings"
+	// EmbeddingsEndpointAuto tries /api/embed first, falls back to /api/embeddings
+	EmbeddingsEndpointAuto EmbeddingsEndpoint = "auto"
+)
+
 // OllamaProvider implements Provider interface for Ollama
 type OllamaProvider struct {
 	*base.BaseProvider
-	config            types.ProviderConfig
-	httpClient        *http.Client
-	authHelper        *auth.AuthHelper
-	connectivityCache *common.ConnectivityCache
-	modelCache        *models.ModelCache
-	streamEndpoint    StreamEndpoint // Endpoint format for streaming (ollama or openai)
+	config              types.ProviderConfig
+	httpClient          *http.Client
+	authHelper          *auth.AuthHelper
+	connectivityCache   *common.ConnectivityCache
+	modelCache          *models.ModelCache
+	streamEndpoint      StreamEndpoint     // Endpoint format for streaming (ollama or openai)
+	embeddingsEndpoint  EmbeddingsEndpoint // Endpoint format for embeddings (embed or embeddings)
+	embedEndpointFailed bool               // Tracks if /api/embed endpoint has failed (for auto fallback)
+}
+
+// NewOllamaProviderFromEnvironment creates a new Ollama provider from environment variables.
+// It reads the following environment variables:
+//   - OLLAMA_HOST: The base URL for the Ollama instance (defaults to http://localhost:11434)
+//   - OLLAMA_API_KEY: The API key for cloud Ollama endpoints (optional, only needed for cloud)
+//
+// Example usage:
+//
+//	provider := ollama.NewOllamaProviderFromEnvironment()
+//	// Uses OLLAMA_HOST if set, otherwise defaults to http://localhost:11434
+//	// Uses OLLAMA_API_KEY if set for cloud authentication
+func NewOllamaProviderFromEnvironment() *OllamaProvider {
+	// Read environment variables
+	baseURL := os.Getenv("OLLAMA_HOST")
+	if baseURL == "" {
+		baseURL = "http://localhost:11434"
+	}
+
+	apiKey := os.Getenv("OLLAMA_API_KEY")
+
+	// Create config from environment
+	config := types.ProviderConfig{
+		Type:    types.ProviderTypeOllama,
+		Name:    "ollama",
+		BaseURL: baseURL,
+		APIKey:  apiKey,
+	}
+
+	return NewOllamaProvider(config)
 }
 
 // NewOllamaProvider creates a new Ollama provider
@@ -83,14 +128,23 @@ func NewOllamaProvider(config types.ProviderConfig) *OllamaProvider {
 		}
 	}
 
+	// Determine embeddings endpoint format from config
+	embeddingsEndpoint := EmbeddingsEndpointAuto // Default to auto (try new, fallback to legacy)
+	if mergedConfig.ProviderConfig != nil {
+		if endpoint, ok := mergedConfig.ProviderConfig["embeddings_endpoint"].(string); ok {
+			embeddingsEndpoint = EmbeddingsEndpoint(endpoint)
+		}
+	}
+
 	return &OllamaProvider{
-		BaseProvider:      base.NewBaseProvider("ollama", mergedConfig, client, log.Default()),
-		config:            mergedConfig,
-		httpClient:        client,
-		authHelper:        authHelper,
-		connectivityCache: common.NewDefaultConnectivityCache(),
-		modelCache:        models.NewModelCache(5 * time.Minute), // 5 minute TTL
-		streamEndpoint:    streamEndpoint,
+		BaseProvider:       base.NewBaseProvider("ollama", mergedConfig, client, log.Default()),
+		config:             mergedConfig,
+		httpClient:         client,
+		authHelper:         authHelper,
+		connectivityCache:  common.NewDefaultConnectivityCache(),
+		modelCache:         models.NewModelCache(5 * time.Minute), // 5 minute TTL
+		streamEndpoint:     streamEndpoint,
+		embeddingsEndpoint: embeddingsEndpoint,
 	}
 }
 
@@ -181,6 +235,11 @@ func (p *OllamaProvider) Configure(config types.ProviderConfig) error {
 	if mergedConfig.ProviderConfig != nil {
 		if endpoint, ok := mergedConfig.ProviderConfig["stream_endpoint"].(string); ok {
 			p.streamEndpoint = StreamEndpoint(endpoint)
+		}
+		if endpoint, ok := mergedConfig.ProviderConfig["embeddings_endpoint"].(string); ok {
+			p.embeddingsEndpoint = EmbeddingsEndpoint(endpoint)
+			// Reset the failed flag when configuration changes
+			p.embedEndpointFailed = false
 		}
 	}
 

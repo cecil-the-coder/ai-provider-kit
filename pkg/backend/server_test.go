@@ -8,83 +8,12 @@ import (
 	"time"
 
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/backendtypes"
+	"github.com/cecil-the-coder/ai-provider-kit/pkg/testutil"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 	"github.com/stretchr/testify/assert"
 )
 
-// MockProvider is a mock implementation of types.Provider for testing
-type MockProvider struct {
-	name          string
-	providerType  types.ProviderType
-	config        types.ProviderConfig
-	authenticated bool
-	healthErr     error
-	metrics       types.ProviderMetrics
-}
-
-func NewMockProvider(name string, providerType types.ProviderType) *MockProvider {
-	return &MockProvider{
-		name:          name,
-		providerType:  providerType,
-		authenticated: true,
-		config: types.ProviderConfig{
-			Name: name,
-			Type: providerType,
-		},
-		metrics: types.ProviderMetrics{
-			HealthStatus: types.HealthStatus{
-				Healthy:     true,
-				LastChecked: time.Now(),
-				Message:     "OK",
-			},
-		},
-	}
-}
-
-func (m *MockProvider) Name() string                    { return m.name }
-func (m *MockProvider) Type() types.ProviderType        { return m.providerType }
-func (m *MockProvider) Description() string             { return "Mock provider for testing" }
-func (m *MockProvider) GetConfig() types.ProviderConfig { return m.config }
-func (m *MockProvider) Configure(config types.ProviderConfig) error {
-	m.config = config
-	return nil
-}
-func (m *MockProvider) GetModels(ctx context.Context) ([]types.Model, error) {
-	return []types.Model{{ID: "test-model", Name: "Test Model"}}, nil
-}
-func (m *MockProvider) GetDefaultModel() string { return "test-model" }
-func (m *MockProvider) Authenticate(ctx context.Context, authConfig types.AuthConfig) error {
-	m.authenticated = true
-	return nil
-}
-func (m *MockProvider) IsAuthenticated() bool                 { return m.authenticated }
-func (m *MockProvider) Logout(ctx context.Context) error      { return nil }
-func (m *MockProvider) HealthCheck(ctx context.Context) error { return m.healthErr }
-func (m *MockProvider) GetMetrics() types.ProviderMetrics     { return m.metrics }
-func (m *MockProvider) SupportsToolCalling() bool             { return false }
-func (m *MockProvider) SupportsStreaming() bool               { return true }
-func (m *MockProvider) SupportsResponsesAPI() bool            { return false }
-func (m *MockProvider) GetToolFormat() types.ToolFormat       { return types.ToolFormatOpenAI }
-func (m *MockProvider) InvokeServerTool(ctx context.Context, toolName string, params interface{}) (interface{}, error) {
-	return nil, nil
-}
-func (m *MockProvider) GenerateChatCompletion(ctx context.Context, options types.GenerateOptions) (types.ChatCompletionStream, error) {
-	return &MockStream{}, nil
-}
-
-// MockStream is a mock implementation of types.ChatCompletionStream
-type MockStream struct {
-	closed bool
-}
-
-func (m *MockStream) Next() (types.ChatCompletionChunk, error) {
-	return types.ChatCompletionChunk{Content: "test", Done: true}, nil
-}
-
-func (m *MockStream) Close() error {
-	m.closed = true
-	return nil
-}
+// Note: MockProvider and MockStream have been moved to pkg/testutil
 
 // TestNewServer tests the NewServer function
 func TestNewServer(t *testing.T) {
@@ -107,7 +36,7 @@ func TestNewServer(t *testing.T) {
 		}
 
 		providers := map[string]types.Provider{
-			"test-provider": NewMockProvider("test-provider", types.ProviderTypeOpenAI),
+			"test-provider": testutil.NewMockProvider("test-provider", types.ProviderTypeOpenAI),
 		}
 
 		server := NewServer(config, providers)
@@ -129,9 +58,9 @@ func TestNewServer(t *testing.T) {
 		}
 
 		providers := map[string]types.Provider{
-			"openai":    NewMockProvider("openai", types.ProviderTypeOpenAI),
-			"anthropic": NewMockProvider("anthropic", types.ProviderTypeAnthropic),
-			"gemini":    NewMockProvider("gemini", types.ProviderTypeGemini),
+			"openai":    testutil.NewMockProvider("openai", types.ProviderTypeOpenAI),
+			"anthropic": testutil.NewMockProvider("anthropic", types.ProviderTypeAnthropic),
+			"gemini":    testutil.NewMockProvider("gemini", types.ProviderTypeGemini),
 		}
 
 		server := NewServer(config, providers)
@@ -178,7 +107,7 @@ func TestNewServer(t *testing.T) {
 		}
 
 		providers := map[string]types.Provider{
-			"test-provider": NewMockProvider("test-provider", types.ProviderTypeOpenAI),
+			"test-provider": testutil.NewMockProvider("test-provider", types.ProviderTypeOpenAI),
 		}
 
 		server := NewServer(config, providers)
@@ -199,7 +128,7 @@ func setupTestServer() *Server {
 	}
 
 	providers := map[string]types.Provider{
-		"test-provider": NewMockProvider("test-provider", types.ProviderTypeOpenAI),
+		"test-provider": testutil.NewMockProvider("test-provider", types.ProviderTypeOpenAI),
 	}
 
 	return NewServer(config, providers)
@@ -273,7 +202,7 @@ func TestServer_applyMiddleware(t *testing.T) {
 		}
 
 		providers := map[string]types.Provider{
-			"test-provider": NewMockProvider("test-provider", types.ProviderTypeOpenAI),
+			"test-provider": testutil.NewMockProvider("test-provider", types.ProviderTypeOpenAI),
 		}
 
 		server := NewServer(config, providers)
@@ -310,7 +239,7 @@ func TestServer_applyMiddleware(t *testing.T) {
 		}
 
 		providers := map[string]types.Provider{
-			"test-provider": NewMockProvider("test-provider", types.ProviderTypeOpenAI),
+			"test-provider": testutil.NewMockProvider("test-provider", types.ProviderTypeOpenAI),
 		}
 
 		server := NewServer(config, providers)
@@ -353,7 +282,7 @@ func TestServer_applyMiddleware(t *testing.T) {
 		}
 
 		providers := map[string]types.Provider{
-			"test-provider": NewMockProvider("test-provider", types.ProviderTypeOpenAI),
+			"test-provider": testutil.NewMockProvider("test-provider", types.ProviderTypeOpenAI),
 		}
 
 		server := NewServer(config, providers)
@@ -392,7 +321,7 @@ func TestServer_applyMiddleware(t *testing.T) {
 		}
 
 		providers := map[string]types.Provider{
-			"test-provider": NewMockProvider("test-provider", types.ProviderTypeOpenAI),
+			"test-provider": testutil.NewMockProvider("test-provider", types.ProviderTypeOpenAI),
 		}
 
 		server := NewServer(config, providers)
@@ -425,7 +354,7 @@ func TestServer_Shutdown(t *testing.T) {
 		}
 
 		providers := map[string]types.Provider{
-			"test-provider": NewMockProvider("test-provider", types.ProviderTypeOpenAI),
+			"test-provider": testutil.NewMockProvider("test-provider", types.ProviderTypeOpenAI),
 		}
 
 		server := NewServer(config, providers)
@@ -448,7 +377,7 @@ func TestServer_Shutdown(t *testing.T) {
 		}
 
 		providers := map[string]types.Provider{
-			"test-provider": NewMockProvider("test-provider", types.ProviderTypeOpenAI),
+			"test-provider": testutil.NewMockProvider("test-provider", types.ProviderTypeOpenAI),
 		}
 
 		server := NewServer(config, providers)
@@ -475,7 +404,7 @@ func TestServer_GetMethods(t *testing.T) {
 	}
 
 	providers := map[string]types.Provider{
-		"openai": NewMockProvider("openai", types.ProviderTypeOpenAI),
+		"openai": testutil.NewMockProvider("openai", types.ProviderTypeOpenAI),
 	}
 
 	server := NewServer(config, providers)
@@ -508,7 +437,7 @@ func TestServer_ExtensionManagement(t *testing.T) {
 	}
 
 	providers := map[string]types.Provider{
-		"test-provider": NewMockProvider("test-provider", types.ProviderTypeOpenAI),
+		"test-provider": testutil.NewMockProvider("test-provider", types.ProviderTypeOpenAI),
 	}
 
 	server := NewServer(config, providers)
@@ -534,7 +463,7 @@ func TestServer_ListenAndServeWithGracefulShutdown(t *testing.T) {
 		}
 
 		providers := map[string]types.Provider{
-			"test-provider": NewMockProvider("test-provider", types.ProviderTypeOpenAI),
+			"test-provider": testutil.NewMockProvider("test-provider", types.ProviderTypeOpenAI),
 		}
 
 		server := NewServer(config, providers)
@@ -570,7 +499,7 @@ func TestServer_ListenAndServeWithGracefulShutdown(t *testing.T) {
 		}
 
 		providers := map[string]types.Provider{
-			"test-provider": NewMockProvider("test-provider", types.ProviderTypeOpenAI),
+			"test-provider": testutil.NewMockProvider("test-provider", types.ProviderTypeOpenAI),
 		}
 
 		server := NewServer(config, providers)
@@ -633,8 +562,8 @@ func TestServer_Integration(t *testing.T) {
 	}
 
 	providers := map[string]types.Provider{
-		"openai":    NewMockProvider("openai", types.ProviderTypeOpenAI),
-		"anthropic": NewMockProvider("anthropic", types.ProviderTypeAnthropic),
+		"openai":    testutil.NewMockProvider("openai", types.ProviderTypeOpenAI),
+		"anthropic": testutil.NewMockProvider("anthropic", types.ProviderTypeAnthropic),
 	}
 
 	server := NewServer(config, providers)
@@ -690,7 +619,7 @@ func TestServer_ConcurrentRequests(t *testing.T) {
 	}
 
 	providers := map[string]types.Provider{
-		"test-provider": NewMockProvider("test-provider", types.ProviderTypeOpenAI),
+		"test-provider": testutil.NewMockProvider("test-provider", types.ProviderTypeOpenAI),
 	}
 
 	server := NewServer(config, providers)
@@ -727,7 +656,7 @@ func TestServer_ProviderRouting(t *testing.T) {
 	}
 
 	providers := map[string]types.Provider{
-		"provider1": NewMockProvider("provider1", types.ProviderTypeOpenAI),
+		"provider1": testutil.NewMockProvider("provider1", types.ProviderTypeOpenAI),
 	}
 
 	server := NewServer(config, providers)
@@ -758,7 +687,7 @@ func BenchmarkServer_NewServer(b *testing.B) {
 	}
 
 	providers := map[string]types.Provider{
-		"test-provider": NewMockProvider("test-provider", types.ProviderTypeOpenAI),
+		"test-provider": testutil.NewMockProvider("test-provider", types.ProviderTypeOpenAI),
 	}
 
 	b.ResetTimer()
@@ -778,7 +707,7 @@ func BenchmarkServer_HealthEndpoint(b *testing.B) {
 	}
 
 	providers := map[string]types.Provider{
-		"test-provider": NewMockProvider("test-provider", types.ProviderTypeOpenAI),
+		"test-provider": testutil.NewMockProvider("test-provider", types.ProviderTypeOpenAI),
 	}
 
 	server := NewServer(config, providers)
@@ -810,7 +739,7 @@ func BenchmarkServer_MiddlewareChain(b *testing.B) {
 	}
 
 	providers := map[string]types.Provider{
-		"test-provider": NewMockProvider("test-provider", types.ProviderTypeOpenAI),
+		"test-provider": testutil.NewMockProvider("test-provider", types.ProviderTypeOpenAI),
 	}
 
 	server := NewServer(config, providers)

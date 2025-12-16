@@ -20,6 +20,7 @@ import (
 	commonconfig "github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common/config"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common/models"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common/streaming"
+	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common/telemetry"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/ratelimit"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 )
@@ -234,6 +235,7 @@ func (p *AnthropicProvider) fetchModelsHelper(ctx context.Context, authType stri
 	// Use auth helper to set headers based on auth type
 	p.authHelper.SetAuthHeaders(req, credential, authType)
 	p.authHelper.SetProviderSpecificHeaders(req)
+	req.Header.Set("User-Agent", telemetry.GetUserAgent())
 
 	resp, err := p.client.Do(req)
 	if err != nil {
@@ -692,6 +694,7 @@ func (p *AnthropicProvider) makeAPICallWithKey(ctx context.Context, requestData 
 	p.authHelper.SetAuthHeaders(req, apiKey, "api_key")
 	p.authHelper.SetProviderSpecificHeaders(req)
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", telemetry.GetUserAgent())
 
 	p.LogRequest("POST", url, map[string]string{
 		"Content-Type":      "application/json",
@@ -796,6 +799,7 @@ func (p *AnthropicProvider) makeAPICallWithOAuthMessage(ctx context.Context, req
 	p.authHelper.SetAuthHeaders(req, accessToken, "oauth")
 	p.authHelper.SetProviderSpecificHeaders(req)
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", telemetry.GetUserAgent())
 
 	p.LogRequest("POST", url, map[string]string{
 		"Content-Type":      "application/json",
@@ -1095,6 +1099,7 @@ func (p *AnthropicProvider) testConnectivityWithModelsEndpoint(ctx context.Conte
 	// Set authentication headers
 	p.authHelper.SetAuthHeaders(req, credential, authType)
 	p.authHelper.SetProviderSpecificHeaders(req)
+	req.Header.Set("User-Agent", telemetry.GetUserAgent())
 
 	// Make the request with a shorter timeout for connectivity testing
 	client := &http.Client{
@@ -1187,6 +1192,7 @@ func (p *AnthropicProvider) testConnectivityWithMessagesAPI(ctx context.Context,
 	p.authHelper.SetAuthHeaders(req, accessToken, authType)
 	p.authHelper.SetProviderSpecificHeaders(req)
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", telemetry.GetUserAgent())
 
 	// Make the request with a shorter timeout for connectivity testing
 	client := &http.Client{

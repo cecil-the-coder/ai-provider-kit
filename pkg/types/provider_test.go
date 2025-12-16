@@ -706,7 +706,7 @@ func TestAuthConfig(t *testing.T) {
 // TestInterfaces tests that interface types can be implemented
 func TestInterfaces(t *testing.T) {
 	t.Run("TokenStorage", func(t *testing.T) {
-		storage := &MockTokenStorage{
+		storage := &mockTokenStorage{
 			tokens: make(map[string]*OAuthConfig),
 		}
 
@@ -739,12 +739,12 @@ func TestInterfaces(t *testing.T) {
 	})
 }
 
-// MockTokenStorage is a mock implementation of TokenStorage interface
-type MockTokenStorage struct {
+// mockTokenStorage is a local mock to avoid import cycle with testutil
+type mockTokenStorage struct {
 	tokens map[string]*OAuthConfig
 }
 
-func (m *MockTokenStorage) StoreToken(key string, token *OAuthConfig) error {
+func (m *mockTokenStorage) StoreToken(key string, token *OAuthConfig) error {
 	if m.tokens == nil {
 		m.tokens = make(map[string]*OAuthConfig)
 	}
@@ -752,19 +752,19 @@ func (m *MockTokenStorage) StoreToken(key string, token *OAuthConfig) error {
 	return nil
 }
 
-func (m *MockTokenStorage) RetrieveToken(key string) (*OAuthConfig, error) {
+func (m *mockTokenStorage) RetrieveToken(key string) (*OAuthConfig, error) {
 	if token, exists := m.tokens[key]; exists {
 		return token, nil
 	}
 	return nil, nil
 }
 
-func (m *MockTokenStorage) DeleteToken(key string) error {
+func (m *mockTokenStorage) DeleteToken(key string) error {
 	delete(m.tokens, key)
 	return nil
 }
 
-func (m *MockTokenStorage) ListTokens() ([]string, error) {
+func (m *mockTokenStorage) ListTokens() ([]string, error) {
 	keys := make([]string, 0, len(m.tokens))
 	for key := range m.tokens {
 		keys = append(keys, key)

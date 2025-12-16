@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common/telemetry"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 )
 
@@ -320,6 +321,7 @@ func (p *AnthropicProvider) StreamBatchResults(ctx context.Context, batchID stri
 	// Set authentication headers
 	p.authHelper.SetAuthHeaders(req, credential, authType)
 	p.authHelper.SetProviderSpecificHeaders(req)
+	req.Header.Set("User-Agent", telemetry.GetUserAgent())
 
 	// Make the request
 	resp, err := p.client.Do(req)
@@ -408,6 +410,7 @@ func (p *AnthropicProvider) makeBatchAPICallWithAuth(ctx context.Context, reques
 	p.authHelper.SetAuthHeaders(req, credential, authType)
 	p.authHelper.SetProviderSpecificHeaders(req)
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", telemetry.GetUserAgent())
 
 	// Make the request
 	resp, err := p.client.Do(req)
@@ -450,6 +453,7 @@ func (p *AnthropicProvider) makeBatchGetRequest(ctx context.Context, url, creden
 	// Set authentication headers
 	p.authHelper.SetAuthHeaders(req, credential, authType)
 	p.authHelper.SetProviderSpecificHeaders(req)
+	req.Header.Set("User-Agent", telemetry.GetUserAgent())
 
 	resp, err := p.client.Do(req)
 	if err != nil {
@@ -500,6 +504,7 @@ func (p *AnthropicProvider) makeBatchPostRequest(ctx context.Context, url string
 	p.authHelper.SetAuthHeaders(req, credential, authType)
 	p.authHelper.SetProviderSpecificHeaders(req)
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", telemetry.GetUserAgent())
 
 	resp, err := p.client.Do(req)
 	if err != nil {

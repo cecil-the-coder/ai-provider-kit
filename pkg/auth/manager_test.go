@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"github.com/cecil-the-coder/ai-provider-kit/pkg/testutil"
 	"context"
 	"errors"
 	"testing"
@@ -72,7 +73,7 @@ func TestAuthManagerBuilder(t *testing.T) {
 	})
 
 	t.Run("BuildWithAuthenticators", func(t *testing.T) {
-		auth := &MockAuthenticator{}
+		auth := testutil.NewMockAuthenticator()
 		builder := NewAuthManagerBuilder().WithAuthenticator("test", auth)
 		manager, err := builder.Build()
 		if err != nil {
@@ -93,7 +94,7 @@ func TestRegisterAuthenticator(t *testing.T) {
 	manager := NewAuthManager(NewMemoryTokenStorage(nil), nil)
 
 	t.Run("Success", func(t *testing.T) {
-		auth := &MockAuthenticator{}
+		auth := testutil.NewMockAuthenticator()
 		err := manager.RegisterAuthenticator("test", auth)
 		if err != nil {
 			t.Errorf("Expected no error, got: %v", err)
@@ -101,7 +102,7 @@ func TestRegisterAuthenticator(t *testing.T) {
 	})
 
 	t.Run("EmptyProvider", func(t *testing.T) {
-		auth := &MockAuthenticator{}
+		auth := testutil.NewMockAuthenticator()
 		err := manager.RegisterAuthenticator("", auth)
 		if err == nil {
 			t.Error("Expected error for empty provider")
@@ -120,7 +121,7 @@ func TestGetAuthenticator(t *testing.T) {
 	manager := NewAuthManager(NewMemoryTokenStorage(nil), nil)
 
 	t.Run("ExistingProvider", func(t *testing.T) {
-		auth := &MockAuthenticator{}
+		auth := testutil.NewMockAuthenticator()
 		_ = manager.RegisterAuthenticator("test", auth)
 
 		retrieved, err := manager.GetAuthenticator("test")
@@ -145,7 +146,7 @@ func TestAuthenticate(t *testing.T) {
 	manager := NewAuthManager(storage, nil)
 
 	t.Run("Success", func(t *testing.T) {
-		auth := &MockAuthenticator{}
+		auth := testutil.NewMockAuthenticator()
 		_ = manager.RegisterAuthenticator("test", auth)
 
 		config := types.AuthConfig{
@@ -159,7 +160,7 @@ func TestAuthenticate(t *testing.T) {
 			t.Errorf("Expected no error, got: %v", err)
 		}
 
-		if !auth.authenticated {
+		if !auth.IsAuthenticated() {
 			t.Error("Expected authenticator to be authenticated")
 		}
 	})
@@ -182,7 +183,7 @@ func TestIsAuthenticated(t *testing.T) {
 	manager := NewAuthManager(NewMemoryTokenStorage(nil), nil)
 
 	t.Run("AuthenticatedProvider", func(t *testing.T) {
-		auth := &MockAuthenticator{authenticated: true}
+		auth := testutil.NewMockAuthenticator()
 		_ = manager.RegisterAuthenticator("test", auth)
 
 		if !manager.IsAuthenticated("test") {
@@ -191,7 +192,7 @@ func TestIsAuthenticated(t *testing.T) {
 	})
 
 	t.Run("NotAuthenticatedProvider", func(t *testing.T) {
-		auth := &MockAuthenticator{authenticated: false}
+		auth := testutil.NewMockAuthenticator()
 		_ = manager.RegisterAuthenticator("test2", auth)
 
 		if manager.IsAuthenticated("test2") {
@@ -211,7 +212,7 @@ func TestLogout(t *testing.T) {
 	manager := NewAuthManager(storage, nil)
 
 	t.Run("Success", func(t *testing.T) {
-		auth := &MockAuthenticator{authenticated: true}
+		auth := testutil.NewMockAuthenticator()
 		_ = manager.RegisterAuthenticator("test", auth)
 
 		ctx := context.Background()
@@ -220,7 +221,7 @@ func TestLogout(t *testing.T) {
 			t.Errorf("Expected no error, got: %v", err)
 		}
 
-		if auth.authenticated {
+		if auth.IsAuthenticated() {
 			t.Error("Expected authenticator to be logged out")
 		}
 	})
@@ -247,9 +248,9 @@ func TestRefreshAllTokens(t *testing.T) {
 	})
 
 	t.Run("MultipleAuthenticators", func(t *testing.T) {
-		auth1 := &MockAuthenticator{authenticated: true}
-		auth2 := &MockAuthenticator{authenticated: true}
-		auth3 := &MockAuthenticator{authenticated: false}
+		auth1 := testutil.NewMockAuthenticator()
+		auth2 := testutil.NewMockAuthenticator()
+		auth3 := testutil.NewMockAuthenticator()
 
 		_ = manager.RegisterAuthenticator("test1", auth1)
 		_ = manager.RegisterAuthenticator("test2", auth2)
@@ -263,10 +264,8 @@ func TestRefreshAllTokens(t *testing.T) {
 	})
 
 	t.Run("WithRefreshError", func(t *testing.T) {
-		auth := &MockAuthenticator{
-			authenticated: true,
-			refreshError:  errors.New("refresh failed"),
-		}
+		auth := testutil.NewMockAuthenticator()
+		auth.SetRefreshError(errors.New("refresh failed"))
 		manager2 := NewAuthManager(storage, nil)
 		_ = manager2.RegisterAuthenticator("failing", auth)
 
@@ -289,9 +288,9 @@ func TestGetAuthenticatedProviders(t *testing.T) {
 	})
 
 	t.Run("MixedProviders", func(t *testing.T) {
-		auth1 := &MockAuthenticator{authenticated: true}
-		auth2 := &MockAuthenticator{authenticated: false}
-		auth3 := &MockAuthenticator{authenticated: true}
+		auth1 := testutil.NewMockAuthenticator()
+		auth2 := testutil.NewMockAuthenticator()
+		auth3 := testutil.NewMockAuthenticator()
 
 		_ = manager.RegisterAuthenticator("auth1", auth1)
 		_ = manager.RegisterAuthenticator("auth2", auth2)
@@ -307,8 +306,8 @@ func TestGetAuthenticatedProviders(t *testing.T) {
 func TestGetAuthStatus(t *testing.T) {
 	manager := NewAuthManager(NewMemoryTokenStorage(nil), nil)
 
-	auth1 := &MockAuthenticator{authenticated: true, authMethod: types.AuthMethodAPIKey}
-	auth2 := &MockAuthenticator{authenticated: false, authMethod: types.AuthMethodOAuth}
+	auth1 := testutil.NewMockAuthenticator()
+	auth2 := testutil.NewMockAuthenticator()
 
 	_ = manager.RegisterAuthenticator("test1", auth1)
 	_ = manager.RegisterAuthenticator("test2", auth2)
@@ -341,9 +340,9 @@ func TestForEachAuthenticated(t *testing.T) {
 	manager := NewAuthManager(NewMemoryTokenStorage(nil), nil)
 
 	t.Run("Success", func(t *testing.T) {
-		auth1 := &MockAuthenticator{authenticated: true}
-		auth2 := &MockAuthenticator{authenticated: false}
-		auth3 := &MockAuthenticator{authenticated: true}
+		auth1 := testutil.NewMockAuthenticator()
+		auth2 := testutil.NewMockAuthenticator()
+		auth3 := testutil.NewMockAuthenticator()
 
 		_ = manager.RegisterAuthenticator("test1", auth1)
 		_ = manager.RegisterAuthenticator("test2", auth2)
@@ -365,7 +364,7 @@ func TestForEachAuthenticated(t *testing.T) {
 	})
 
 	t.Run("WithError", func(t *testing.T) {
-		auth := &MockAuthenticator{authenticated: true}
+		auth := testutil.NewMockAuthenticator()
 		manager2 := NewAuthManager(NewMemoryTokenStorage(nil), nil)
 		_ = manager2.RegisterAuthenticator("test", auth)
 
@@ -405,7 +404,7 @@ func TestGetTokenInfo(t *testing.T) {
 	})
 
 	t.Run("NonOAuthAuthenticator", func(t *testing.T) {
-		auth := &MockAuthenticator{authenticated: true}
+		auth := testutil.NewMockAuthenticator()
 		_ = manager.RegisterAuthenticator("apikey", auth)
 
 		_, err := manager.GetTokenInfo("apikey")
@@ -448,7 +447,7 @@ func TestStartOAuthFlow(t *testing.T) {
 	})
 
 	t.Run("NonOAuthAuthenticator", func(t *testing.T) {
-		auth := &MockAuthenticator{}
+		auth := testutil.NewMockAuthenticator()
 		_ = manager.RegisterAuthenticator("apikey", auth)
 
 		ctx := context.Background()
@@ -465,7 +464,7 @@ func TestHandleOAuthCallback(t *testing.T) {
 	manager := NewAuthManager(storage, config)
 
 	t.Run("NonOAuthAuthenticator", func(t *testing.T) {
-		auth := &MockAuthenticator{}
+		auth := testutil.NewMockAuthenticator()
 		_ = manager.RegisterAuthenticator("apikey", auth)
 
 		ctx := context.Background()
@@ -487,9 +486,9 @@ func TestGetProviders(t *testing.T) {
 	})
 
 	t.Run("MultipleProviders", func(t *testing.T) {
-		_ = manager.RegisterAuthenticator("test1", &MockAuthenticator{})
-		_ = manager.RegisterAuthenticator("test2", &MockAuthenticator{})
-		_ = manager.RegisterAuthenticator("test3", &MockAuthenticator{})
+		_ = manager.RegisterAuthenticator("test1", testutil.NewMockAuthenticator())
+		_ = manager.RegisterAuthenticator("test2", testutil.NewMockAuthenticator())
+		_ = manager.RegisterAuthenticator("test3", testutil.NewMockAuthenticator())
 
 		providers := manager.GetProviders()
 		if len(providers) != 3 {
@@ -503,7 +502,7 @@ func TestRemoveAuthenticator(t *testing.T) {
 	manager := NewAuthManager(storage, nil)
 
 	t.Run("Success", func(t *testing.T) {
-		auth := &MockAuthenticator{authenticated: true}
+		auth := testutil.NewMockAuthenticator()
 		_ = manager.RegisterAuthenticator("test", auth)
 
 		err := manager.RemoveAuthenticator("test")
@@ -531,8 +530,8 @@ func TestClose(t *testing.T) {
 	config.TokenStorage.File.Backup.Enabled = false
 	manager := NewAuthManager(storage, config)
 
-	auth1 := &MockAuthenticator{authenticated: true}
-	auth2 := &MockAuthenticator{authenticated: true}
+	auth1 := testutil.NewMockAuthenticator()
+	auth2 := testutil.NewMockAuthenticator()
 
 	_ = manager.RegisterAuthenticator("test1", auth1)
 	_ = manager.RegisterAuthenticator("test2", auth2)
@@ -542,10 +541,10 @@ func TestClose(t *testing.T) {
 		t.Errorf("Expected no error, got: %v", err)
 	}
 
-	if auth1.authenticated {
+	if auth1.IsAuthenticated() {
 		t.Error("Expected auth1 to be logged out")
 	}
-	if auth2.authenticated {
+	if auth2.IsAuthenticated() {
 		t.Error("Expected auth2 to be logged out")
 	}
 }

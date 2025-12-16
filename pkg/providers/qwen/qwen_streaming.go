@@ -181,12 +181,16 @@ func (p *QwenProvider) executeStreamWithAuth(ctx context.Context, options types.
 func (p *QwenProvider) makeStreamingAPICall(ctx context.Context, url string, request QwenRequest, authToken string) (types.ChatCompletionStream, error) {
 	jsonBody, err := json.Marshal(request)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal request: %w", err)
+		return nil, types.NewInvalidRequestError(types.ProviderTypeQwen, "failed to marshal request").
+			WithOperation("chat_completion_stream").
+			WithOriginalErr(err)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonBody))
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
+		return nil, types.NewInvalidRequestError(types.ProviderTypeQwen, "failed to create request").
+			WithOperation("chat_completion_stream").
+			WithOriginalErr(err)
 	}
 
 	req.Header.Set("Content-Type", "application/json")
@@ -201,7 +205,9 @@ func (p *QwenProvider) makeStreamingAPICall(ctx context.Context, url string, req
 	startTime := time.Now()
 	resp, err := p.client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("request failed: %w", err)
+		return nil, types.NewNetworkError(types.ProviderTypeQwen, "request failed").
+			WithOperation("chat_completion_stream").
+			WithOriginalErr(err)
 	}
 
 	duration := time.Since(startTime)
@@ -213,7 +219,10 @@ func (p *QwenProvider) makeStreamingAPICall(ctx context.Context, url string, req
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		func() { _ = resp.Body.Close() }() //nolint:staticcheck // Empty branch is intentional - we ignore close errors
-		return nil, fmt.Errorf("qwen API error: %d - %s", resp.StatusCode, string(body))
+		errCode := types.ClassifyHTTPError(resp.StatusCode)
+		return nil, types.NewProviderError(types.ProviderTypeQwen, errCode, string(body)).
+			WithOperation("chat_completion_stream").
+			WithStatusCode(resp.StatusCode)
 	}
 
 	return &QwenRealStream{

@@ -1,6 +1,69 @@
 package ollama
 
+import (
+	"encoding/json"
+	"fmt"
+	"time"
+)
+
 // Type definitions for Ollama API requests and responses
+
+// Duration is a wrapper around time.Duration that marshals/unmarshals
+// to Ollama's expected duration format (e.g., "5m", "300s", "-1", "0")
+type Duration struct {
+	time.Duration
+}
+
+// MarshalJSON converts Duration to Ollama's expected format
+func (d Duration) MarshalJSON() ([]byte, error) {
+	// Zero value means don't include in request (use server default)
+	if d.Duration == 0 {
+		return []byte("null"), nil
+	}
+
+	// Special case: negative duration (-1) means keep forever
+	if d.Duration < 0 {
+		return json.Marshal("-1")
+	}
+
+	// Convert to string format (e.g., "5m0s", "300s")
+	return json.Marshal(d.Duration.String())
+}
+
+// UnmarshalJSON parses Ollama's duration format
+func (d *Duration) UnmarshalJSON(b []byte) error {
+	var v interface{}
+	if err := json.Unmarshal(b, &v); err != nil {
+		return err
+	}
+
+	switch value := v.(type) {
+	case string:
+		// Handle special case: "-1" means keep forever
+		if value == "-1" {
+			d.Duration = -1
+			return nil
+		}
+
+		// Parse standard duration format (e.g., "5m", "300s")
+		dur, err := time.ParseDuration(value)
+		if err != nil {
+			return fmt.Errorf("invalid duration format: %w", err)
+		}
+		d.Duration = dur
+		return nil
+	case float64:
+		// Handle numeric values (nanoseconds)
+		d.Duration = time.Duration(value)
+		return nil
+	case nil:
+		// Null value means use default
+		d.Duration = 0
+		return nil
+	default:
+		return fmt.Errorf("invalid duration type: %T", v)
+	}
+}
 
 // ollamaTagsResponse represents the response from /api/tags endpoint
 type ollamaTagsResponse struct {
@@ -45,12 +108,13 @@ type ollamaRunningModel struct {
 
 // ollamaChatRequest represents a request to Ollama /api/chat endpoint
 type ollamaChatRequest struct {
-	Model    string                 `json:"model"`
-	Messages []ollamaChatMessage    `json:"messages"`
-	Stream   bool                   `json:"stream"`
-	Tools    []ollamaTool           `json:"tools,omitempty"`
-	Format   interface{}            `json:"format,omitempty"` // Can be "json" string or JSON schema object
-	Options  map[string]interface{} `json:"options,omitempty"`
+	Model     string                 `json:"model"`
+	Messages  []ollamaChatMessage    `json:"messages"`
+	Stream    bool                   `json:"stream"`
+	Tools     []ollamaTool           `json:"tools,omitempty"`
+	Format    interface{}            `json:"format,omitempty"` // Can be "json" string or JSON schema object
+	Options   map[string]interface{} `json:"options,omitempty"`
+	KeepAlive *Duration              `json:"keep_alive,omitempty"` // Controls model memory management
 }
 
 // ollamaChatMessage represents a message in the Ollama chat API
@@ -103,15 +167,36 @@ type ollamaChatResponse struct {
 	EvalDuration       int64 `json:"eval_duration,omitempty"`
 }
 
-// ollamaEmbeddingsRequest represents a request to Ollama /api/embeddings endpoint
+// ollamaEmbeddingsRequest represents a request to Ollama legacy /api/embeddings endpoint
 type ollamaEmbeddingsRequest struct {
-	Model  string `json:"model"`
-	Prompt string `json:"prompt"`
+	Model     string                 `json:"model"`
+	Prompt    string                 `json:"prompt"`
+	KeepAlive *Duration              `json:"keep_alive,omitempty"`
+	Options   map[string]interface{} `json:"options,omitempty"`
 }
 
-// ollamaEmbeddingsResponse represents a response from Ollama /api/embeddings endpoint
+// ollamaEmbeddingsResponse represents a response from Ollama legacy /api/embeddings endpoint
 type ollamaEmbeddingsResponse struct {
 	Embedding []float64 `json:"embedding"`
+}
+
+// ollamaEmbedRequest represents a request to Ollama new /api/embed endpoint (supports batching)
+type ollamaEmbedRequest struct {
+	Model      string                 `json:"model"`
+	Input      interface{}            `json:"input"` // Can be string or []string for batch
+	KeepAlive  *Duration              `json:"keep_alive,omitempty"`
+	Truncate   *bool                  `json:"truncate,omitempty"`
+	Dimensions int                    `json:"dimensions,omitempty"`
+	Options    map[string]interface{} `json:"options,omitempty"`
+}
+
+// ollamaEmbedResponse represents a response from Ollama new /api/embed endpoint (supports batching)
+type ollamaEmbedResponse struct {
+	Model           string      `json:"model"`
+	Embeddings      [][]float32 `json:"embeddings"`
+	TotalDuration   int64       `json:"total_duration,omitempty"` // in nanoseconds
+	LoadDuration    int64       `json:"load_duration,omitempty"`  // in nanoseconds
+	PromptEvalCount int         `json:"prompt_eval_count,omitempty"`
 }
 
 // ollamaModelRequest represents a request for model operations (pull/push)

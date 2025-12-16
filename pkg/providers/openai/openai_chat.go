@@ -12,6 +12,7 @@ import (
 
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common/streaming"
+	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common/telemetry"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 )
 
@@ -296,6 +297,7 @@ func (p *OpenAIProvider) makeAPICallInternal(ctx context.Context, requestData Op
 	req.Header.Set("Content-Type", "application/json")
 	p.authHelper.SetAuthHeaders(req, apiKey, "api_key")
 	p.authHelper.SetProviderSpecificHeaders(req)
+	req.Header.Set("User-Agent", telemetry.GetUserAgent())
 
 	// Log request (for debugging)
 	p.LogRequest("POST", url, map[string]string{

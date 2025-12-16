@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cecil-the-coder/ai-provider-kit/pkg/testutil"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -174,11 +175,7 @@ func TestScenario5_PerformanceAndReliability(t *testing.T) {
 				// Factory operations
 				providerType := types.ProviderType(fmt.Sprintf("thread-test-%d", id))
 				factory.RegisterProvider(providerType, func(config types.ProviderConfig) types.Provider {
-					return &MockProvider{
-						name:         config.Name,
-						providerType: providerType,
-						config:       config,
-					}
+					return testutil.NewMockProvider(config.Name, providerType)
 				})
 
 				config := types.ProviderConfig{

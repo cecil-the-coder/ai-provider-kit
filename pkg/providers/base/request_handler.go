@@ -9,6 +9,7 @@ import (
 	"net/http"
 
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common/auth"
+	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common/telemetry"
 )
 
 // RequestHandler interface for executing HTTP requests with authentication
@@ -66,6 +67,11 @@ func (h *DefaultRequestHandler) ExecuteRequest(ctx context.Context, method, url 
 	// Set custom headers
 	for key, value := range headers {
 		req.Header.Set(key, value)
+	}
+
+	// Set User-Agent header if not already set
+	if req.Header.Get("User-Agent") == "" {
+		req.Header.Set("User-Agent", telemetry.GetUserAgent())
 	}
 
 	// Set Content-Type if body is present and not already set
@@ -132,6 +138,11 @@ func (h *DefaultRequestHandler) ExecuteAuthenticatedRequest(ctx context.Context,
 	// Use auth helper to set headers
 	h.authHelper.SetAuthHeaders(req, authToken, authType)
 	h.authHelper.SetProviderSpecificHeaders(req)
+
+	// Set User-Agent header if not already set
+	if req.Header.Get("User-Agent") == "" {
+		req.Header.Set("User-Agent", telemetry.GetUserAgent())
+	}
 
 	// Set Content-Type
 	if body != nil {

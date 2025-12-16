@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cecil-the-coder/ai-provider-kit/pkg/testutil"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -19,11 +20,7 @@ func TestScenario1_CompleteProviderWorkflow(t *testing.T) {
 	// Register a custom provider
 	customProviderType := types.ProviderType("custom-test")
 	factory.RegisterProvider(customProviderType, func(config types.ProviderConfig) types.Provider {
-		return &MockProvider{
-			name:         config.Name,
-			providerType: customProviderType,
-			config:       config,
-		}
+		return testutil.NewMockProvider(config.Name, customProviderType)
 	})
 
 	// Test factory supports our custom provider

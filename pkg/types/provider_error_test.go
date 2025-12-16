@@ -1,10 +1,14 @@
 package types
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
+	"strings"
 	"testing"
+	"time"
 )
 
 func TestProviderError_Error(t *testing.T) {
@@ -389,5 +393,399 @@ func TestProviderError_NilOriginalErr(t *testing.T) {
 
 	if err.Unwrap() != nil {
 		t.Error("Unwrap() should return nil when OriginalErr is not set")
+	}
+}
+
+func TestProviderError_WithRequestDump(t *testing.T) {
+	err := NewProviderError(ProviderTypeOpenAI, ErrCodeUnknown, "test")
+	dump := "POST /v1/chat/completions HTTP/1.1\nAuthorization: Bearer sk-1234"
+
+	result := err.WithRequestDump(dump)
+
+	if result != err {
+		t.Error("WithRequestDump should return the same error instance")
+	}
+	if err.RequestDump != dump {
+		t.Errorf("RequestDump = %v, want %v", err.RequestDump, dump)
+	}
+}
+
+func TestProviderError_WithResponseDump(t *testing.T) {
+	err := NewProviderError(ProviderTypeOpenAI, ErrCodeUnknown, "test")
+	dump := "HTTP/1.1 401 Unauthorized\nContent-Type: application/json"
+
+	result := err.WithResponseDump(dump)
+
+	if result != err {
+		t.Error("WithResponseDump should return the same error instance")
+	}
+	if err.ResponseDump != dump {
+		t.Errorf("ResponseDump = %v, want %v", err.ResponseDump, dump)
+	}
+}
+
+func TestProviderError_WithRequestLatency(t *testing.T) {
+	err := NewProviderError(ProviderTypeOpenAI, ErrCodeUnknown, "test")
+	latency := 250 * time.Millisecond
+
+	result := err.WithRequestLatency(latency)
+
+	if result != err {
+		t.Error("WithRequestLatency should return the same error instance")
+	}
+	if err.RequestLatency != latency {
+		t.Errorf("RequestLatency = %v, want %v", err.RequestLatency, latency)
+	}
+}
+
+func TestProviderError_WithCorrelationID(t *testing.T) {
+	err := NewProviderError(ProviderTypeOpenAI, ErrCodeUnknown, "test")
+	correlationID := "corr-12345"
+
+	result := err.WithCorrelationID(correlationID)
+
+	if result != err {
+		t.Error("WithCorrelationID should return the same error instance")
+	}
+	if err.CorrelationID != correlationID {
+		t.Errorf("CorrelationID = %v, want %v", err.CorrelationID, correlationID)
+	}
+}
+
+func TestProviderError_DumpRequest(t *testing.T) {
+	tests := []struct {
+		name           string
+		setupReq       func() *http.Request
+		wantContain    []string
+		wantNotContain []string
+	}{
+		{
+			name: "masks bearer token",
+			setupReq: func() *http.Request {
+				req, _ := http.NewRequest("POST", "https://api.openai.com/v1/chat/completions", nil)
+				req.Header.Set("Authorization", "Bearer sk-1234567890abcdef")
+				return req
+			},
+			wantContain:    []string{"Authorization:", "***MASKED***"},
+			wantNotContain: []string{"sk-1234567890abcdef"},
+		},
+		{
+			name: "masks API key header",
+			setupReq: func() *http.Request {
+				req, _ := http.NewRequest("POST", "https://api.anthropic.com/v1/messages", nil)
+				req.Header.Set("X-Api-Key", "sk-ant-api-key-secret")
+				return req
+			},
+			wantContain:    []string{"X-Api-Key:", "***MASKED***"},
+			wantNotContain: []string{"sk-ant-api-key-secret"},
+		},
+		{
+			name: "masks generic API key",
+			setupReq: func() *http.Request {
+				req, _ := http.NewRequest("GET", "https://api.example.com/models", nil)
+				req.Header.Set("Api-Key", "my-secret-key")
+				return req
+			},
+			wantContain:    []string{"Api-Key:", "***MASKED***"},
+			wantNotContain: []string{"my-secret-key"},
+		},
+		{
+			name: "nil request",
+			setupReq: func() *http.Request {
+				return nil
+			},
+			wantContain:    []string{},
+			wantNotContain: []string{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := NewProviderError(ProviderTypeOpenAI, ErrCodeUnknown, "test")
+			req := tt.setupReq()
+
+			result := err.DumpRequest(req)
+
+			if result != err {
+				t.Error("DumpRequest should return the same error instance")
+			}
+
+			if req == nil && err.RequestDump != "" {
+				t.Error("RequestDump should be empty for nil request")
+				return
+			}
+
+			if req != nil {
+				for _, want := range tt.wantContain {
+					if !strings.Contains(err.RequestDump, want) {
+						t.Errorf("RequestDump should contain %q, got: %s", want, err.RequestDump)
+					}
+				}
+
+				for _, notWant := range tt.wantNotContain {
+					if strings.Contains(err.RequestDump, notWant) {
+						t.Errorf("RequestDump should not contain %q, got: %s", notWant, err.RequestDump)
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestProviderError_DumpResponse(t *testing.T) {
+	tests := []struct {
+		name        string
+		setupResp   func() *http.Response
+		wantContain []string
+	}{
+		{
+			name: "dumps response correctly",
+			setupResp: func() *http.Response {
+				return &http.Response{
+					StatusCode: 401,
+					Status:     "401 Unauthorized",
+					Proto:      "HTTP/1.1",
+					ProtoMajor: 1,
+					ProtoMinor: 1,
+					Header: http.Header{
+						"Content-Type": []string{"application/json"},
+					},
+					Body: io.NopCloser(bytes.NewBufferString(`{"error":"invalid_api_key"}`)),
+				}
+			},
+			wantContain: []string{"401", "application/json"},
+		},
+		{
+			name: "nil response",
+			setupResp: func() *http.Response {
+				return nil
+			},
+			wantContain: []string{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := NewProviderError(ProviderTypeOpenAI, ErrCodeUnknown, "test")
+			resp := tt.setupResp()
+
+			result := err.DumpResponse(resp)
+
+			if result != err {
+				t.Error("DumpResponse should return the same error instance")
+			}
+
+			if resp == nil && err.ResponseDump != "" {
+				t.Error("ResponseDump should be empty for nil response")
+				return
+			}
+
+			if resp != nil {
+				for _, want := range tt.wantContain {
+					if !strings.Contains(err.ResponseDump, want) {
+						t.Errorf("ResponseDump should contain %q, got: %s", want, err.ResponseDump)
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestMaskCredentials(t *testing.T) {
+	tests := []struct {
+		name          string
+		input         string
+		wantMasked    []string
+		wantNotMasked []string
+	}{
+		{
+			name:          "bearer token",
+			input:         "Authorization: Bearer sk-1234567890abcdef\r\n",
+			wantMasked:    []string{"sk-1234567890abcdef"},
+			wantNotMasked: []string{"Authorization:", "Bearer", "***MASKED***"},
+		},
+		{
+			name:          "api key header",
+			input:         "X-Api-Key: sk-ant-secret-key\r\n",
+			wantMasked:    []string{"sk-ant-secret-key"},
+			wantNotMasked: []string{"X-Api-Key:", "***MASKED***"},
+		},
+		{
+			name:          "json api key",
+			input:         `{"api_key": "secret123", "model": "gpt-4"}`,
+			wantMasked:    []string{"secret123"},
+			wantNotMasked: []string{`"api_key"`, "***MASKED***", "gpt-4"},
+		},
+		{
+			name:          "json password",
+			input:         `{"username": "user", "password": "pass123"}`,
+			wantMasked:    []string{"pass123"},
+			wantNotMasked: []string{`"password"`, "***MASKED***", "user"},
+		},
+		{
+			name:          "multiple headers",
+			input:         "Authorization: Bearer token1\r\nX-API-KEY: key2\r\nContent-Type: application/json\r\n",
+			wantMasked:    []string{"token1", "key2"},
+			wantNotMasked: []string{"Authorization:", "X-API-KEY:", "***MASKED***", "Content-Type:", "application/json"},
+		},
+		{
+			name:          "case insensitive",
+			input:         "authorization: bearer SECRET\r\napi-key: KEY\r\n",
+			wantMasked:    []string{"SECRET", "KEY"},
+			wantNotMasked: []string{"***MASKED***"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := maskCredentials(tt.input)
+
+			for _, masked := range tt.wantMasked {
+				if strings.Contains(result, masked) {
+					t.Errorf("Result should not contain masked value %q, got: %s", masked, result)
+				}
+			}
+
+			for _, notMasked := range tt.wantNotMasked {
+				if !strings.Contains(result, notMasked) {
+					t.Errorf("Result should contain %q, got: %s", notMasked, result)
+				}
+			}
+		})
+	}
+}
+
+func TestProviderError_GetDebugInfo(t *testing.T) {
+	originalErr := errors.New("connection refused")
+	err := NewAuthError(ProviderTypeOpenAI, "invalid API key").
+		WithOperation("chat_completion").
+		WithStatusCode(401).
+		WithOriginalErr(originalErr).
+		WithRequestID("req-123").
+		WithRequestLatency(250 * time.Millisecond).
+		WithCorrelationID("corr-456").
+		WithRequestDump("POST /v1/chat HTTP/1.1\nAuthorization: Bearer ***MASKED***").
+		WithResponseDump("HTTP/1.1 401 Unauthorized")
+
+	debugInfo := err.GetDebugInfo()
+
+	// Check that all expected fields are present
+	expectedFields := []string{
+		"[openai]",
+		"invalid API key",
+		"authentication",
+		"chat_completion",
+		"req-123",
+		"corr-456",
+		"250ms",
+		"Request Dump",
+		"Response Dump",
+		"connection refused",
+	}
+
+	for _, field := range expectedFields {
+		if !strings.Contains(debugInfo, field) {
+			t.Errorf("GetDebugInfo should contain %q, got: %s", field, debugInfo)
+		}
+	}
+}
+
+func TestProviderError_FullChaining(t *testing.T) {
+	// Test that all new methods can be chained together
+	originalErr := errors.New("timeout")
+	err := NewTimeoutError(ProviderTypeAnthropic, "request timeout").
+		WithOperation("chat_completion").
+		WithStatusCode(504).
+		WithOriginalErr(originalErr).
+		WithRequestID("req-789").
+		WithRetryAfter(30).
+		WithRequestDump("POST /v1/messages HTTP/1.1").
+		WithResponseDump("HTTP/1.1 504 Gateway Timeout").
+		WithRequestLatency(5 * time.Second).
+		WithCorrelationID("corr-abc")
+
+	// Verify all fields are set
+	if err.Operation != "chat_completion" {
+		t.Errorf("Operation = %v, want chat_completion", err.Operation)
+	}
+	if err.StatusCode != 504 {
+		t.Errorf("StatusCode = %v, want 504", err.StatusCode)
+	}
+	if err.OriginalErr != originalErr {
+		t.Errorf("OriginalErr = %v, want %v", err.OriginalErr, originalErr)
+	}
+	if err.RequestID != "req-789" {
+		t.Errorf("RequestID = %v, want req-789", err.RequestID)
+	}
+	if err.RetryAfter != 30 {
+		t.Errorf("RetryAfter = %v, want 30", err.RetryAfter)
+	}
+	if err.RequestDump != "POST /v1/messages HTTP/1.1" {
+		t.Errorf("RequestDump = %v, want POST /v1/messages HTTP/1.1", err.RequestDump)
+	}
+	if err.ResponseDump != "HTTP/1.1 504 Gateway Timeout" {
+		t.Errorf("ResponseDump = %v, want HTTP/1.1 504 Gateway Timeout", err.ResponseDump)
+	}
+	if err.RequestLatency != 5*time.Second {
+		t.Errorf("RequestLatency = %v, want 5s", err.RequestLatency)
+	}
+	if err.CorrelationID != "corr-abc" {
+		t.Errorf("CorrelationID = %v, want corr-abc", err.CorrelationID)
+	}
+}
+
+func TestProviderError_BackwardCompatibility(t *testing.T) {
+	// Test that existing code still works without new fields
+	err := NewProviderError(ProviderTypeCerebras, ErrCodeInvalidRequest, "test").
+		WithOperation("list_models").
+		WithStatusCode(400)
+
+	if err.Provider != ProviderTypeCerebras {
+		t.Errorf("Provider = %v, want %v", err.Provider, ProviderTypeCerebras)
+	}
+	if err.Code != ErrCodeInvalidRequest {
+		t.Errorf("Code = %v, want %v", err.Code, ErrCodeInvalidRequest)
+	}
+	if err.Message != "test" {
+		t.Errorf("Message = %v, want test", err.Message)
+	}
+
+	// New fields should have zero values
+	if err.RequestDump != "" {
+		t.Error("RequestDump should be empty by default")
+	}
+	if err.ResponseDump != "" {
+		t.Error("ResponseDump should be empty by default")
+	}
+	if err.RequestLatency != 0 {
+		t.Error("RequestLatency should be zero by default")
+	}
+	if err.CorrelationID != "" {
+		t.Error("CorrelationID should be empty by default")
+	}
+}
+
+func TestProviderError_DumpRequestWithBody(t *testing.T) {
+	// Test request dump with body content
+	body := `{"model": "gpt-4", "api_key": "secret123"}`
+	req, _ := http.NewRequest("POST", "https://api.openai.com/v1/chat/completions", bytes.NewBufferString(body))
+	req.Header.Set("Authorization", "Bearer sk-secret")
+	req.Header.Set("Content-Type", "application/json")
+
+	err := NewProviderError(ProviderTypeOpenAI, ErrCodeUnknown, "test")
+	_ = err.DumpRequest(req)
+
+	// Check that sensitive data in both headers and body is masked
+	if strings.Contains(err.RequestDump, "sk-secret") {
+		t.Error("RequestDump should not contain unmasked bearer token")
+	}
+	if strings.Contains(err.RequestDump, "secret123") {
+		t.Error("RequestDump should not contain unmasked api_key from body")
+	}
+	if !strings.Contains(err.RequestDump, "***MASKED***") {
+		t.Error("RequestDump should contain masked values")
+	}
+	if !strings.Contains(err.RequestDump, "gpt-4") {
+		t.Error("RequestDump should preserve non-sensitive data")
 	}
 }

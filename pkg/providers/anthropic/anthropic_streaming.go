@@ -10,6 +10,7 @@ import (
 
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common/auth"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common/streaming"
+	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common/telemetry"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 )
 
@@ -92,6 +93,7 @@ func (p *AnthropicProvider) makeStreamingAPICallWithKey(ctx context.Context, req
 	p.authHelper.SetAuthHeaders(req, apiKey, "api_key")
 	p.authHelper.SetProviderSpecificHeaders(req)
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", telemetry.GetUserAgent())
 
 	resp, err := p.client.Do(req)
 	if err != nil {
@@ -159,6 +161,7 @@ func (p *AnthropicProvider) makeStreamingAPICallWithOAuth(ctx context.Context, r
 	p.authHelper.SetAuthHeaders(req, accessToken, "oauth")
 	p.authHelper.SetProviderSpecificHeaders(req)
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", telemetry.GetUserAgent())
 
 	resp, err := p.client.Do(req)
 	if err != nil {

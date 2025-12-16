@@ -17,6 +17,7 @@ import (
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common/auth"
 	commonconfig "github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common/config"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common/models"
+	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common/telemetry"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/ratelimit"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 )
@@ -143,6 +144,7 @@ func (p *OpenAIProvider) fetchModelsFromAPI(ctx context.Context) ([]types.Model,
 
 	// Use auth helper to set headers
 	p.authHelper.SetAuthHeaders(req, keys[0], "api_key")
+	req.Header.Set("User-Agent", telemetry.GetUserAgent())
 
 	resp, err := p.client.Do(req)
 	if err != nil {
@@ -369,6 +371,7 @@ func (p *OpenAIProvider) performConnectivityTest(ctx context.Context) error {
 
 	// Set authentication headers
 	p.authHelper.SetAuthHeaders(req, apiKey, "api_key")
+	req.Header.Set("User-Agent", telemetry.GetUserAgent())
 
 	// Make the request with a shorter timeout for connectivity testing
 	client := &http.Client{

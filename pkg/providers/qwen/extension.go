@@ -224,11 +224,13 @@ func (e *QwenExtension) handleCustomGenerationParams(req *QwenRequest, metadata 
 func (e *QwenExtension) ProviderToStandard(response interface{}) (*types.StandardResponse, error) {
 	qwenResp, ok := response.(*QwenResponse)
 	if !ok {
-		return nil, fmt.Errorf("response is not a Qwen response")
+		return nil, types.NewInvalidRequestError(types.ProviderTypeQwen, "response is not a Qwen response").
+			WithOperation("convert_response")
 	}
 
 	if len(qwenResp.Choices) == 0 {
-		return nil, fmt.Errorf("no choices in Qwen API response")
+		return nil, types.NewInvalidRequestError(types.ProviderTypeQwen, "no choices in Qwen API response").
+			WithOperation("convert_response")
 	}
 
 	choice := qwenResp.Choices[0]
@@ -285,11 +287,13 @@ func (e *QwenExtension) ProviderToStandard(response interface{}) (*types.Standar
 func (e *QwenExtension) ProviderToStandardChunk(chunk interface{}) (*types.StandardStreamChunk, error) {
 	qwenChunk, ok := chunk.(*QwenResponse)
 	if !ok {
-		return nil, fmt.Errorf("chunk is not a Qwen stream response")
+		return nil, types.NewInvalidRequestError(types.ProviderTypeQwen, "chunk is not a Qwen stream response").
+			WithOperation("convert_stream_chunk")
 	}
 
 	if len(qwenChunk.Choices) == 0 {
-		return nil, fmt.Errorf("no choices in Qwen stream chunk")
+		return nil, types.NewInvalidRequestError(types.ProviderTypeQwen, "no choices in Qwen stream chunk").
+			WithOperation("convert_stream_chunk")
 	}
 
 	choice := qwenChunk.Choices[0]
@@ -374,14 +378,16 @@ func (e *QwenExtension) validateBasicParameters(options map[string]interface{}) 
 	// Validate temperature if provided
 	if temperature, ok := options["temperature"].(float64); ok {
 		if temperature < 0 || temperature > 2 {
-			return fmt.Errorf("temperature must be between 0 and 2")
+			return types.NewInvalidRequestError(types.ProviderTypeQwen, "temperature must be between 0 and 2").
+				WithOperation("validate_options")
 		}
 	}
 
 	// Validate max_tokens if provided
 	if maxTokens, ok := options["max_tokens"].(int); ok {
 		if maxTokens < 1 || maxTokens > 32768 {
-			return fmt.Errorf("max_tokens must be between 1 and 32768")
+			return types.NewInvalidRequestError(types.ProviderTypeQwen, "max_tokens must be between 1 and 32768").
+				WithOperation("validate_options")
 		}
 	}
 
@@ -400,7 +406,8 @@ func (e *QwenExtension) validateLanguageSettings(options map[string]interface{})
 			}
 		}
 		if !valid {
-			return fmt.Errorf("language must be one of: %v", validLanguages)
+			return types.NewInvalidRequestError(types.ProviderTypeQwen, fmt.Sprintf("language must be one of: %v", validLanguages)).
+				WithOperation("validate_options")
 		}
 	}
 
@@ -412,21 +419,24 @@ func (e *QwenExtension) validateModeSpecificSettings(options map[string]interfac
 	// Validate chinese_mode
 	if chineseMode, ok := options["chinese_mode"].(bool); ok && chineseMode {
 		if temperature, ok := options["temperature"].(float64); ok && temperature > 1.5 {
-			return fmt.Errorf("temperature should be <= 1.5 for chinese mode")
+			return types.NewInvalidRequestError(types.ProviderTypeQwen, "temperature should be <= 1.5 for chinese mode").
+				WithOperation("validate_options")
 		}
 	}
 
 	// Validate code_generation mode
 	if codeGen, ok := options["code_generation"].(bool); ok && codeGen {
 		if temperature, ok := options["temperature"].(float64); ok && temperature > 0.5 {
-			return fmt.Errorf("temperature should be <= 0.5 for code generation mode")
+			return types.NewInvalidRequestError(types.ProviderTypeQwen, "temperature should be <= 0.5 for code generation mode").
+				WithOperation("validate_options")
 		}
 	}
 
 	// Validate long_context mode
 	if longContext, ok := options["long_context"].(bool); ok && longContext {
 		if maxTokens, ok := options["max_tokens"].(int); ok && maxTokens < 8192 {
-			return fmt.Errorf("max_tokens should be >= 8192 for long context mode")
+			return types.NewInvalidRequestError(types.ProviderTypeQwen, "max_tokens should be >= 8192 for long context mode").
+				WithOperation("validate_options")
 		}
 	}
 

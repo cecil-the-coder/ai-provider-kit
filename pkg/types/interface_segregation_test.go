@@ -7,12 +7,14 @@ import (
 )
 
 // MockProvider implements all interfaces for testing
+// Kept local to avoid import cycle with testutil
 type MockProvider struct {
 	name         string
 	providerType ProviderType
 	description  string
 	models       []Model
 	isHealthy    bool
+	healthErr    error
 }
 
 func (m *MockProvider) Name() string                                                  { return m.name }
@@ -36,12 +38,28 @@ func (m *MockProvider) SupportsStreaming() bool    { return true }
 func (m *MockProvider) SupportsResponsesAPI() bool { return false }
 func (m *MockProvider) GetToolFormat() ToolFormat  { return ToolFormatOpenAI }
 func (m *MockProvider) HealthCheck(ctx context.Context) error {
+	if m.healthErr != nil {
+		return m.healthErr
+	}
 	if !m.isHealthy {
 		return fmt.Errorf("provider is unhealthy")
 	}
 	return nil
 }
 func (m *MockProvider) GetMetrics() ProviderMetrics { return ProviderMetrics{} }
+
+func (m *MockProvider) SetDescription(description string) {
+	m.description = description
+}
+
+func (m *MockProvider) SetModels(models []Model) {
+	m.models = models
+}
+
+func (m *MockProvider) SetHealthy(healthy bool, err error) {
+	m.isHealthy = healthy
+	m.healthErr = err
+}
 
 type MockStream struct{}
 
@@ -68,7 +86,7 @@ func TestInterfaceSegregation(t *testing.T) {
 
 // createMockProvider creates a mock provider for testing
 func createMockProvider() *MockProvider {
-	return &MockProvider{
+	mock := &MockProvider{
 		name:         "test-provider",
 		providerType: ProviderTypeOpenAI,
 		description:  "Test provider for interface segregation",
@@ -78,6 +96,7 @@ func createMockProvider() *MockProvider {
 		},
 		isHealthy: true,
 	}
+	return mock
 }
 
 // testCoreProvider tests the CoreProvider interface
@@ -263,6 +282,7 @@ func TestHealthMonitoringService(t *testing.T) {
 		providerType: ProviderTypeAnthropic,
 		description:  "Unhealthy provider",
 		isHealthy:    false,
+		healthErr:    fmt.Errorf("provider is unhealthy"),
 	}
 
 	service.AddProvider(healthyMock)

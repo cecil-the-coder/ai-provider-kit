@@ -68,12 +68,7 @@ func TestCoreProviderAdapter(t *testing.T) {
 	})
 
 	t.Run("GenerateStandardCompletion", func(t *testing.T) {
-		provider := &mockStreamProvider{
-			MockProvider: MockProvider{
-				name:         "test-provider",
-				providerType: ProviderTypeOpenAI,
-			},
-		}
+		provider := newMockStreamProvider("test-provider", ProviderTypeOpenAI)
 		extension := &mockExtension{
 			BaseExtension: NewBaseExtension("test", "1.0.0", "Test", []string{"chat"}),
 		}
@@ -93,12 +88,7 @@ func TestCoreProviderAdapter(t *testing.T) {
 	})
 
 	t.Run("GenerateStandardStream", func(t *testing.T) {
-		provider := &mockStreamProvider{
-			MockProvider: MockProvider{
-				name:         "test-provider",
-				providerType: ProviderTypeOpenAI,
-			},
-		}
+		provider := newMockStreamProvider("test-provider", ProviderTypeOpenAI)
 		extension := &mockExtension{
 			BaseExtension: NewBaseExtension("test", "1.0.0", "Test", []string{"chat"}),
 		}
@@ -163,8 +153,41 @@ func TestCoreProviderAdapter(t *testing.T) {
 }
 
 // mockStreamProvider implements Provider with streaming support
+// This is a local mock to avoid import cycle with testutil
 type mockStreamProvider struct {
-	MockProvider
+	name         string
+	providerType ProviderType
+}
+
+func newMockStreamProvider(name string, providerType ProviderType) *mockStreamProvider {
+	return &mockStreamProvider{
+		name:         name,
+		providerType: providerType,
+	}
+}
+
+func (m *mockStreamProvider) Name() string                          { return m.name }
+func (m *mockStreamProvider) Type() ProviderType                    { return m.providerType }
+func (m *mockStreamProvider) Description() string                   { return "Mock provider for testing" }
+func (m *mockStreamProvider) GetConfig() ProviderConfig             { return ProviderConfig{} }
+func (m *mockStreamProvider) Configure(config ProviderConfig) error { return nil }
+func (m *mockStreamProvider) GetModels(ctx context.Context) ([]Model, error) {
+	return []Model{{ID: "test-model", Name: "Test Model"}}, nil
+}
+func (m *mockStreamProvider) GetDefaultModel() string { return "test-model" }
+func (m *mockStreamProvider) Authenticate(ctx context.Context, authConfig AuthConfig) error {
+	return nil
+}
+func (m *mockStreamProvider) IsAuthenticated() bool                 { return true }
+func (m *mockStreamProvider) Logout(ctx context.Context) error      { return nil }
+func (m *mockStreamProvider) HealthCheck(ctx context.Context) error { return nil }
+func (m *mockStreamProvider) GetMetrics() ProviderMetrics           { return ProviderMetrics{} }
+func (m *mockStreamProvider) SupportsToolCalling() bool             { return true }
+func (m *mockStreamProvider) SupportsStreaming() bool               { return true }
+func (m *mockStreamProvider) SupportsResponsesAPI() bool            { return false }
+func (m *mockStreamProvider) GetToolFormat() ToolFormat             { return ToolFormatOpenAI }
+func (m *mockStreamProvider) InvokeServerTool(ctx context.Context, toolName string, params interface{}) (interface{}, error) {
+	return "tool result", nil
 }
 
 func (m *mockStreamProvider) GenerateChatCompletion(ctx context.Context, options GenerateOptions) (ChatCompletionStream, error) {
@@ -271,10 +294,7 @@ func (m *mockProviderFactory) RegisterProvider(providerType ProviderType, factor
 }
 
 func (m *mockProviderFactory) CreateProvider(providerType ProviderType, config ProviderConfig) (Provider, error) {
-	return &MockProvider{
-		name:         "mock-provider",
-		providerType: providerType,
-	}, nil
+	return newMockStreamProvider("mock-provider", providerType), nil
 }
 
 func (m *mockProviderFactory) GetSupportedProviders() []ProviderType {
@@ -348,12 +368,7 @@ func (m *mockErrorStream) Close() error {
 
 // BenchmarkCoreProviderAdapter benchmarks the adapter
 func BenchmarkCoreProviderAdapter(b *testing.B) {
-	provider := &mockStreamProvider{
-		MockProvider: MockProvider{
-			name:         "bench-provider",
-			providerType: ProviderTypeOpenAI,
-		},
-	}
+	provider := newMockStreamProvider("bench-provider", ProviderTypeOpenAI)
 	extension := &mockExtension{
 		BaseExtension: NewBaseExtension("bench", "1.0.0", "Benchmark", []string{"chat"}),
 	}

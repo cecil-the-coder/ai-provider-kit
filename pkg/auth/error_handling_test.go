@@ -1,14 +1,13 @@
 package auth
 
 import (
-	"context"
 	"errors"
 	"os"
 	"path/filepath"
-	"sync"
 	"testing"
 	"time"
 
+	"github.com/cecil-the-coder/ai-provider-kit/pkg/testutil"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 )
 
@@ -280,11 +279,8 @@ func TestLogoutErrorHandling(t *testing.T) {
 
 	t.Run("RemoveAuthenticatorWithLogoutError", func(t *testing.T) {
 		// Create a mock authenticator that fails on logout
-		failingAuth := &MockAuthenticator{
-			authenticated:    true,
-			logoutShouldFail: true,
-			logoutError:      errors.New("logout failed during removal"),
-		}
+		failingAuth := testutil.NewMockAuthenticator()
+		failingAuth.SetLogoutError(errors.New("logout failed during removal"))
 
 		// Register the failing authenticator
 		err := authManager.RegisterAuthenticator("test-provider", failingAuth)
@@ -320,22 +316,13 @@ func TestLogoutErrorHandling(t *testing.T) {
 		authManager2.SetLogger(testLogger)
 
 		// Create multiple authenticators, some that fail logout
-		failingAuth1 := &MockAuthenticator{
-			authenticated:    true,
-			logoutShouldFail: true,
-			logoutError:      errors.New("logout failed during close"),
-		}
+		failingAuth1 := testutil.NewMockAuthenticator()
+		failingAuth1.SetLogoutError(errors.New("logout failed during close"))
 
-		failingAuth2 := &MockAuthenticator{
-			authenticated:    true,
-			logoutShouldFail: true,
-			logoutError:      errors.New("another logout failure"),
-		}
+		failingAuth2 := testutil.NewMockAuthenticator()
+		failingAuth2.SetLogoutError(errors.New("another logout failure"))
 
-		workingAuth := &MockAuthenticator{
-			authenticated:    true,
-			logoutShouldFail: false,
-		}
+		workingAuth := testutil.NewMockAuthenticator()
 
 		// Register authenticators
 		err := authManager2.RegisterAuthenticator("failing1", failingAuth1)
@@ -374,10 +361,7 @@ func TestLogoutErrorHandling(t *testing.T) {
 		authManager3 := NewAuthManager(storage, authConfig)
 		authManager3.SetLogger(testLogger)
 
-		workingAuth := &MockAuthenticator{
-			authenticated:    true,
-			logoutShouldFail: false,
-		}
+		workingAuth := testutil.NewMockAuthenticator()
 
 		err := authManager3.RegisterAuthenticator("working-logout", workingAuth)
 		if err != nil {
@@ -415,11 +399,8 @@ func TestCleanupErrorHandling(t *testing.T) {
 
 	t.Run("CleanupExpiredErrorDirect", func(t *testing.T) {
 		// Create a mock storage that fails on DeleteToken
-		failingStorage := &MockTokenStorage{
-			tokens:           make(map[string]*types.OAuthConfig),
-			shouldFailDelete: true,
-			deleteError:      errors.New("failed to delete expired token"),
-		}
+		failingStorage := newMockTokenStorageWrapper()
+		failingStorage.SetDeleteError(errors.New("failed to delete expired token"))
 
 		// Add an expired token so the cleanup process will try to delete it
 		_ = failingStorage.StoreToken("test-provider", &types.OAuthConfig{
@@ -446,11 +427,8 @@ func TestCleanupErrorHandling(t *testing.T) {
 
 	t.Run("CleanupExpiredErrorInTicker", func(t *testing.T) {
 		// Create a mock storage that fails on DeleteToken to trigger the error in background cleanup
-		failingStorage := &MockTokenStorage{
-			tokens:           make(map[string]*types.OAuthConfig),
-			shouldFailDelete: true,
-			deleteError:      errors.New("failed to delete expired token"),
-		}
+		failingStorage := newMockTokenStorageWrapper()
+		failingStorage.SetDeleteError(errors.New("failed to delete expired token"))
 
 		// Add an expired token so the cleanup process will try to delete it
 		_ = failingStorage.StoreToken("test-provider", &types.OAuthConfig{
@@ -484,114 +462,26 @@ func TestCleanupErrorHandling(t *testing.T) {
 	})
 }
 
-// MockAuthenticator is a mock implementation of Authenticator for testing
-type MockAuthenticator struct {
-	authenticated    bool
-	logoutShouldFail bool
-	logoutError      error
-	authMethod       types.AuthMethod
-	refreshError     error
+// Note: MockAuthenticator has been moved to pkg/testutil
+
+// mockTokenStorageWrapper wraps testutil.MockTokenStorage and adds GetTokenInfo method
+type mockTokenStorageWrapper struct {
+	*testutil.MockTokenStorage
 }
 
-func (m *MockAuthenticator) Authenticate(ctx context.Context, config types.AuthConfig) error {
-	m.authenticated = true
-	return nil
-}
-
-func (m *MockAuthenticator) IsAuthenticated() bool {
-	return m.authenticated
-}
-
-func (m *MockAuthenticator) GetToken() (string, error) {
-	if !m.authenticated {
-		return "", errors.New("not authenticated")
+func newMockTokenStorageWrapper() *mockTokenStorageWrapper {
+	return &mockTokenStorageWrapper{
+		MockTokenStorage: testutil.NewMockTokenStorage(),
 	}
-	return "mock-token", nil
 }
 
-func (m *MockAuthenticator) RefreshToken(ctx context.Context) error {
-	if m.refreshError != nil {
-		return m.refreshError
+func (m *mockTokenStorageWrapper) GetTokenInfo(key string) (*TokenMetadata, error) {
+	// Check if token exists
+	_, err := m.RetrieveToken(key)
+	if err != nil {
+		return nil, err
 	}
-	if !m.authenticated {
-		return errors.New("not authenticated")
-	}
-	return nil
-}
 
-func (m *MockAuthenticator) Logout(ctx context.Context) error {
-	if m.logoutShouldFail {
-		return m.logoutError
-	}
-	m.authenticated = false
-	return nil
-}
-
-func (m *MockAuthenticator) GetAuthMethod() types.AuthMethod {
-	if m.authMethod == "" {
-		return types.AuthMethodAPIKey
-	}
-	return m.authMethod
-}
-
-// MockTokenStorage is a mock implementation of TokenStorage for testing
-type MockTokenStorage struct {
-	tokens            map[string]*types.OAuthConfig
-	shouldFailCleanup bool
-	cleanupError      error
-	shouldFailDelete  bool
-	deleteError       error
-}
-
-func (m *MockTokenStorage) StoreToken(key string, config *types.OAuthConfig) error {
-	if m.tokens == nil {
-		m.tokens = make(map[string]*types.OAuthConfig)
-	}
-	m.tokens[key] = config
-	return nil
-}
-
-func (m *MockTokenStorage) RetrieveToken(key string) (*types.OAuthConfig, error) {
-	token, exists := m.tokens[key]
-	if !exists {
-		return nil, errors.New("token not found")
-	}
-	return token, nil
-}
-
-func (m *MockTokenStorage) DeleteToken(key string) error {
-	if m.shouldFailDelete {
-		return m.deleteError
-	}
-	delete(m.tokens, key)
-	return nil
-}
-
-func (m *MockTokenStorage) ListTokens() ([]string, error) {
-	keys := make([]string, 0, len(m.tokens))
-	for key := range m.tokens {
-		keys = append(keys, key)
-	}
-	return keys, nil
-}
-
-func (m *MockTokenStorage) IsTokenValid(key string) bool {
-	token, exists := m.tokens[key]
-	if !exists {
-		return false
-	}
-	// Check if token is expired
-	return token.ExpiresAt.After(time.Now())
-}
-
-func (m *MockTokenStorage) CleanupExpired() error {
-	if m.shouldFailCleanup {
-		return m.cleanupError
-	}
-	return nil
-}
-
-func (m *MockTokenStorage) GetTokenInfo(key string) (*TokenMetadata, error) {
 	return &TokenMetadata{
 		Provider:     key,
 		CreatedAt:    time.Now(),
@@ -603,7 +493,6 @@ func (m *MockTokenStorage) GetTokenInfo(key string) (*TokenMetadata, error) {
 
 // TestLogger is a mock logger that captures log messages for testing
 type TestLogger struct {
-	mu            sync.RWMutex
 	debugMessages []logMessage
 	infoMessages  []logMessage
 	warnMessages  []logMessage
@@ -616,8 +505,6 @@ type logMessage struct {
 }
 
 func (t *TestLogger) Reset() {
-	t.mu.Lock()
-	defer t.mu.Unlock()
 	t.debugMessages = nil
 	t.infoMessages = nil
 	t.warnMessages = nil
@@ -625,58 +512,33 @@ func (t *TestLogger) Reset() {
 }
 
 func (t *TestLogger) GetDebugMessages() []logMessage {
-	t.mu.RLock()
-	defer t.mu.RUnlock()
-	// Return a copy to avoid race conditions
-	result := make([]logMessage, len(t.debugMessages))
-	copy(result, t.debugMessages)
-	return result
+	return t.debugMessages
 }
 
 func (t *TestLogger) GetInfoMessages() []logMessage {
-	t.mu.RLock()
-	defer t.mu.RUnlock()
-	result := make([]logMessage, len(t.infoMessages))
-	copy(result, t.infoMessages)
-	return result
+	return t.infoMessages
 }
 
 func (t *TestLogger) GetWarnMessages() []logMessage {
-	t.mu.RLock()
-	defer t.mu.RUnlock()
-	result := make([]logMessage, len(t.warnMessages))
-	copy(result, t.warnMessages)
-	return result
+	return t.warnMessages
 }
 
 func (t *TestLogger) GetErrorMessages() []logMessage {
-	t.mu.RLock()
-	defer t.mu.RUnlock()
-	result := make([]logMessage, len(t.errorMessages))
-	copy(result, t.errorMessages)
-	return result
+	return t.errorMessages
 }
 
 func (t *TestLogger) Debug(msg string, fields ...interface{}) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
 	t.debugMessages = append(t.debugMessages, logMessage{msg: msg, fields: fields})
 }
 
 func (t *TestLogger) Info(msg string, fields ...interface{}) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
 	t.infoMessages = append(t.infoMessages, logMessage{msg: msg, fields: fields})
 }
 
 func (t *TestLogger) Warn(msg string, fields ...interface{}) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
 	t.warnMessages = append(t.warnMessages, logMessage{msg: msg, fields: fields})
 }
 
 func (t *TestLogger) Error(msg string, fields ...interface{}) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
 	t.errorMessages = append(t.errorMessages, logMessage{msg: msg, fields: fields})
 }

@@ -354,10 +354,12 @@ func (p *GeminiProvider) Authenticate(ctx context.Context, authConfig types.Auth
 		p.config.Model = authConfig.DefaultModel
 
 	case types.AuthMethodOAuth:
-		return fmt.Errorf("legacy OAuth authentication not supported - use multi-OAuth via OAuthCredentials")
+		return types.NewAuthError(types.ProviderTypeGemini, "legacy OAuth authentication not supported - use multi-OAuth via OAuthCredentials").
+			WithOperation("authenticate")
 
 	default:
-		return fmt.Errorf("unsupported authentication method: %s", authConfig.Method)
+		return types.NewInvalidRequestError(types.ProviderTypeGemini, fmt.Sprintf("unsupported authentication method: %s", authConfig.Method)).
+			WithOperation("authenticate")
 	}
 
 	return p.Configure(p.GetConfig())
@@ -589,7 +591,8 @@ func (p *GeminiProvider) Configure(config types.ProviderConfig) error {
 	// Validate configuration
 	validation := configHelper.ValidateProviderConfig(config)
 	if !validation.Valid {
-		return fmt.Errorf("configuration validation failed: %s", validation.Errors[0])
+		return types.NewInvalidRequestError(types.ProviderTypeGemini, validation.Errors[0]).
+			WithOperation("configure")
 	}
 
 	// Merge with defaults
@@ -604,7 +607,9 @@ func (p *GeminiProvider) Configure(config types.ProviderConfig) error {
 
 	// Apply top-level overrides using helper
 	if err := configHelper.ApplyTopLevelOverrides(mergedConfig, &geminiConfig); err != nil {
-		return fmt.Errorf("failed to apply top-level overrides: %w", err)
+		return types.NewInvalidRequestError(types.ProviderTypeGemini, "failed to apply top-level overrides").
+			WithOperation("configure").
+			WithOriginalErr(err)
 	}
 
 	// Update provider state
@@ -664,7 +669,8 @@ func (p *GeminiProvider) InvokeServerTool(
 	toolName string,
 	params interface{},
 ) (interface{}, error) {
-	return nil, fmt.Errorf("tool invocation not yet implemented for Gemini provider")
+	return nil, types.NewInvalidRequestError(types.ProviderTypeGemini, "tool invocation not yet implemented for Gemini provider").
+		WithOperation("invoke_tool")
 }
 
 // Helper Methods
@@ -765,20 +771,26 @@ func (p *GeminiProvider) executeStandardAPIRequest(ctx context.Context, model st
 	// Use backend router to convert request if needed
 	convertedRequest, err := p.backendRouter.GetConverter().ConvertRequest(requestBody)
 	if err != nil {
-		return nil, fmt.Errorf("failed to convert request: %w", err)
+		return nil, types.NewInvalidRequestError(types.ProviderTypeGemini, "failed to convert request").
+			WithOperation("chat_completion").
+			WithOriginalErr(err)
 	}
 
 	// Serialize request
 	jsonBody, err := json.Marshal(convertedRequest)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal request: %w", err)
+		return nil, types.NewInvalidRequestError(types.ProviderTypeGemini, "failed to marshal request").
+			WithOperation("chat_completion").
+			WithOriginalErr(err)
 	}
 
 	// Use backend router to build the URL
 	url := p.backendRouter.BuildRequestURL(model, "generateContent", apiKey)
 	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonBody))
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
+		return nil, types.NewInvalidRequestError(types.ProviderTypeGemini, "failed to create request").
+			WithOperation("chat_completion").
+			WithOriginalErr(err)
 	}
 
 	// Set headers
@@ -791,14 +803,18 @@ func (p *GeminiProvider) executeStandardAPIRequest(ctx context.Context, model st
 	// Make the request
 	resp, err := p.client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("request failed: %w", err)
+		return nil, types.NewNetworkError(types.ProviderTypeGemini, "request failed").
+			WithOperation("chat_completion").
+			WithOriginalErr(err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	// Read response body
 	responseBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read response body: %w", err)
+		return nil, types.NewNetworkError(types.ProviderTypeGemini, "failed to read response body").
+			WithOperation("chat_completion").
+			WithOriginalErr(err)
 	}
 
 	// Handle rate limiting
@@ -855,14 +871,18 @@ func (p *GeminiProvider) makeStandardAPICallWithOAuth(ctx context.Context, model
 	// Make the request
 	resp, err := p.client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("request failed: %w", err)
+		return nil, types.NewNetworkError(types.ProviderTypeGemini, "request failed").
+			WithOperation("chat_completion").
+			WithOriginalErr(err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	// Read response body
 	responseBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read response body: %w", err)
+		return nil, types.NewNetworkError(types.ProviderTypeGemini, "failed to read response body").
+			WithOperation("chat_completion").
+			WithOriginalErr(err)
 	}
 
 	// Handle rate limiting
