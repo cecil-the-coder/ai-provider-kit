@@ -254,6 +254,11 @@ func (m *MockAuthenticator) SetRefreshError(err error) {
 	m.refreshError = err
 }
 
+// SetAuthenticated sets the authenticated state of the mock authenticator.
+func (m *MockAuthenticator) SetAuthenticated(authenticated bool) {
+	m.authenticated = authenticated
+}
+
 // Authenticate authenticates using the mock authenticator.
 func (m *MockAuthenticator) Authenticate(ctx context.Context, config types.AuthConfig) error {
 	m.authenticated = true

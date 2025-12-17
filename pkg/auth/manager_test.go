@@ -193,6 +193,7 @@ func TestIsAuthenticated(t *testing.T) {
 
 	t.Run("NotAuthenticatedProvider", func(t *testing.T) {
 		auth := testutil.NewMockAuthenticator()
+		auth.SetAuthenticated(false)
 		_ = manager.RegisterAuthenticator("test2", auth)
 
 		if manager.IsAuthenticated("test2") {
@@ -290,6 +291,7 @@ func TestGetAuthenticatedProviders(t *testing.T) {
 	t.Run("MixedProviders", func(t *testing.T) {
 		auth1 := testutil.NewMockAuthenticator()
 		auth2 := testutil.NewMockAuthenticator()
+		auth2.SetAuthenticated(false)
 		auth3 := testutil.NewMockAuthenticator()
 
 		_ = manager.RegisterAuthenticator("auth1", auth1)
@@ -308,6 +310,7 @@ func TestGetAuthStatus(t *testing.T) {
 
 	auth1 := testutil.NewMockAuthenticator()
 	auth2 := testutil.NewMockAuthenticator()
+	auth2.SetAuthenticated(false)
 
 	_ = manager.RegisterAuthenticator("test1", auth1)
 	_ = manager.RegisterAuthenticator("test2", auth2)
@@ -342,6 +345,7 @@ func TestForEachAuthenticated(t *testing.T) {
 	t.Run("Success", func(t *testing.T) {
 		auth1 := testutil.NewMockAuthenticator()
 		auth2 := testutil.NewMockAuthenticator()
+		auth2.SetAuthenticated(false)
 		auth3 := testutil.NewMockAuthenticator()
 
 		_ = manager.RegisterAuthenticator("test1", auth1)
