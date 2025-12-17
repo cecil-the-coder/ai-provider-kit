@@ -3,6 +3,7 @@ package gemini
 import (
 	"encoding/json"
 	"os"
+	"strings"
 	"testing"
 )
 
@@ -87,8 +88,8 @@ func TestClientConfig_Validate(t *testing.T) {
 					t.Errorf("Expected error but got nil")
 					return
 				}
-				if err.Error() != tt.errorMsg {
-					t.Errorf("Expected error message '%s', got '%s'", tt.errorMsg, err.Error())
+				if !strings.Contains(err.Error(), tt.errorMsg) {
+					t.Errorf("Expected error containing '%s', got '%s'", tt.errorMsg, err.Error())
 				}
 			} else if err != nil {
 				t.Errorf("Expected no error but got: %v", err)

@@ -1,12 +1,12 @@
 package auth
 
 import (
-	"github.com/cecil-the-coder/ai-provider-kit/pkg/testutil"
 	"context"
 	"errors"
 	"testing"
 	"time"
 
+	"github.com/cecil-the-coder/ai-provider-kit/pkg/testutil"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 )
 

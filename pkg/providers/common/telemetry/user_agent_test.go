@@ -98,7 +98,7 @@ func TestGetUserAgentConcurrent(t *testing.T) {
 	close(results)
 
 	// Collect all results
-	var userAgents []string
+	userAgents := make([]string, 0, goroutines)
 	for ua := range results {
 		userAgents = append(userAgents, ua)
 	}

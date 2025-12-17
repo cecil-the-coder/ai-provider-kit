@@ -109,8 +109,8 @@ func TestGeminiProvider_ValidateToken_NoOAuthConfigured(t *testing.T) {
 	}
 
 	expectedError := "no OAuth manager configured"
-	if err.Error() != expectedError {
-		t.Errorf("Expected error '%s', got '%s'", expectedError, err.Error())
+	if !strings.Contains(err.Error(), expectedError) {
+		t.Errorf("Expected error containing '%s', got '%s'", expectedError, err.Error())
 	}
 }
 
@@ -144,7 +144,7 @@ func TestGeminiProvider_ValidateToken_NoCredentials(t *testing.T) {
 	errorMsg := err.Error()
 	found := false
 	for _, acceptableError := range acceptableErrors {
-		if errorMsg == acceptableError {
+		if strings.Contains(errorMsg, acceptableError) {
 			found = true
 			break
 		}

@@ -40,9 +40,9 @@ func GetUserAgent() string {
 
 // buildUserAgent constructs the User-Agent string with SDK version, Go version, OS, and architecture.
 func buildUserAgent() string {
-	goVersion := runtime.Version()    // e.g., "go1.24.0"
-	goos := runtime.GOOS              // e.g., "linux", "darwin", "windows"
-	goarch := runtime.GOARCH          // e.g., "amd64", "arm64"
+	goVersion := runtime.Version() // e.g., "go1.24.0"
+	goos := runtime.GOOS           // e.g., "linux", "darwin", "windows"
+	goarch := runtime.GOARCH       // e.g., "amd64", "arm64"
 
 	return fmt.Sprintf("%s/%s (%s; %s; %s)", SDKName, SDKVersion, goVersion, goos, goarch)
 }

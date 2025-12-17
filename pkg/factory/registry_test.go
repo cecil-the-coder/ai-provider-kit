@@ -1,12 +1,12 @@
 package factory
 
 import (
-	"github.com/cecil-the-coder/ai-provider-kit/pkg/testutil"
 	"context"
 	"fmt"
 	"sync"
 	"testing"
 
+	"github.com/cecil-the-coder/ai-provider-kit/pkg/testutil"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
