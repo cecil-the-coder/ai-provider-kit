@@ -26,11 +26,11 @@ type AnthropicRequest struct {
 
 // AnthropicTool represents a tool definition in the Anthropic API
 type AnthropicTool struct {
-	Type           string                 `json:"type,omitempty"`           // For native tools (e.g., "web_search_20250305")
-	Name           string                 `json:"name"`
-	Description    string                 `json:"description,omitempty"`
-	InputSchema    map[string]interface{} `json:"input_schema,omitempty"`
-	CacheControl   *CacheControl          `json:"cache_control,omitempty"`
+	Type         string                 `json:"type,omitempty"` // For native tools (e.g., "web_search_20250305")
+	Name         string                 `json:"name"`
+	Description  string                 `json:"description,omitempty"`
+	InputSchema  map[string]interface{} `json:"input_schema,omitempty"`
+	CacheControl *CacheControl          `json:"cache_control,omitempty"`
 	// Native tool fields
 	MaxUses        *int                   `json:"max_uses,omitempty"`
 	AllowedDomains []string               `json:"allowed_domains,omitempty"`
