@@ -215,6 +215,7 @@ func TestChatCompletionWithHTTPError(t *testing.T) {
 }
 
 // TestChatCompletionWithNoContent tests empty content handling
+// Empty content is valid for token counting requests (maxTokens=1)
 func TestChatCompletionWithNoContent(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		response := map[string]interface{}{
@@ -222,7 +223,7 @@ func TestChatCompletionWithNoContent(t *testing.T) {
 			"type":    "message",
 			"role":    "assistant",
 			"model":   "claude-3-5-sonnet-20241022",
-			"content": []interface{}{}, // Empty content
+			"content": []interface{}{}, // Empty content (valid for token counting)
 			"usage": map[string]interface{}{
 				"input_tokens":  10,
 				"output_tokens": 0,
@@ -243,10 +244,17 @@ func TestChatCompletionWithNoContent(t *testing.T) {
 		Model:  "claude-3-5-sonnet-20241022",
 	}
 
+	// Empty content should succeed (used for token counting)
 	stream, err := provider.GenerateChatCompletion(context.Background(), options)
-	assert.Error(t, err)
-	assert.Nil(t, stream)
-	assert.Contains(t, err.Error(), "no content")
+	assert.NoError(t, err)
+	assert.NotNil(t, stream)
+
+	// Should have one chunk with usage info but empty content
+	chunk, err := stream.Next()
+	assert.NoError(t, err)
+	assert.Equal(t, "", chunk.Content)
+	assert.Equal(t, 10, chunk.Usage.PromptTokens)
+	assert.True(t, chunk.Done)
 }
 
 // TestStreamingWithAPIKey tests streaming with API key

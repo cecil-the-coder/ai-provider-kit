@@ -734,9 +734,8 @@ func (p *AnthropicProvider) makeAPICallWithKey(ctx context.Context, requestData 
 		return nil, nil, fmt.Errorf("failed to parse API response: %w", err)
 	}
 
-	if len(response.Content) == 0 {
-		return nil, nil, fmt.Errorf("no content in API response")
-	}
+	// Note: Content may be empty for token counting requests with maxTokens=1
+	// Still return the response with usage info
 
 	// Convert usage to standard format
 	usage := &types.Usage{
@@ -838,16 +837,12 @@ func (p *AnthropicProvider) makeAPICallWithOAuthMessage(ctx context.Context, req
 		return types.ChatMessage{}, nil, fmt.Errorf("failed to parse API response: %w", err)
 	}
 
-	if len(response.Content) == 0 {
-		return types.ChatMessage{}, nil, fmt.Errorf("no content in API response")
-	}
-
 	// Convert response to ChatMessage with tool call support
 	message := types.ChatMessage{
 		Role: response.Role,
 	}
 
-	// Extract text content
+	// Extract text content (may be empty for token counting requests with maxTokens=1)
 	for _, block := range response.Content {
 		if block.Type == "text" {
 			message.Content = block.Text
