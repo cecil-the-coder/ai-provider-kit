@@ -415,11 +415,13 @@ func TestStandardToProviderWithToolCalls(t *testing.T) {
 	// First message should be plain text
 	assert.Equal(t, "user", anthropicReq.Messages[0].Role)
 
-	// Second message should have tool_use content
-	assistantContent, ok := anthropicReq.Messages[1].Content.([]AnthropicContentBlock)
+	// Second message should have tool_use content ([]interface{} to ensure input is serialized)
+	assistantContent, ok := anthropicReq.Messages[1].Content.([]interface{})
 	require.True(t, ok)
 	require.Len(t, assistantContent, 1)
-	assert.Equal(t, "tool_use", assistantContent[0].Type)
+	toolUseBlock, ok := assistantContent[0].(map[string]interface{})
+	require.True(t, ok)
+	assert.Equal(t, "tool_use", toolUseBlock["type"])
 
 	// Third message should have tool_result content
 	toolContent, ok := anthropicReq.Messages[2].Content.([]AnthropicContentBlock)

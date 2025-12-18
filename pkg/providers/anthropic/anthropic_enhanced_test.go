@@ -688,14 +688,21 @@ func TestConvertToAnthropicContentWithTextAndToolCalls(t *testing.T) {
 
 	content := convertToAnthropicContent(msg)
 
-	blocks, ok := content.([]AnthropicContentBlock)
+	// Returns []interface{} to allow mixing struct and map types for tool_use
+	blocks, ok := content.([]interface{})
 	require.True(t, ok)
 	require.Len(t, blocks, 2) // Text + tool_use
 
-	assert.Equal(t, "text", blocks[0].Type)
-	assert.Equal(t, "I'll help you with that.", blocks[0].Text)
+	// First block is text (AnthropicContentBlock)
+	textBlock, ok := blocks[0].(AnthropicContentBlock)
+	require.True(t, ok)
+	assert.Equal(t, "text", textBlock.Type)
+	assert.Equal(t, "I'll help you with that.", textBlock.Text)
 
-	assert.Equal(t, "tool_use", blocks[1].Type)
-	assert.Equal(t, "tool_1", blocks[1].ID)
-	assert.Equal(t, "test_function", blocks[1].Name)
+	// Second block is tool_use (map[string]interface{} to ensure input is always serialized)
+	toolUseBlock, ok := blocks[1].(map[string]interface{})
+	require.True(t, ok)
+	assert.Equal(t, "tool_use", toolUseBlock["type"])
+	assert.Equal(t, "tool_1", toolUseBlock["id"])
+	assert.Equal(t, "test_function", toolUseBlock["name"])
 }

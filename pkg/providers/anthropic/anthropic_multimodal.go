@@ -53,11 +53,17 @@ func convertContentPartToAnthropic(part types.ContentPart) interface{} {
 			"source": source,
 		}
 	case types.ContentTypeToolUse:
-		return AnthropicContentBlock{
-			Type:  "tool_use",
-			ID:    part.ID,
-			Name:  part.Name,
-			Input: part.Input,
+		// Use map[string]interface{} instead of AnthropicContentBlock to ensure
+		// "input" field is always present (Anthropic API requires it for tool_use)
+		input := part.Input
+		if input == nil {
+			input = map[string]interface{}{}
+		}
+		return map[string]interface{}{
+			"type":  "tool_use",
+			"id":    part.ID,
+			"name":  part.Name,
+			"input": input,
 		}
 	case types.ContentTypeToolResult:
 		return AnthropicContentBlock{
@@ -90,15 +96,16 @@ func convertToAnthropicContent(msg types.ChatMessage) interface{} {
 
 		// Add tool calls if present (backwards compatibility)
 		for _, tc := range msg.ToolCalls {
-			var input map[string]interface{}
-			// Ignore JSON unmarshal errors - use empty map on failure
+			input := map[string]interface{}{}
+			// Ignore JSON unmarshal errors - empty map is used by default
 			_ = json.Unmarshal([]byte(tc.Function.Arguments), &input)
 
-			content = append(content, AnthropicContentBlock{
-				Type:  "tool_use",
-				ID:    tc.ID,
-				Name:  tc.Function.Name,
-				Input: input,
+			// Use map[string]interface{} to ensure "input" is always serialized
+			content = append(content, map[string]interface{}{
+				"type":  "tool_use",
+				"id":    tc.ID,
+				"name":  tc.Function.Name,
+				"input": input,
 			})
 		}
 
@@ -126,7 +133,8 @@ func convertToAnthropicContent(msg types.ChatMessage) interface{} {
 		}
 	case len(msg.ToolCalls) > 0:
 		// Assistant message with tool calls
-		var content []AnthropicContentBlock
+		// Use []interface{} to allow mixing struct and map types
+		var content []interface{}
 
 		// Add text content if present
 		if msg.Content != "" {
@@ -138,15 +146,16 @@ func convertToAnthropicContent(msg types.ChatMessage) interface{} {
 
 		// Add tool use blocks
 		for _, tc := range msg.ToolCalls {
-			var input map[string]interface{}
-			// Ignore JSON unmarshal errors - use empty map on failure
+			input := map[string]interface{}{}
+			// Ignore JSON unmarshal errors - empty map is used by default
 			_ = json.Unmarshal([]byte(tc.Function.Arguments), &input)
 
-			content = append(content, AnthropicContentBlock{
-				Type:  "tool_use",
-				ID:    tc.ID,
-				Name:  tc.Function.Name,
-				Input: input,
+			// Use map[string]interface{} to ensure "input" is always serialized
+			content = append(content, map[string]interface{}{
+				"type":  "tool_use",
+				"id":    tc.ID,
+				"name":  tc.Function.Name,
+				"input": input,
 			})
 		}
 		return content

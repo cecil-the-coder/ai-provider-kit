@@ -107,18 +107,61 @@ func TestConvertContentPartToAnthropic(t *testing.T) {
 				Input: map[string]interface{}{"location": "London"},
 			},
 			validate: func(t *testing.T, result interface{}) {
-				block, ok := result.(AnthropicContentBlock)
+				// tool_use returns map[string]interface{} to ensure input is always serialized
+				resultMap, ok := result.(map[string]interface{})
 				if !ok {
-					t.Fatalf("Expected AnthropicContentBlock, got %T", result)
+					t.Fatalf("Expected map[string]interface{}, got %T", result)
 				}
-				if block.Type != "tool_use" {
-					t.Errorf("Expected type 'tool_use', got '%s'", block.Type)
+				if resultMap["type"] != "tool_use" {
+					t.Errorf("Expected type 'tool_use', got '%v'", resultMap["type"])
 				}
-				if block.ID != "tool_123" {
-					t.Errorf("Expected ID 'tool_123', got '%s'", block.ID)
+				if resultMap["id"] != "tool_123" {
+					t.Errorf("Expected ID 'tool_123', got '%v'", resultMap["id"])
 				}
-				if block.Name != "get_weather" {
-					t.Errorf("Expected name 'get_weather', got '%s'", block.Name)
+				if resultMap["name"] != "get_weather" {
+					t.Errorf("Expected name 'get_weather', got '%v'", resultMap["name"])
+				}
+				input, ok := resultMap["input"].(map[string]interface{})
+				if !ok {
+					t.Fatalf("Expected input to be map[string]interface{}, got %T", resultMap["input"])
+				}
+				if input["location"] != "London" {
+					t.Errorf("Expected input.location 'London', got '%v'", input["location"])
+				}
+			},
+		},
+		{
+			name: "tool_use part with nil input gets empty map",
+			input: types.ContentPart{
+				Type:  types.ContentTypeToolUse,
+				ID:    "tool_456",
+				Name:  "no_args_tool",
+				Input: nil, // nil input should become empty map, not omitted
+			},
+			validate: func(t *testing.T, result interface{}) {
+				resultMap, ok := result.(map[string]interface{})
+				if !ok {
+					t.Fatalf("Expected map[string]interface{}, got %T", result)
+				}
+				if resultMap["type"] != "tool_use" {
+					t.Errorf("Expected type 'tool_use', got '%v'", resultMap["type"])
+				}
+				// Critical: Input must be present (Anthropic API requires input field)
+				input, exists := resultMap["input"]
+				if !exists {
+					t.Error("Expected 'input' key to exist in result")
+				}
+				if input == nil {
+					t.Error("Expected input to be empty map, got nil")
+				}
+				// Verify it serializes correctly with input field present
+				jsonBytes, err := json.Marshal(resultMap)
+				if err != nil {
+					t.Fatalf("Failed to marshal block: %v", err)
+				}
+				jsonStr := string(jsonBytes)
+				if !contains(jsonStr, `"input"`) {
+					t.Errorf("Expected JSON to contain 'input' field, got: %s", jsonStr)
 				}
 			},
 		},
@@ -303,20 +346,33 @@ func TestConvertToAnthropicContentMultimodal(t *testing.T) {
 				},
 			},
 			validate: func(t *testing.T, result interface{}) {
-				content, ok := result.([]AnthropicContentBlock)
+				// Returns []interface{} to allow mixing struct and map types for tool_use
+				content, ok := result.([]interface{})
 				if !ok {
-					t.Fatalf("Expected []AnthropicContentBlock, got %T", result)
+					t.Fatalf("Expected []interface{}, got %T", result)
 				}
 				if len(content) != 2 {
 					t.Fatalf("Expected 2 content blocks (text + tool_use), got %d", len(content))
 				}
-				// First should be text
-				if content[0].Type != "text" {
-					t.Errorf("Expected first block to be 'text', got '%s'", content[0].Type)
+				// First should be text (AnthropicContentBlock)
+				textBlock, ok := content[0].(AnthropicContentBlock)
+				if !ok {
+					t.Fatalf("Expected first block to be AnthropicContentBlock, got %T", content[0])
 				}
-				// Second should be tool_use
-				if content[1].Type != "tool_use" {
-					t.Errorf("Expected second block to be 'tool_use', got '%s'", content[1].Type)
+				if textBlock.Type != "text" {
+					t.Errorf("Expected first block to be 'text', got '%s'", textBlock.Type)
+				}
+				// Second should be tool_use (map[string]interface{} to ensure input is serialized)
+				toolUseBlock, ok := content[1].(map[string]interface{})
+				if !ok {
+					t.Fatalf("Expected second block to be map[string]interface{}, got %T", content[1])
+				}
+				if toolUseBlock["type"] != "tool_use" {
+					t.Errorf("Expected second block to be 'tool_use', got '%v'", toolUseBlock["type"])
+				}
+				// Verify input field is present
+				if _, hasInput := toolUseBlock["input"]; !hasInput {
+					t.Error("Expected tool_use block to have 'input' field")
 				}
 			},
 		},

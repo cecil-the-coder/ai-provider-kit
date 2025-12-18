@@ -165,16 +165,18 @@ func TestToolCalling_ToolCallsInMessages(t *testing.T) {
 	// Verify tool calls are included in messages
 	assert.Len(t, request.Messages, 1)
 
-	// The content should be an array of content blocks
-	contentBlocks, ok := request.Messages[0].Content.([]AnthropicContentBlock)
-	require.True(t, ok, "Content should be []AnthropicContentBlock")
+	// The content should be an array ([]interface{} to support tool_use as map)
+	contentBlocks, ok := request.Messages[0].Content.([]interface{})
+	require.True(t, ok, "Content should be []interface{}")
 	require.Len(t, contentBlocks, 1)
 
-	// Verify tool_use block
-	assert.Equal(t, "tool_use", contentBlocks[0].Type)
-	assert.Equal(t, "toolu_123", contentBlocks[0].ID)
-	assert.Equal(t, "get_weather", contentBlocks[0].Name)
-	assert.NotNil(t, contentBlocks[0].Input)
+	// Verify tool_use block (map[string]interface{} to ensure input is always serialized)
+	toolUseBlock, ok := contentBlocks[0].(map[string]interface{})
+	require.True(t, ok, "tool_use block should be map[string]interface{}")
+	assert.Equal(t, "tool_use", toolUseBlock["type"])
+	assert.Equal(t, "toolu_123", toolUseBlock["id"])
+	assert.Equal(t, "get_weather", toolUseBlock["name"])
+	assert.NotNil(t, toolUseBlock["input"])
 }
 
 // TestToolCalling_ToolResponses tests that tool responses are included
@@ -298,13 +300,18 @@ func TestToolCalling_ConversionHelpers(t *testing.T) {
 
 		content := convertToAnthropicContent(msg)
 
-		blocks, ok := content.([]AnthropicContentBlock)
+		// Returns []interface{} to support tool_use as map[string]interface{}
+		blocks, ok := content.([]interface{})
 		require.True(t, ok)
 		require.Len(t, blocks, 1)
-		assert.Equal(t, "tool_use", blocks[0].Type)
-		assert.Equal(t, "toolu_456", blocks[0].ID)
-		assert.Equal(t, "test_func", blocks[0].Name)
-		assert.NotNil(t, blocks[0].Input)
+
+		// tool_use is map[string]interface{} to ensure input is always serialized
+		toolUseBlock, ok := blocks[0].(map[string]interface{})
+		require.True(t, ok)
+		assert.Equal(t, "tool_use", toolUseBlock["type"])
+		assert.Equal(t, "toolu_456", toolUseBlock["id"])
+		assert.Equal(t, "test_func", toolUseBlock["name"])
+		assert.NotNil(t, toolUseBlock["input"])
 	})
 
 	t.Run("ConvertToAnthropicContent_TextMessage", func(t *testing.T) {
