@@ -76,9 +76,10 @@ type ToolCallFunction struct {
 
 // Tool represents an available tool
 type Tool struct {
+	Type        string                 `json:"type,omitempty"`   // For native tools (e.g., "web_search_20250305")
 	Name        string                 `json:"name"`
-	Description string                 `json:"description"`
-	InputSchema map[string]interface{} `json:"input_schema"`
+	Description string                 `json:"description,omitempty"`
+	InputSchema map[string]interface{} `json:"input_schema,omitempty"`
 }
 
 // ToolChoiceMode represents the mode for tool choice control

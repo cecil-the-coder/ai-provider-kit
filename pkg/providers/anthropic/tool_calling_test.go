@@ -243,6 +243,71 @@ func TestToolCalling_ConversionHelpers(t *testing.T) {
 		assert.NotNil(t, anthropicTools[0].InputSchema)
 	})
 
+	t.Run("ConvertToAnthropicTools_NativeWebSearch", func(t *testing.T) {
+		// Test native web_search tool conversion
+		tools := []types.Tool{
+			{
+				Type: "web_search_20250305",
+				Name: "web_search",
+				InputSchema: map[string]interface{}{
+					"allowed_domains": []string{"example.com", "docs.example.com"},
+					"blocked_domains": []string{"spam.com"},
+					"max_uses":        5,
+				},
+			},
+		}
+
+		anthropicTools := convertToAnthropicTools(tools)
+
+		assert.Len(t, anthropicTools, 1)
+		assert.Equal(t, "web_search_20250305", anthropicTools[0].Type)
+		assert.Equal(t, "web_search", anthropicTools[0].Name)
+		// Native tools should not have InputSchema set
+		assert.Nil(t, anthropicTools[0].InputSchema)
+		// But should have native tool fields
+		assert.NotNil(t, anthropicTools[0].MaxUses)
+		assert.Equal(t, 5, *anthropicTools[0].MaxUses)
+		assert.Equal(t, []string{"example.com", "docs.example.com"}, anthropicTools[0].AllowedDomains)
+		assert.Equal(t, []string{"spam.com"}, anthropicTools[0].BlockedDomains)
+	})
+
+	t.Run("ConvertToAnthropicTools_MixedTools", func(t *testing.T) {
+		// Test conversion of both custom and native tools
+		tools := []types.Tool{
+			{
+				Name:        "custom_tool",
+				Description: "A custom tool",
+				InputSchema: map[string]interface{}{
+					"type": "object",
+					"properties": map[string]interface{}{
+						"param": map[string]interface{}{
+							"type": "string",
+						},
+					},
+				},
+			},
+			{
+				Type: "web_search_20250305",
+				Name: "web_search",
+			},
+		}
+
+		anthropicTools := convertToAnthropicTools(tools)
+
+		assert.Len(t, anthropicTools, 2)
+
+		// First tool should be custom
+		assert.Equal(t, "", anthropicTools[0].Type)
+		assert.Equal(t, "custom_tool", anthropicTools[0].Name)
+		assert.Equal(t, "A custom tool", anthropicTools[0].Description)
+		assert.NotNil(t, anthropicTools[0].InputSchema)
+
+		// Second tool should be native
+		assert.Equal(t, "web_search_20250305", anthropicTools[1].Type)
+		assert.Equal(t, "web_search", anthropicTools[1].Name)
+		assert.Nil(t, anthropicTools[1].InputSchema)
+	})
+
 	t.Run("ConvertAnthropicContentToToolCalls", func(t *testing.T) {
 		content := []AnthropicContentBlock{
 			{

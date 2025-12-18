@@ -11,11 +11,58 @@ import (
 func convertToAnthropicTools(tools []types.Tool) []AnthropicTool {
 	anthropicTools := make([]AnthropicTool, len(tools))
 	for i, tool := range tools {
-		anthropicTools[i] = AnthropicTool{
-			Name:        tool.Name,
-			Description: tool.Description,
-			InputSchema: tool.InputSchema,
+		anthropicTool := AnthropicTool{
+			Name: tool.Name,
 		}
+
+		// Check if this is a native tool (has a type set)
+		if tool.Type != "" && tool.Type != "custom" {
+			// Native tool: preserve type, skip input_schema
+			anthropicTool.Type = tool.Type
+			// Native tools may have optional description and other fields
+			if tool.Description != "" {
+				anthropicTool.Description = tool.Description
+			}
+			// Extract native tool fields from InputSchema if present
+			if tool.InputSchema != nil {
+				if maxUses, ok := tool.InputSchema["max_uses"].(int); ok {
+					anthropicTool.MaxUses = &maxUses
+				}
+				if allowedDomains, ok := tool.InputSchema["allowed_domains"].([]string); ok {
+					anthropicTool.AllowedDomains = allowedDomains
+				} else if allowedDomainsInterface, ok := tool.InputSchema["allowed_domains"].([]interface{}); ok {
+					// Handle []interface{} conversion
+					allowedDomains := make([]string, len(allowedDomainsInterface))
+					for j, v := range allowedDomainsInterface {
+						if str, ok := v.(string); ok {
+							allowedDomains[j] = str
+						}
+					}
+					anthropicTool.AllowedDomains = allowedDomains
+				}
+				if blockedDomains, ok := tool.InputSchema["blocked_domains"].([]string); ok {
+					anthropicTool.BlockedDomains = blockedDomains
+				} else if blockedDomainsInterface, ok := tool.InputSchema["blocked_domains"].([]interface{}); ok {
+					// Handle []interface{} conversion
+					blockedDomains := make([]string, len(blockedDomainsInterface))
+					for j, v := range blockedDomainsInterface {
+						if str, ok := v.(string); ok {
+							blockedDomains[j] = str
+						}
+					}
+					anthropicTool.BlockedDomains = blockedDomains
+				}
+				if userLocation, ok := tool.InputSchema["user_location"].(map[string]interface{}); ok {
+					anthropicTool.UserLocation = userLocation
+				}
+			}
+		} else {
+			// Custom tool: include description and input_schema
+			anthropicTool.Description = tool.Description
+			anthropicTool.InputSchema = tool.InputSchema
+		}
+
+		anthropicTools[i] = anthropicTool
 	}
 	return anthropicTools
 }
