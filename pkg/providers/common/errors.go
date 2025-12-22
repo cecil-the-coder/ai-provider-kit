@@ -46,7 +46,6 @@ func (e *APIError) IsRetryable() bool {
 	return e.Retryable
 }
 
-
 // ErrorClassifier interface for provider-specific error parsing
 // Providers can implement this to provide more detailed error classification
 // based on their specific API error response formats

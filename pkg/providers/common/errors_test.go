@@ -113,7 +113,6 @@ func TestAPIError_IsRetryable(t *testing.T) {
 	}
 }
 
-
 func TestAPIErrorType_Constants(t *testing.T) {
 	// Test that error type constants are correctly defined
 	assert.Equal(t, APIErrorType("rate_limit"), APIErrorTypeRateLimit)
@@ -165,4 +164,3 @@ func TestAPIError_AsError(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "test error")
 }
-
