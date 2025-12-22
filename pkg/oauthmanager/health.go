@@ -3,7 +3,11 @@
 package oauthmanager
 
 import (
+	"errors"
+	"strings"
 	"time"
+
+	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 )
 
 // credentialHealth tracks the health status of an individual OAuth credential
@@ -69,18 +73,30 @@ func (h *credentialHealth) recordSuccess() {
 }
 
 // recordFailure updates health metrics for a failed operation
-func (h *credentialHealth) recordFailure() {
+func (h *credentialHealth) recordFailure(err error) {
 	h.lastFailure = time.Now()
 	h.failureCount++
 
-	// Calculate and apply backoff
-	backoffDuration := h.calculateBackoff()
-	h.backoffUntil = time.Now().Add(backoffDuration)
+	// Check if this is a rate limit error (429)
+	// Rate limit errors should NOT trigger backoff because:
+	// 1. They're expected API behavior, not failures
+	// 2. Clients should receive the 429 to implement their own retry logic
+	// 3. Backoff should only trigger for actual failures (5xx, network, auth, etc.)
+	isRateLimit := isRateLimitError(err)
 
-	// Mark as unhealthy after 3 consecutive failures
-	if h.failureCount >= 3 {
-		h.isHealthy = false
+	// Only apply backoff if this is NOT a rate limit error
+	if !isRateLimit {
+		// Calculate and apply backoff
+		backoffDuration := h.calculateBackoff()
+		h.backoffUntil = time.Now().Add(backoffDuration)
+
+		// Mark as unhealthy after 3 consecutive failures
+		if h.failureCount >= 3 {
+			h.isHealthy = false
+		}
 	}
+	// For rate limit errors, we don't set backoff or mark as unhealthy
+	// The error will still be propagated to the client for their retry logic
 }
 
 // recordRefreshSuccess updates health metrics for a successful token refresh
@@ -120,6 +136,27 @@ func (h *credentialHealth) recordRefreshFailure(err error) {
 		}
 		h.backoffUntil = time.Now().Add(time.Duration(backoffSeconds) * time.Second)
 	}
+}
+
+// isRateLimitError checks if an error is a rate limit error (HTTP 429)
+// by examining the error chain for ProviderError with ErrCodeRateLimit
+func isRateLimitError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	// Check if it's a ProviderError with rate limit code
+	var providerErr *types.ProviderError
+	if errors.As(err, &providerErr) {
+		return providerErr.Code == types.ErrCodeRateLimit
+	}
+
+	// Check if the error message contains rate limit indicators
+	// This is a fallback for errors that aren't properly wrapped as ProviderError
+	errMsg := strings.ToLower(err.Error())
+	return strings.Contains(errMsg, "rate limit") ||
+		strings.Contains(errMsg, "429") ||
+		strings.Contains(errMsg, "too many requests")
 }
 
 // min returns the minimum of two integers

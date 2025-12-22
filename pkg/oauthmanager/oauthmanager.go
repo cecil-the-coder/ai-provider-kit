@@ -275,7 +275,8 @@ func (m *OAuthKeyManager) ReportFailure(credentialID string, err error) {
 		return
 	}
 
-	health.recordFailure()
+	// Pass the error to recordFailure so it can determine if it's a rate limit error
+	health.recordFailure(err)
 }
 
 // GetCredentials returns a copy of the CACHED credentials slice

@@ -5,8 +5,10 @@ package auth
 import (
 	"context"
 	"crypto/rand"
+	"errors"
 	"fmt"
 	"math/big"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -357,6 +359,13 @@ func (m *APIKeyManagerImpl) ReportFailure(key string, err error) {
 		return
 	}
 
+	// Check if this is a rate limit error (429)
+	// Rate limit errors should NOT trigger backoff because:
+	// 1. They're expected API behavior, not failures
+	// 2. Clients should receive the 429 to implement their own retry logic
+	// 3. Backoff should only trigger for actual failures (5xx, network, auth, etc.)
+	isRateLimit := isRateLimitError(err)
+
 	health.lastFailure = time.Now()
 	health.failureCount++
 	atomic.AddInt64(&health.requestCount, 1)
@@ -366,19 +375,24 @@ func (m *APIKeyManagerImpl) ReportFailure(key string, err error) {
 		health.errorRate = float64(health.failureCount) / float64(health.requestCount)
 	}
 
-	// Calculate backoff duration
-	backoffDuration := m.calculateBackoff(health.failureCount)
-	health.backoffUntil = time.Now().Add(backoffDuration)
+	// Only apply backoff if this is NOT a rate limit error
+	if !isRateLimit {
+		// Calculate backoff duration
+		backoffDuration := m.calculateBackoff(health.failureCount)
+		health.backoffUntil = time.Now().Add(backoffDuration)
 
-	// Mark as unhealthy after threshold
-	if m.config.Health.Enabled && health.failureCount >= m.config.Health.FailureThreshold {
-		health.isHealthy = false
-	}
+		// Mark as unhealthy after threshold
+		if m.config.Health.Enabled && health.failureCount >= m.config.Health.FailureThreshold {
+			health.isHealthy = false
+		}
 
-	// Record failure in circuit breaker
-	if health.circuitBreaker != nil {
-		health.circuitBreaker.recordFailure()
+		// Record failure in circuit breaker
+		if health.circuitBreaker != nil {
+			health.circuitBreaker.recordFailure()
+		}
 	}
+	// For rate limit errors, we don't set backoff or mark as unhealthy
+	// The error will still be propagated to the client for their retry logic
 }
 
 // calculateBackoff calculates exponential backoff duration
@@ -713,6 +727,27 @@ func (cb *circuitBreaker) getState() string {
 	default:
 		return "closed"
 	}
+}
+
+// isRateLimitError checks if an error is a rate limit error (HTTP 429)
+// by examining the error chain for ProviderError with ErrCodeRateLimit
+func isRateLimitError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	// Check if it's a ProviderError with rate limit code
+	var providerErr *types.ProviderError
+	if errors.As(err, &providerErr) {
+		return providerErr.Code == types.ErrCodeRateLimit
+	}
+
+	// Check if the error message contains rate limit indicators
+	// This is a fallback for errors that aren't properly wrapped as ProviderError
+	errMsg := strings.ToLower(err.Error())
+	return strings.Contains(errMsg, "rate limit") ||
+		strings.Contains(errMsg, "429") ||
+		strings.Contains(errMsg, "too many requests")
 }
 
 // Utility functions
