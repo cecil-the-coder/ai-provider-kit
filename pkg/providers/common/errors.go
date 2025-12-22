@@ -5,8 +5,6 @@ package common
 
 import (
 	"fmt"
-	"net/http"
-	"strings"
 )
 
 // APIErrorType classifies API errors
@@ -48,58 +46,6 @@ func (e *APIError) IsRetryable() bool {
 	return e.Retryable
 }
 
-// ClassifyHTTPError creates an APIError from HTTP status code
-// This provides a basic classification based on standard HTTP status codes
-func ClassifyHTTPError(statusCode int, body []byte) *APIError {
-	apiErr := &APIError{
-		StatusCode: statusCode,
-		RawBody:    string(body),
-	}
-
-	// Classify based on status code
-	switch {
-	case statusCode == http.StatusUnauthorized || statusCode == http.StatusForbidden:
-		apiErr.Type = APIErrorTypeAuth
-		apiErr.Message = "authentication failed"
-		apiErr.Retryable = false
-
-	case statusCode == http.StatusNotFound:
-		apiErr.Type = APIErrorTypeNotFound
-		apiErr.Message = "resource not found"
-		apiErr.Retryable = false
-
-	case statusCode == http.StatusBadRequest:
-		apiErr.Type = APIErrorTypeInvalidRequest
-		apiErr.Message = "invalid request"
-		apiErr.Retryable = false
-
-	case statusCode == http.StatusTooManyRequests:
-		apiErr.Type = APIErrorTypeRateLimit
-		apiErr.Message = "rate limit exceeded"
-		apiErr.Retryable = true
-
-	case statusCode >= 500 && statusCode < 600:
-		apiErr.Type = APIErrorTypeServer
-		apiErr.Message = "server error"
-		apiErr.Retryable = true
-
-	default:
-		apiErr.Type = APIErrorTypeUnknown
-		apiErr.Message = fmt.Sprintf("unknown error with status %d", statusCode)
-		apiErr.Retryable = false
-	}
-
-	// Try to extract more details from body if available
-	if len(body) > 0 && len(body) < 1000 {
-		bodyStr := strings.TrimSpace(string(body))
-		if bodyStr != "" && bodyStr != "{}" {
-			// Add body content to message if it's reasonably short
-			apiErr.Message = fmt.Sprintf("%s: %s", apiErr.Message, bodyStr)
-		}
-	}
-
-	return apiErr
-}
 
 // ErrorClassifier interface for provider-specific error parsing
 // Providers can implement this to provide more detailed error classification
