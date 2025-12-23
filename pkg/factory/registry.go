@@ -5,6 +5,7 @@ package factory
 import (
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/anthropic"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/cerebras"
+	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/copilot"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/gemini"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/ollama"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/openai"
@@ -58,6 +59,11 @@ func registerPrimaryProviders(factory *DefaultProviderFactory) {
 	// Register Ollama provider with full implementation
 	factory.RegisterProvider(types.ProviderTypeOllama, func(config types.ProviderConfig) types.Provider {
 		return ollama.NewOllamaProvider(config)
+	})
+
+	// Register Copilot provider with full implementation
+	factory.RegisterProvider(types.ProviderTypeCopilot, func(config types.ProviderConfig) types.Provider {
+		return copilot.NewCopilotProvider(config)
 	})
 }
 

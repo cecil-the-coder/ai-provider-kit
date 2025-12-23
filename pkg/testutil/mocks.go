@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"sync"
 	"time"
 
@@ -163,7 +164,7 @@ func (m *MockProvider) GetToolFormat() types.ToolFormat {
 func (m *MockProvider) GenerateChatCompletion(ctx context.Context, options types.GenerateOptions) (types.ChatCompletionStream, error) {
 	m.metrics.RequestCount++
 	m.metrics.SuccessCount++
-	return &MockStream{}, nil
+	return NewMockStream(), nil
 }
 
 // InvokeServerTool invokes a server tool (not implemented in mock).
@@ -183,7 +184,8 @@ type MockStream struct {
 func NewMockStream() *MockStream {
 	return &MockStream{
 		chunks: []types.ChatCompletionChunk{
-			{Content: "test", Done: true},
+			{Content: "test", Done: false},
+			{Done: true},
 		},
 		index: 0,
 	}
@@ -203,7 +205,7 @@ func (m *MockStream) Next() (types.ChatCompletionChunk, error) {
 	defer m.mu.Unlock()
 
 	if m.index >= len(m.chunks) {
-		return types.ChatCompletionChunk{}, nil
+		return types.ChatCompletionChunk{}, io.EOF
 	}
 
 	chunk := m.chunks[m.index]

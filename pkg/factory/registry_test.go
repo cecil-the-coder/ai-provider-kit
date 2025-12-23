@@ -32,6 +32,7 @@ func TestRegisterDefaultProviders(t *testing.T) {
 		types.ProviderTypeQwen,
 		types.ProviderTypeCerebras,
 		types.ProviderTypeOpenRouter,
+		types.ProviderTypeCopilot,
 		types.ProviderTypeLMStudio,
 		types.ProviderTypeLlamaCpp,
 		types.ProviderTypeOllama,
@@ -178,7 +179,7 @@ func TestRegisterDefaultProviders_DuplicateRegistration(t *testing.T) {
 
 	// Should still have the same number of providers (no duplicates)
 	supportedProviders := factory.GetSupportedProviders()
-	expectedCount := 12 // Number of default providers (9 regular + 3 virtual)
+	expectedCount := 13 // Number of default providers (10 regular + 3 virtual)
 	assert.Len(t, supportedProviders, expectedCount)
 }
 
@@ -201,7 +202,7 @@ func TestRegisterDefaultProviders_ConcurrentAccess(t *testing.T) {
 
 	// Verify providers were registered correctly (no duplicates)
 	supportedProviders := factory.GetSupportedProviders()
-	expectedCount := 12 // Number of default providers (9 regular + 3 virtual)
+	expectedCount := 13 // Number of default providers (10 regular + 3 virtual)
 	assert.Len(t, supportedProviders, expectedCount)
 
 	// Verify we can still create providers
@@ -242,6 +243,7 @@ func TestRegisterDefaultProviders_MixedWithCustomProviders(t *testing.T) {
 		types.ProviderTypeQwen,
 		types.ProviderTypeCerebras,
 		types.ProviderTypeOpenRouter,
+		types.ProviderTypeCopilot,
 		types.ProviderTypeLMStudio,
 		types.ProviderTypeLlamaCpp,
 		types.ProviderTypeOllama,
@@ -252,7 +254,7 @@ func TestRegisterDefaultProviders_MixedWithCustomProviders(t *testing.T) {
 	}
 
 	// Verify total count
-	assert.Len(t, supportedProviders, 13) // 12 default + 1 custom
+	assert.Len(t, supportedProviders, 14) // 13 default + 1 custom
 }
 
 // TestInitializeDefaultProviders_vs_RegisterDefaultProviders tests both initialization methods
@@ -276,7 +278,7 @@ func TestInitializeDefaultProviders_vs_RegisterDefaultProviders(t *testing.T) {
 	}
 	assert.Len(t, providers1, len(expectedStubProviders))
 
-	// RegisterDefaultProviders should have all providers (12 total)
+	// RegisterDefaultProviders should have all providers (13 total)
 	expectedAllProviders := []types.ProviderType{
 		types.ProviderTypeOpenAI,
 		types.ProviderTypeAnthropic,
@@ -284,6 +286,7 @@ func TestInitializeDefaultProviders_vs_RegisterDefaultProviders(t *testing.T) {
 		types.ProviderTypeQwen,
 		types.ProviderTypeCerebras,
 		types.ProviderTypeOpenRouter,
+		types.ProviderTypeCopilot,
 		types.ProviderTypeOllama,
 		types.ProviderTypeLMStudio,
 		types.ProviderTypeLlamaCpp,

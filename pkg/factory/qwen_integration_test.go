@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/cecil-the-coder/ai-provider-kit/pkg/testutil"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 )
 
@@ -14,14 +15,10 @@ func TestQwenProvider_FactoryIntegration(t *testing.T) {
 	// Register all default providers
 	RegisterDefaultProviders(f)
 
-	// Create a Qwen provider config
-	config := types.ProviderConfig{
-		Type:         types.ProviderTypeQwen,
-		Name:         "test-qwen",
-		APIKey:       "test-api-key",
-		BaseURL:      "https://portal.qwen.ai/v1",
-		DefaultModel: "qwen3-coder-flash",
-	}
+	// Create a Qwen provider config using helper
+	config := testutil.DefaultProviderConfig(types.ProviderTypeQwen, "test-qwen")
+	config.BaseURL = "https://portal.qwen.ai/v1"
+	config.DefaultModel = "qwen3-coder-flash"
 
 	// Create the provider using the factory
 	provider, err := f.CreateProvider(types.ProviderTypeQwen, config)
@@ -43,21 +40,16 @@ func TestQwenProvider_FactoryIntegration(t *testing.T) {
 		t.Errorf("Expected default model 'qwen3-coder-flash', got '%s'", provider.GetDefaultModel())
 	}
 
-	// Test authentication
+	// Test authentication using helper
 	ctx := context.Background()
-	authConfig := types.AuthConfig{
-		Method: types.AuthMethodAPIKey,
-		APIKey: "test-api-key",
-	}
+	authConfig := testutil.DefaultAuthConfig(config)
 
 	err = provider.Authenticate(ctx, authConfig)
 	if err != nil {
 		t.Fatalf("Expected no error authenticating, got %v", err)
 	}
 
-	if !provider.IsAuthenticated() {
-		t.Error("Expected provider to be authenticated")
-	}
+	testutil.RequireProviderAuthenticated(t, provider)
 
 	// Test getting models
 	models, err := provider.GetModels(ctx)
@@ -107,18 +99,12 @@ func TestQwenProvider_OAuthFlow(t *testing.T) {
 	// Register all default providers
 	RegisterDefaultProviders(f)
 
-	// Create a Qwen provider config with OAuth
-	config := types.ProviderConfig{
-		Type: types.ProviderTypeQwen,
-		Name: "test-qwen-oauth",
-		OAuthCredentials: []*types.OAuthCredentialSet{
-			{
-				ID:           "test-cred",
-				ClientID:     "test-client-id",
-				ClientSecret: "test-client-secret",
-			},
-		},
-	}
+	// Create a Qwen provider config with OAuth using helper
+	oauthCreds := testutil.MultiOAuthTestConfig(1)
+	oauthCreds[0].ClientID = "test-client-id"
+	oauthCreds[0].ClientSecret = "test-client-secret"
+
+	config := testutil.ProviderConfigWithOAuth(types.ProviderTypeQwen, "test-qwen-oauth", oauthCreds)
 
 	// Create the provider using the factory
 	provider, err := f.CreateProvider(types.ProviderTypeQwen, config)
@@ -133,7 +119,7 @@ func TestQwenProvider_OAuthFlow(t *testing.T) {
 
 	// OAuth authentication is now handled through OAuthCredentials in ProviderConfig
 	// The provider should already be set up with OAuth if credentials were provided
-	// Test that the provider is created successfully
+	// Test that the provider was created successfully
 	if provider == nil {
 		t.Fatal("Expected provider to be created")
 	}
@@ -141,4 +127,24 @@ func TestQwenProvider_OAuthFlow(t *testing.T) {
 	// Note: OAuth authentication flow has changed - credentials are now managed
 	// by OAuthKeyManager internally. We just verify the provider was created.
 	t.Log("Provider created successfully with OAuth credentials configuration")
+}
+
+func TestQwenProvider_HappyPathScenario(t *testing.T) {
+	// Create a new factory
+	f := NewProviderFactory()
+
+	// Register all default providers
+	RegisterDefaultProviders(f)
+
+	// Create provider using helper
+	config := testutil.DefaultProviderConfig(types.ProviderTypeQwen, "qwen-happy-path")
+
+	provider, err := f.CreateProvider(types.ProviderTypeQwen, config)
+	if err != nil {
+		t.Fatalf("Expected no error creating provider, got %v", err)
+	}
+
+	// Run standard happy path scenario
+	ctx := testutil.NewTestContext(t, defaultTestTimeout)
+	testutil.HappyPathScenario(t, provider, ctx)
 }
