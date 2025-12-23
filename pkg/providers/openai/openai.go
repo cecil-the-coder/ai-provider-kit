@@ -15,6 +15,7 @@ import (
 	"github.com/cecil-the-coder/ai-provider-kit/internal/common"
 	"github.com/cecil-the-coder/ai-provider-kit/internal/common/auth"
 	commonconfig "github.com/cecil-the-coder/ai-provider-kit/internal/common/config"
+	commonhttp "github.com/cecil-the-coder/ai-provider-kit/internal/common/http"
 	"github.com/cecil-the-coder/ai-provider-kit/internal/common/models"
 	"github.com/cecil-the-coder/ai-provider-kit/internal/common/telemetry"
 	pkghttp "github.com/cecil-the-coder/ai-provider-kit/internal/http"
@@ -152,26 +153,15 @@ func (p *OpenAIProvider) fetchModelsFromAPI(ctx context.Context) ([]types.Model,
 			WithOperation("fetchModelsFromAPI").
 			WithOriginalErr(err)
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer commonhttp.SafeClose(resp)
 
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, types.NewServerError(types.ProviderTypeOpenAI, resp.StatusCode, fmt.Sprintf("failed to fetch models: %s", string(body))).
-			WithOperation("fetchModelsFromAPI")
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, types.NewNetworkError(types.ProviderTypeOpenAI, "failed to read response").
-			WithOperation("fetchModelsFromAPI").
-			WithOriginalErr(err)
+	if err := commonhttp.HandleHTTPStatusError(resp, types.ProviderTypeOpenAI, "fetchModelsFromAPI", "failed to fetch models"); err != nil {
+		return nil, err
 	}
 
 	var modelsResp OpenAIModelsResponse
-	if err := json.Unmarshal(body, &modelsResp); err != nil {
-		return nil, types.NewInvalidRequestError(types.ProviderTypeOpenAI, "failed to parse models response").
-			WithOperation("fetchModelsFromAPI").
-			WithOriginalErr(err)
+	if err := commonhttp.UnmarshalJSONResponse(resp.Body, &modelsResp, types.ProviderTypeOpenAI, "fetchModelsFromAPI"); err != nil {
+		return nil, err
 	}
 
 	// Convert to internal Model format - no filtering to support OpenAI-compatible providers
@@ -384,26 +374,10 @@ func (p *OpenAIProvider) performConnectivityTest(ctx context.Context) error {
 			WithOperation("test_connectivity").
 			WithOriginalErr(err)
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer commonhttp.SafeClose(resp)
 
-	// Check response status
-	if resp.StatusCode == http.StatusUnauthorized {
-		return types.NewAuthError(types.ProviderTypeOpenAI, "invalid API key").
-			WithOperation("test_connectivity").
-			WithStatusCode(resp.StatusCode)
-	}
-
-	if resp.StatusCode == http.StatusForbidden {
-		return types.NewAuthError(types.ProviderTypeOpenAI, "API key does not have access to models endpoint").
-			WithOperation("test_connectivity").
-			WithStatusCode(resp.StatusCode)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return types.NewServerError(types.ProviderTypeOpenAI, resp.StatusCode,
-			fmt.Sprintf("connectivity test failed: %s", string(body))).
-			WithOperation("test_connectivity")
+	if err := commonhttp.HandleHTTPStatusError(resp, types.ProviderTypeOpenAI, "test_connectivity", "connectivity test failed"); err != nil {
+		return err
 	}
 
 	// Read entire response to support providers with many models (e.g., Groq with 20+ models)

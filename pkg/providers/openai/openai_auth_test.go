@@ -185,7 +185,8 @@ func TestOpenAIProvider_TestConnectivity(t *testing.T) {
 
 		err := provider.TestConnectivity(context.Background())
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "invalid API key")
+		assert.Contains(t, err.Error(), "connectivity test failed")
+		assert.Contains(t, err.Error(), "401")
 	})
 
 	t.Run("ForbiddenAccess", func(t *testing.T) {

@@ -3,15 +3,14 @@ package gemini
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
 
 	"github.com/cecil-the-coder/ai-provider-kit/internal/common/telemetry"
+	commonhttp "github.com/cecil-the-coder/ai-provider-kit/internal/common/http"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 )
 
@@ -62,14 +61,10 @@ func (p *GeminiProvider) ValidateToken(ctx context.Context) (*types.TokenInfo, e
 			WithOperation("validate_token").
 			WithOriginalErr(err)
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer commonhttp.SafeClose(resp)
 
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, types.NewAuthError(types.ProviderTypeGemini,
-			fmt.Sprintf("token validation failed: %s", string(body))).
-			WithOperation("validate_token").
-			WithStatusCode(resp.StatusCode)
+	if err := commonhttp.HandleHTTPStatusError(resp, types.ProviderTypeGemini, "validate_token", "token validation failed"); err != nil {
+		return nil, err
 	}
 
 	// Parse tokeninfo response
@@ -82,10 +77,8 @@ func (p *GeminiProvider) ValidateToken(ctx context.Context) (*types.TokenInfo, e
 		Issuer        string `json:"iss"`
 	}
 
-	if err := json.NewDecoder(resp.Body).Decode(&tokenInfoResponse); err != nil {
-		return nil, types.NewServerError(types.ProviderTypeGemini, 0, "failed to decode token info response").
-			WithOperation("validate_token").
-			WithOriginalErr(err)
+	if err := commonhttp.UnmarshalJSONResponse(resp.Body, &tokenInfoResponse, types.ProviderTypeGemini, "validate_token"); err != nil {
+		return nil, err
 	}
 
 	// Parse scopes

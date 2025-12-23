@@ -191,7 +191,7 @@ func TestFetchModelsFromAPI(t *testing.T) {
 		models, err := provider.fetchModelsFromAPI(context.Background())
 		assert.Error(t, err)
 		assert.Nil(t, models)
-		assert.Contains(t, err.Error(), "failed to parse models response")
+		assert.Contains(t, err.Error(), "failed to decode response")
 	})
 }
 

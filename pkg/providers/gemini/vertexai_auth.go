@@ -4,13 +4,13 @@ package gemini
 import (
 	"context"
 	"encoding/json"
-	"io"
 	"net/http"
 	"net/url"
 	"os"
 	"strings"
 	"time"
 
+	commonhttp "github.com/cecil-the-coder/ai-provider-kit/internal/common/http"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 )
 
@@ -152,14 +152,10 @@ func (v *VertexAIAuthenticator) refreshWithServiceAccount(ctx context.Context) e
 			WithOperation("refresh_service_account_token").
 			WithOriginalErr(err)
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer commonhttp.SafeClose(resp)
 
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		errCode := types.ClassifyHTTPError(resp.StatusCode)
-		return types.NewProviderError(types.ProviderTypeGemini, errCode, string(body)).
-			WithOperation("refresh_service_account_token").
-			WithStatusCode(resp.StatusCode)
+	if err := commonhttp.HandleHTTPStatusError(resp, types.ProviderTypeGemini, "refresh_service_account_token", ""); err != nil {
+		return err
 	}
 
 	var tokenResponse struct {
@@ -168,10 +164,8 @@ func (v *VertexAIAuthenticator) refreshWithServiceAccount(ctx context.Context) e
 		TokenType   string `json:"token_type"`
 	}
 
-	if err := json.NewDecoder(resp.Body).Decode(&tokenResponse); err != nil {
-		return types.NewServerError(types.ProviderTypeGemini, 0, "failed to decode token response").
-			WithOperation("refresh_service_account_token").
-			WithOriginalErr(err)
+	if err := commonhttp.UnmarshalJSONResponse(resp.Body, &tokenResponse, types.ProviderTypeGemini, "refresh_service_account_token"); err != nil {
+		return err
 	}
 
 	v.accessToken = tokenResponse.AccessToken
@@ -200,14 +194,10 @@ func (v *VertexAIAuthenticator) refreshWithMetadataServer(ctx context.Context) e
 			WithOperation("refresh_service_account_token").
 			WithOriginalErr(err)
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer commonhttp.SafeClose(resp)
 
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		errCode := types.ClassifyHTTPError(resp.StatusCode)
-		return types.NewProviderError(types.ProviderTypeGemini, errCode, string(body)).
-			WithOperation("refresh_service_account_token").
-			WithStatusCode(resp.StatusCode)
+	if err := commonhttp.HandleHTTPStatusError(resp, types.ProviderTypeGemini, "refresh_service_account_token", ""); err != nil {
+		return err
 	}
 
 	var tokenResponse struct {
@@ -216,10 +206,8 @@ func (v *VertexAIAuthenticator) refreshWithMetadataServer(ctx context.Context) e
 		TokenType   string `json:"token_type"`
 	}
 
-	if err := json.NewDecoder(resp.Body).Decode(&tokenResponse); err != nil {
-		return types.NewServerError(types.ProviderTypeGemini, 0, "failed to decode metadata response").
-			WithOperation("refresh_service_account_token").
-			WithOriginalErr(err)
+	if err := commonhttp.UnmarshalJSONResponse(resp.Body, &tokenResponse, types.ProviderTypeGemini, "refresh_service_account_token"); err != nil {
+		return err
 	}
 
 	v.accessToken = tokenResponse.AccessToken

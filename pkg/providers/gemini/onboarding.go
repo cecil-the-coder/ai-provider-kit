@@ -5,12 +5,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
 	"time"
 
 	"github.com/cecil-the-coder/ai-provider-kit/internal/common/telemetry"
+	commonhttp "github.com/cecil-the-coder/ai-provider-kit/internal/common/http"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 )
 
@@ -57,21 +57,15 @@ func (p *GeminiProvider) loadCodeAssist(ctx context.Context, projectID *string, 
 			WithOperation("onboard_user").
 			WithOriginalErr(err)
 	}
-	defer func() { _ = resp.Body.Close() }() //nolint:staticcheck // Empty branch is intentional - we ignore close errors
+	defer commonhttp.SafeClose(resp)
 
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		errCode := types.ClassifyHTTPError(resp.StatusCode)
-		return nil, types.NewProviderError(types.ProviderTypeGemini, errCode, string(body)).
-			WithOperation("onboard_user").
-			WithStatusCode(resp.StatusCode)
+	if err := commonhttp.HandleHTTPStatusError(resp, types.ProviderTypeGemini, "onboard_user", ""); err != nil {
+		return nil, err
 	}
 
 	var loadRes LoadCodeAssistResponse
-	if err := json.NewDecoder(resp.Body).Decode(&loadRes); err != nil {
-		return nil, types.NewServerError(types.ProviderTypeGemini, 0, "failed to decode loadCodeAssist response").
-			WithOperation("onboard_user").
-			WithOriginalErr(err)
+	if err := commonhttp.UnmarshalJSONResponse(resp.Body, &loadRes, types.ProviderTypeGemini, "onboard_user"); err != nil {
+		return nil, err
 	}
 	return &loadRes, nil
 }
@@ -85,21 +79,15 @@ func (p *GeminiProvider) onboardUser(ctx context.Context, req OnboardUserRequest
 			WithOperation("onboard_user").
 			WithOriginalErr(err)
 	}
-	defer func() { _ = resp.Body.Close() }() //nolint:staticcheck // Empty branch is intentional - we ignore close errors
+	defer commonhttp.SafeClose(resp)
 
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		errCode := types.ClassifyHTTPError(resp.StatusCode)
-		return nil, types.NewProviderError(types.ProviderTypeGemini, errCode, string(body)).
-			WithOperation("onboard_user").
-			WithStatusCode(resp.StatusCode)
+	if err := commonhttp.HandleHTTPStatusError(resp, types.ProviderTypeGemini, "onboard_user", ""); err != nil {
+		return nil, err
 	}
 
 	var lroResp LongRunningOperationResponse
-	if err := json.NewDecoder(resp.Body).Decode(&lroResp); err != nil {
-		return nil, types.NewServerError(types.ProviderTypeGemini, 0, "failed to decode onboardUser response").
-			WithOperation("onboard_user").
-			WithOriginalErr(err)
+	if err := commonhttp.UnmarshalJSONResponse(resp.Body, &lroResp, types.ProviderTypeGemini, "onboard_user"); err != nil {
+		return nil, err
 	}
 	return &lroResp, nil
 }
