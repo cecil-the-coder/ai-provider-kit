@@ -33,8 +33,10 @@ type OpenRouterParser struct{}
 //   - Free tier accounts may have different limits
 func (p *OpenRouterParser) Parse(headers http.Header, model string) (*Info, error) {
 	info := &Info{
-		Provider: "openrouter",
-		Model:    model,
+		BaseInfo: BaseInfo{
+			Provider: "openrouter",
+			Model:    model,
+		},
 	}
 
 	// Parse credit-based rate limits

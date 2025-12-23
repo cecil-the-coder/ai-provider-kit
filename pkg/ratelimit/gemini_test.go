@@ -21,11 +21,9 @@ func TestGeminiParser_Parse(t *testing.T) {
 				"Retry-After": []string{"60"},
 			},
 			model: "gemini-pro",
-			want: &Info{
-				Provider:   "gemini",
-				Model:      "gemini-pro",
-				RetryAfter: 60 * time.Second,
-			},
+			want: MakeTestInfo("gemini", "gemini-pro",
+				WithRetryAfter(60*time.Second),
+			),
 			wantErr: false,
 		},
 		{
@@ -33,13 +31,8 @@ func TestGeminiParser_Parse(t *testing.T) {
 			headers: http.Header{
 				"Retry-After": []string{"Wed, 21 Oct 2015 07:28:00 GMT"},
 			},
-			model: "gemini-pro-vision",
-			want: &Info{
-				Provider: "gemini",
-				Model:    "gemini-pro-vision",
-				// RetryAfter will be calculated from current time to the date
-				// We'll verify this is set in the test logic below
-			},
+			model:   "gemini-pro-vision",
+			want:    MakeTestInfo("gemini", "gemini-pro-vision"),
 			wantErr: false,
 		},
 		{
@@ -49,28 +42,17 @@ func TestGeminiParser_Parse(t *testing.T) {
 				"X-Request-Id": []string{"req_gemini_123"},
 			},
 			model: "gemini-pro",
-			want: &Info{
-				Provider:   "gemini",
-				Model:      "gemini-pro",
-				RetryAfter: 120 * time.Second,
-				RequestID:  "req_gemini_123",
-			},
+			want: MakeTestInfo("gemini", "gemini-pro",
+				WithRetryAfter(120*time.Second),
+				WithRequestID("req_gemini_123"),
+			),
 			wantErr: false,
 		},
 		{
 			name:    "no headers (normal 200 response)",
 			headers: http.Header{},
 			model:   "gemini-pro",
-			want: &Info{
-				Provider: "gemini",
-				Model:    "gemini-pro",
-				// All limit/remaining fields should be 0
-				RequestsLimit:     0,
-				RequestsRemaining: 0,
-				TokensLimit:       0,
-				TokensRemaining:   0,
-				RetryAfter:        0,
-			},
+			want:    MakeTestInfo("gemini", "gemini-pro"),
 			wantErr: false,
 		},
 		{
@@ -79,11 +61,9 @@ func TestGeminiParser_Parse(t *testing.T) {
 				"X-Request-Id": []string{"req_success_456"},
 			},
 			model: "gemini-pro",
-			want: &Info{
-				Provider:  "gemini",
-				Model:     "gemini-pro",
-				RequestID: "req_success_456",
-			},
+			want: MakeTestInfo("gemini", "gemini-pro",
+				WithRequestID("req_success_456"),
+			),
 			wantErr: false,
 		},
 		{
@@ -91,12 +71,8 @@ func TestGeminiParser_Parse(t *testing.T) {
 			headers: http.Header{
 				"Retry-After": []string{"invalid"},
 			},
-			model: "gemini-pro",
-			want: &Info{
-				Provider:   "gemini",
-				Model:      "gemini-pro",
-				RetryAfter: 0, // Should remain 0 due to invalid value
-			},
+			model:   "gemini-pro",
+			want:    MakeTestInfo("gemini", "gemini-pro"),
 			wantErr: false,
 		},
 		{
@@ -104,12 +80,8 @@ func TestGeminiParser_Parse(t *testing.T) {
 			headers: http.Header{
 				"Retry-After": []string{"0"},
 			},
-			model: "gemini-pro",
-			want: &Info{
-				Provider:   "gemini",
-				Model:      "gemini-pro",
-				RetryAfter: 0,
-			},
+			model:   "gemini-pro",
+			want:    MakeTestInfo("gemini", "gemini-pro"),
 			wantErr: false,
 		},
 		{
@@ -118,11 +90,9 @@ func TestGeminiParser_Parse(t *testing.T) {
 				"Retry-After": []string{"3600"}, // 1 hour
 			},
 			model: "gemini-pro",
-			want: &Info{
-				Provider:   "gemini",
-				Model:      "gemini-pro",
-				RetryAfter: 3600 * time.Second,
-			},
+			want: MakeTestInfo("gemini", "gemini-pro",
+				WithRetryAfter(3600*time.Second),
+			),
 			wantErr: false,
 		},
 		{
@@ -132,12 +102,10 @@ func TestGeminiParser_Parse(t *testing.T) {
 				"X-Request-Id": []string{"req_case_test"},
 			},
 			model: "gemini-pro",
-			want: &Info{
-				Provider:   "gemini",
-				Model:      "gemini-pro",
-				RetryAfter: 30 * time.Second,
-				RequestID:  "req_case_test",
-			},
+			want: MakeTestInfo("gemini", "gemini-pro",
+				WithRetryAfter(30*time.Second),
+				WithRequestID("req_case_test"),
+			),
 			wantErr: false,
 		},
 		{
@@ -145,12 +113,8 @@ func TestGeminiParser_Parse(t *testing.T) {
 			headers: http.Header{
 				"Retry-After": []string{"Mon, 01 Jan 2020 00:00:00 GMT"},
 			},
-			model: "gemini-pro",
-			want: &Info{
-				Provider:   "gemini",
-				Model:      "gemini-pro",
-				RetryAfter: 0, // Should be 0 since the date is in the past
-			},
+			model:   "gemini-pro",
+			want:    MakeTestInfo("gemini", "gemini-pro"),
 			wantErr: false,
 		},
 	}

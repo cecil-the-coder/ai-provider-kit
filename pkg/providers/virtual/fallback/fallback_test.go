@@ -6,6 +6,7 @@ import (
 	"io"
 	"testing"
 
+	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/virtual/common"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 )
 
@@ -231,9 +232,6 @@ func TestFallbackProvider_FirstProviderSucceeds(t *testing.T) {
 	if !ok {
 		t.Fatal("expected fallbackStream type")
 	}
-	if fbStream.providerName != "provider1" {
-		t.Errorf("expected provider name 'provider1', got %s", fbStream.providerName)
-	}
 	if fbStream.providerIndex != 0 {
 		t.Errorf("expected provider index 0, got %d", fbStream.providerIndex)
 	}
@@ -291,9 +289,6 @@ func TestFallbackProvider_FirstFailsSecondSucceeds(t *testing.T) {
 	if !ok {
 		t.Fatal("expected fallbackStream type")
 	}
-	if fbStream.providerName != "provider2" {
-		t.Errorf("expected provider name 'provider2', got %s", fbStream.providerName)
-	}
 	if fbStream.providerIndex != 1 {
 		t.Errorf("expected provider index 1, got %d", fbStream.providerIndex)
 	}
@@ -349,9 +344,6 @@ func TestFallbackProvider_FirstTwoFailThirdSucceeds(t *testing.T) {
 	fbStream, ok := stream.(*fallbackStream)
 	if !ok {
 		t.Fatal("expected fallbackStream type")
-	}
-	if fbStream.providerName != "provider3" {
-		t.Errorf("expected provider name 'provider3', got %s", fbStream.providerName)
 	}
 	if fbStream.providerIndex != 2 {
 		t.Errorf("expected provider index 2, got %d", fbStream.providerIndex)
@@ -469,9 +461,6 @@ func TestFallbackProvider_NonChatProvider(t *testing.T) {
 	if !ok {
 		t.Fatal("expected fallbackStream type")
 	}
-	if fbStream.providerName != "chat-provider" {
-		t.Errorf("expected provider name 'chat-provider', got %s", fbStream.providerName)
-	}
 	// Index should be 1 (second provider) since first returned error
 	if fbStream.providerIndex != 1 {
 		t.Errorf("expected provider index 1, got %d", fbStream.providerIndex)
@@ -516,8 +505,7 @@ func TestFallbackStream_MetadataAddition(t *testing.T) {
 	}
 
 	fbStream := &fallbackStream{
-		inner:         innerStream,
-		providerName:  "test-provider",
+		StreamWrapper: common.NewStreamWrapper(innerStream, "fallback_provider", "test-provider"),
 		providerIndex: 2,
 	}
 
@@ -546,8 +534,7 @@ func TestFallbackStream_MetadataPreserved(t *testing.T) {
 	}
 
 	fbStream := &fallbackStream{
-		inner:         innerStream,
-		providerName:  "test-provider",
+		StreamWrapper: common.NewStreamWrapper(innerStream, "fallback_provider", "test-provider"),
 		providerIndex: 1,
 	}
 
@@ -573,8 +560,7 @@ func TestFallbackStream_CloseWorks(t *testing.T) {
 	}
 
 	fbStream := &fallbackStream{
-		inner:         innerStream,
-		providerName:  "test-provider",
+		StreamWrapper: common.NewStreamWrapper(innerStream, "fallback_provider", "test-provider"),
 		providerIndex: 0,
 	}
 
@@ -596,8 +582,7 @@ func TestFallbackStream_CloseError(t *testing.T) {
 	}
 
 	fbStream := &fallbackStream{
-		inner:         innerStream,
-		providerName:  "test-provider",
+		StreamWrapper: common.NewStreamWrapper(innerStream, "fallback_provider", "test-provider"),
 		providerIndex: 0,
 	}
 
@@ -690,8 +675,7 @@ func TestFallbackStream_NextError(t *testing.T) {
 	}
 
 	fbStream := &fallbackStream{
-		inner:         innerStream,
-		providerName:  "test-provider",
+		StreamWrapper: common.NewStreamWrapper(innerStream, "fallback_provider", "test-provider"),
 		providerIndex: 0,
 	}
 
@@ -713,8 +697,7 @@ func TestFallbackStream_NextMetadataInitialization(t *testing.T) {
 	}
 
 	fbStream := &fallbackStream{
-		inner:         innerStream,
-		providerName:  "test-provider",
+		StreamWrapper: common.NewStreamWrapper(innerStream, "fallback_provider", "test-provider"),
 		providerIndex: 0,
 	}
 

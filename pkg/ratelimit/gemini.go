@@ -57,8 +57,10 @@ type GeminiParser struct{}
 //   - error is always nil (this parser doesn't fail)
 func (p *GeminiParser) Parse(headers http.Header, model string) (*Info, error) {
 	info := &Info{
-		Provider: "gemini",
-		Model:    model,
+		BaseInfo: BaseInfo{
+			Provider: "gemini",
+			Model:    model,
+		},
 	}
 
 	// Gemini does not provide proactive rate limit headers.

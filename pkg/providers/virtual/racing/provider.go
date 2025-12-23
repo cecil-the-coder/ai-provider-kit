@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/virtual/common"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 )
 
@@ -323,13 +324,11 @@ func (r *RacingProvider) pickBestCandidate(ctx context.Context, candidates []*ra
 		}
 
 		return &racingStream{
-			inner:            best.stream,
-			provider:         best.provider.Name(),
+			StreamWrapper:    common.NewStreamWrapper(best.stream, "racing_winner", best.provider.Name()),
 			latency:          best.latency,
 			virtualModel:     virtualModelName,
 			virtualModelDesc: virtualModelDesc,
 			cancelTimeout:    cancelTimeout,
-			cancelRace:       cancelRace,
 		}, nil
 	}
 
@@ -347,13 +346,11 @@ func (r *RacingProvider) pickBestCandidate(ctx context.Context, candidates []*ra
 		}
 
 		return &racingStream{
-			inner:            candidates[0].stream,
-			provider:         candidates[0].provider.Name(),
+			StreamWrapper:    common.NewStreamWrapper(candidates[0].stream, "racing_winner", candidates[0].provider.Name()),
 			latency:          candidates[0].latency,
 			virtualModel:     virtualModelName,
 			virtualModelDesc: virtualModelDesc,
 			cancelTimeout:    cancelTimeout,
-			cancelRace:       cancelRace,
 		}, nil
 	}
 
@@ -515,29 +512,27 @@ func (r *RacingProvider) emitRaceWinnerEvents(ctx context.Context, collector typ
 }
 
 type racingStream struct {
-	inner            types.ChatCompletionStream
-	provider         string
+	*common.StreamWrapper
 	latency          time.Duration
 	virtualModel     string
 	virtualModelDesc string
 	cancelTimeout    context.CancelFunc
-	cancelRace       context.CancelFunc
 }
 
 func (s *racingStream) Next() (types.ChatCompletionChunk, error) {
-	chunk, err := s.inner.Next()
-	if chunk.Metadata == nil {
-		chunk.Metadata = make(map[string]interface{})
+	chunk, err := s.StreamWrapper.Next()
+	if err != nil {
+		return chunk, err
 	}
-	chunk.Metadata["racing_winner"] = s.provider
-	chunk.Metadata["racing_latency_ms"] = s.latency.Milliseconds()
+	// Add racing-specific metadata
+	s.StreamWrapper.AddMetadata(&chunk, "racing_latency_ms", s.latency.Milliseconds())
 	if s.virtualModel != "" {
-		chunk.Metadata["virtual_model"] = s.virtualModel
+		s.StreamWrapper.AddMetadata(&chunk, "virtual_model", s.virtualModel)
 	}
 	if s.virtualModelDesc != "" {
-		chunk.Metadata["virtual_model_desc"] = s.virtualModelDesc
+		s.StreamWrapper.AddMetadata(&chunk, "virtual_model_desc", s.virtualModelDesc)
 	}
-	return chunk, err
+	return chunk, nil
 }
 
 func (s *racingStream) Close() error {
@@ -550,5 +545,5 @@ func (s *racingStream) Close() error {
 	if s.cancelTimeout != nil {
 		s.cancelTimeout()
 	}
-	return s.inner.Close()
+	return s.StreamWrapper.Close()
 }

@@ -25,8 +25,10 @@ type OpenAIParser struct{}
 // and converted to absolute timestamps.
 func (p *OpenAIParser) Parse(headers http.Header, model string) (*Info, error) {
 	info := &Info{
-		Provider: "openai",
-		Model:    model,
+		BaseInfo: BaseInfo{
+			Provider: "openai",
+			Model:    model,
+		},
 	}
 
 	// Parse request-based rate limits

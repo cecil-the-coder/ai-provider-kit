@@ -436,12 +436,18 @@ func TestPickBestCandidate_SingleCandidate(t *testing.T) {
 		t.Fatal("expected non-nil stream")
 	}
 
-	rs, ok := stream.(*racingStream)
+	_, ok := stream.(*racingStream)
 	if !ok {
 		t.Fatal("expected racingStream type")
 	}
 
-	if rs.provider != "only-provider" {
-		t.Errorf("expected provider 'only-provider', got '%s'", rs.provider)
+	// The provider name is now in the StreamWrapper, check metadata instead
+	chunk, err := stream.Next()
+	if err != nil {
+		t.Fatalf("expected no error on Next(), got %v", err)
+	}
+
+	if chunk.Metadata["racing_winner"] != "only-provider" {
+		t.Errorf("expected racing_winner 'only-provider', got '%v'", chunk.Metadata["racing_winner"])
 	}
 }

@@ -18,14 +18,11 @@ func TestTracker_Update(t *testing.T) {
 
 	// Test updating with valid info
 	now := time.Now()
-	info1 := &Info{
-		Provider:          "anthropic",
-		Model:             "claude-3-opus-20240229",
-		Timestamp:         now,
-		RequestsLimit:     1000,
-		RequestsRemaining: 999,
-		RequestsReset:     now.Add(time.Hour),
-	}
+	info1 := MakeTestInfo("anthropic", "claude-3-opus-20240229",
+		WithRequests(1000, 999, ""),
+	)
+	info1.Timestamp = now
+	info1.RequestsReset = now.Add(time.Hour)
 
 	tracker.Update(info1)
 
@@ -47,14 +44,11 @@ func TestTracker_Update(t *testing.T) {
 	}
 
 	// Test updating existing model
-	info2 := &Info{
-		Provider:          "anthropic",
-		Model:             "claude-3-opus-20240229",
-		Timestamp:         now.Add(time.Minute),
-		RequestsLimit:     1000,
-		RequestsRemaining: 998,
-		RequestsReset:     now.Add(time.Hour),
-	}
+	info2 := MakeTestInfo("anthropic", "claude-3-opus-20240229",
+		WithRequests(1000, 998, ""),
+	)
+	info2.Timestamp = now.Add(time.Minute)
+	info2.RequestsReset = now.Add(time.Hour)
 
 	tracker.Update(info2)
 
@@ -72,14 +66,11 @@ func TestTracker_Update(t *testing.T) {
 	}
 
 	// Test updating different models
-	info3 := &Info{
-		Provider:          "openai",
-		Model:             "gpt-4",
-		Timestamp:         now,
-		RequestsLimit:     500,
-		RequestsRemaining: 450,
-		RequestsReset:     now.Add(time.Hour),
-	}
+	info3 := MakeTestInfo("openai", "gpt-4",
+		WithRequests(500, 450, ""),
+	)
+	info3.Timestamp = now
+	info3.RequestsReset = now.Add(time.Hour)
 
 	tracker.Update(info3)
 
@@ -103,17 +94,13 @@ func TestTracker_Get(t *testing.T) {
 	}
 
 	// Add some data
-	testInfo := &Info{
-		Provider:          "anthropic",
-		Model:             "claude-3-opus-20240229",
-		Timestamp:         now,
-		RequestsLimit:     1000,
-		RequestsRemaining: 999,
-		RequestsReset:     now.Add(time.Hour),
-		TokensLimit:       100000,
-		TokensRemaining:   99500,
-		TokensReset:       now.Add(time.Hour),
-	}
+	testInfo := MakeTestInfo("anthropic", "claude-3-opus-20240229",
+		WithRequests(1000, 999, ""),
+		WithTokens(100000, 99500, ""),
+	)
+	testInfo.Timestamp = now
+	testInfo.RequestsReset = now.Add(time.Hour)
+	testInfo.TokensReset = now.Add(time.Hour)
 
 	tracker.Update(testInfo)
 
@@ -166,119 +153,103 @@ func TestTracker_CanMakeRequest(t *testing.T) {
 	}{
 		{
 			name: "has requests and tokens remaining",
-			info: &Info{
-				Provider:          "anthropic",
-				Model:             "claude-3-opus-20240229",
-				RequestsLimit:     1000,
-				RequestsRemaining: 100,
-				RequestsReset:     now.Add(time.Hour),
-				TokensLimit:       100000,
-				TokensRemaining:   50000,
-				TokensReset:       now.Add(time.Hour),
-			},
+			info: func() *Info {
+				i := MakeTestInfo("anthropic", "claude-3-opus-20240229",
+					WithRequests(1000, 100, ""),
+					WithTokens(100000, 50000, ""),
+				)
+				i.RequestsReset = now.Add(time.Hour)
+				i.TokensReset = now.Add(time.Hour)
+				return i
+			}(),
 			estimatedTokens: 1000,
 			want:            true,
 		},
 		{
 			name: "no requests remaining",
-			info: &Info{
-				Provider:          "anthropic",
-				Model:             "claude-3-opus-no-requests",
-				RequestsLimit:     1000,
-				RequestsRemaining: 0,
-				RequestsReset:     now.Add(time.Hour),
-				TokensLimit:       100000,
-				TokensRemaining:   50000,
-				TokensReset:       now.Add(time.Hour),
-			},
+			info: func() *Info {
+				i := MakeTestInfo("anthropic", "claude-3-opus-no-requests",
+					WithRequests(1000, 0, ""),
+					WithTokens(100000, 50000, ""),
+				)
+				i.RequestsReset = now.Add(time.Hour)
+				i.TokensReset = now.Add(time.Hour)
+				return i
+			}(),
 			estimatedTokens: 1000,
 			want:            false,
 		},
 		{
 			name: "not enough tokens remaining",
-			info: &Info{
-				Provider:          "anthropic",
-				Model:             "claude-3-opus-low-tokens",
-				RequestsLimit:     1000,
-				RequestsRemaining: 100,
-				RequestsReset:     now.Add(time.Hour),
-				TokensLimit:       100000,
-				TokensRemaining:   500,
-				TokensReset:       now.Add(time.Hour),
-			},
+			info: func() *Info {
+				i := MakeTestInfo("anthropic", "claude-3-opus-low-tokens",
+					WithRequests(1000, 100, ""),
+					WithTokens(100000, 500, ""),
+				)
+				i.RequestsReset = now.Add(time.Hour)
+				i.TokensReset = now.Add(time.Hour)
+				return i
+			}(),
 			estimatedTokens: 1000,
 			want:            false,
 		},
 		{
 			name: "requests reset time passed",
-			info: &Info{
-				Provider:          "anthropic",
-				Model:             "claude-3-opus-reset",
-				RequestsLimit:     1000,
-				RequestsRemaining: 0,
-				RequestsReset:     now.Add(-time.Minute), // Already passed
-				TokensLimit:       100000,
-				TokensRemaining:   0,
-				TokensReset:       now.Add(-time.Minute),
-			},
+			info: func() *Info {
+				i := MakeTestInfo("anthropic", "claude-3-opus-reset",
+					WithRequests(1000, 0, ""),
+					WithTokens(100000, 0, ""),
+				)
+				i.RequestsReset = now.Add(-time.Minute) // Already passed
+				i.TokensReset = now.Add(-time.Minute)
+				return i
+			}(),
 			estimatedTokens: 1000,
 			want:            true,
 		},
 		{
 			name: "anthropic input tokens insufficient",
-			info: &Info{
-				Provider:             "anthropic",
-				Model:                "claude-3-opus-input-limit",
-				RequestsLimit:        1000,
-				RequestsRemaining:    100,
-				RequestsReset:        now.Add(time.Hour),
-				InputTokensLimit:     10000,
-				InputTokensRemaining: 500,
-				InputTokensReset:     now.Add(time.Hour),
-			},
+			info: func() *Info {
+				i := MakeTestInfo("anthropic", "claude-3-opus-input-limit",
+					WithRequests(1000, 100, ""),
+					WithInputTokens(10000, 500, ""),
+				)
+				i.RequestsReset = now.Add(time.Hour)
+				i.InputTokensReset = now.Add(time.Hour)
+				return i
+			}(),
 			estimatedTokens: 1000,
 			want:            false,
 		},
 		{
 			name: "cerebras daily limit exceeded",
-			info: &Info{
-				Provider:               "cerebras",
-				Model:                  "cerebras-model",
-				RequestsLimit:          1000,
-				RequestsRemaining:      100,
-				RequestsReset:          now.Add(time.Hour),
-				DailyRequestsLimit:     100,
-				DailyRequestsRemaining: 0,
-				DailyRequestsReset:     now.Add(time.Hour),
-			},
+			info: func() *Info {
+				i := MakeTestInfo("cerebras", "cerebras-model",
+					WithRequests(1000, 100, ""),
+					WithDailyRequests(100, 0, ""),
+				)
+				i.RequestsReset = now.Add(time.Hour)
+				i.DailyRequestsReset = now.Add(time.Hour)
+				return i
+			}(),
 			estimatedTokens: 0,
 			want:            false,
 		},
 		{
 			name: "openrouter credits exhausted",
-			info: &Info{
-				Provider:          "openrouter",
-				Model:             "openrouter-model",
-				RequestsLimit:     1000,
-				RequestsRemaining: 100,
-				RequestsReset:     now.Add(time.Hour),
-				CreditsLimit:      100.0,
-				CreditsRemaining:  0.0,
-			},
+			info: MakeTestInfo("openrouter", "openrouter-model",
+				WithRequests(1000, 100, ""),
+				WithCredits(100.0, 0.0),
+			),
 			estimatedTokens: 0,
 			want:            false,
 		},
 		{
 			name: "openrouter has credits",
-			info: &Info{
-				Provider:          "openrouter",
-				Model:             "openrouter-model-ok",
-				RequestsLimit:     1000,
-				RequestsRemaining: 100,
-				RequestsReset:     now.Add(time.Hour),
-				CreditsLimit:      100.0,
-				CreditsRemaining:  50.0,
-			},
+			info: MakeTestInfo("openrouter", "openrouter-model-ok",
+				WithRequests(1000, 100, ""),
+				WithCredits(100.0, 50.0),
+			),
 			estimatedTokens: 0,
 			want:            true,
 		},
@@ -307,11 +278,9 @@ func TestTracker_GetWaitTime(t *testing.T) {
 	}
 
 	// Test with RetryAfter specified
-	info1 := &Info{
-		Provider:   "anthropic",
-		Model:      "model-with-retry-after",
-		RetryAfter: 30 * time.Second,
-	}
+	info1 := MakeTestInfo("anthropic", "model-with-retry-after",
+		WithRetryAfter(30*time.Second),
+	)
 	tracker.Update(info1)
 	waitTime = tracker.GetWaitTime("model-with-retry-after")
 	if waitTime != 30*time.Second {
@@ -319,13 +288,10 @@ func TestTracker_GetWaitTime(t *testing.T) {
 	}
 
 	// Test with future reset time
-	info2 := &Info{
-		Provider:          "anthropic",
-		Model:             "model-with-reset",
-		RequestsLimit:     1000,
-		RequestsRemaining: 0,
-		RequestsReset:     now.Add(5 * time.Minute),
-	}
+	info2 := MakeTestInfo("anthropic", "model-with-reset",
+		WithRequests(1000, 0, ""),
+	)
+	info2.RequestsReset = now.Add(5 * time.Minute)
 	tracker.Update(info2)
 	waitTime = tracker.GetWaitTime("model-with-reset")
 	if waitTime <= 0 || waitTime > 6*time.Minute {
@@ -333,13 +299,10 @@ func TestTracker_GetWaitTime(t *testing.T) {
 	}
 
 	// Test with past reset time
-	info3 := &Info{
-		Provider:          "anthropic",
-		Model:             "model-reset-passed",
-		RequestsLimit:     1000,
-		RequestsRemaining: 0,
-		RequestsReset:     now.Add(-time.Minute),
-	}
+	info3 := MakeTestInfo("anthropic", "model-reset-passed",
+		WithRequests(1000, 0, ""),
+	)
+	info3.RequestsReset = now.Add(-time.Minute)
 	tracker.Update(info3)
 	waitTime = tracker.GetWaitTime("model-reset-passed")
 	if waitTime != 0 {
@@ -347,13 +310,13 @@ func TestTracker_GetWaitTime(t *testing.T) {
 	}
 
 	// Test with multiple reset times (should return earliest)
-	info4 := &Info{
-		Provider:         "anthropic",
-		Model:            "model-multiple-resets",
-		RequestsReset:    now.Add(10 * time.Minute),
-		TokensReset:      now.Add(3 * time.Minute), // Earliest
-		InputTokensReset: now.Add(7 * time.Minute),
-	}
+	info4 := MakeTestInfo("anthropic", "model-multiple-resets",
+		WithTokens(100000, 95000, ""),
+		WithInputTokens(10000, 9500, ""),
+	)
+	info4.RequestsReset = now.Add(10 * time.Minute)
+	info4.TokensReset = now.Add(3 * time.Minute) // Earliest
+	info4.InputTokensReset = now.Add(7 * time.Minute)
 	tracker.Update(info4)
 	waitTime = tracker.GetWaitTime("model-multiple-resets")
 	if waitTime <= 2*time.Minute || waitTime > 4*time.Minute {
@@ -379,120 +342,117 @@ func TestTracker_ShouldThrottle(t *testing.T) {
 	}{
 		{
 			name: "below threshold - requests",
-			info: &Info{
-				Provider:          "anthropic",
-				Model:             "model-ok",
-				RequestsLimit:     1000,
-				RequestsRemaining: 500, // 50% used
-				RequestsReset:     now.Add(time.Hour),
-			},
+			info: func() *Info {
+				i := MakeTestInfo("anthropic", "model-ok",
+					WithRequests(1000, 500, ""),
+				)
+				i.RequestsReset = now.Add(time.Hour)
+				return i
+			}(),
 			threshold: 0.8,
 			want:      false,
 		},
 		{
 			name: "above threshold - requests",
-			info: &Info{
-				Provider:          "anthropic",
-				Model:             "model-high-usage",
-				RequestsLimit:     1000,
-				RequestsRemaining: 100, // 90% used
-				RequestsReset:     now.Add(time.Hour),
-			},
+			info: func() *Info {
+				i := MakeTestInfo("anthropic", "model-high-usage",
+					WithRequests(1000, 100, ""),
+				)
+				i.RequestsReset = now.Add(time.Hour)
+				return i
+			}(),
 			threshold: 0.8,
 			want:      true,
 		},
 		{
 			name: "at threshold - requests",
-			info: &Info{
-				Provider:          "anthropic",
-				Model:             "model-at-threshold",
-				RequestsLimit:     1000,
-				RequestsRemaining: 200, // 80% used
-				RequestsReset:     now.Add(time.Hour),
-			},
+			info: func() *Info {
+				i := MakeTestInfo("anthropic", "model-at-threshold",
+					WithRequests(1000, 200, ""),
+				)
+				i.RequestsReset = now.Add(time.Hour)
+				return i
+			}(),
 			threshold: 0.8,
 			want:      true,
 		},
 		{
 			name: "above threshold - tokens",
-			info: &Info{
-				Provider:        "anthropic",
-				Model:           "model-tokens-high",
-				TokensLimit:     100000,
-				TokensRemaining: 5000, // 95% used
-				TokensReset:     now.Add(time.Hour),
-			},
+			info: func() *Info {
+				i := MakeTestInfo("anthropic", "model-tokens-high",
+					WithTokens(100000, 5000, ""),
+				)
+				i.TokensReset = now.Add(time.Hour)
+				return i
+			}(),
 			threshold: 0.8,
 			want:      true,
 		},
 		{
 			name: "above threshold - input tokens",
-			info: &Info{
-				Provider:             "anthropic",
-				Model:                "model-input-tokens-high",
-				InputTokensLimit:     50000,
-				InputTokensRemaining: 5000, // 90% used
-				InputTokensReset:     now.Add(time.Hour),
-			},
+			info: func() *Info {
+				i := MakeTestInfo("anthropic", "model-input-tokens-high",
+					WithInputTokens(50000, 5000, ""),
+				)
+				i.InputTokensReset = now.Add(time.Hour)
+				return i
+			}(),
 			threshold: 0.8,
 			want:      true,
 		},
 		{
 			name: "above threshold - output tokens",
-			info: &Info{
-				Provider:              "anthropic",
-				Model:                 "model-output-tokens-high",
-				OutputTokensLimit:     50000,
-				OutputTokensRemaining: 1000, // 98% used
-				OutputTokensReset:     now.Add(time.Hour),
-			},
+			info: func() *Info {
+				i := MakeTestInfo("anthropic", "model-output-tokens-high",
+					WithOutputTokens(50000, 1000, ""),
+				)
+				i.OutputTokensReset = now.Add(time.Hour)
+				return i
+			}(),
 			threshold: 0.8,
 			want:      true,
 		},
 		{
 			name: "above threshold - daily requests",
-			info: &Info{
-				Provider:               "cerebras",
-				Model:                  "cerebras-daily-high",
-				DailyRequestsLimit:     1000,
-				DailyRequestsRemaining: 150, // 85% used
-				DailyRequestsReset:     now.Add(time.Hour),
-			},
+			info: func() *Info {
+				i := MakeTestInfo("cerebras", "cerebras-daily-high",
+					WithDailyRequests(1000, 150, ""),
+				)
+				i.DailyRequestsReset = now.Add(time.Hour)
+				return i
+			}(),
 			threshold: 0.8,
 			want:      true,
 		},
 		{
 			name: "above threshold - credits",
-			info: &Info{
-				Provider:         "openrouter",
-				Model:            "openrouter-credits-low",
-				CreditsLimit:     100.0,
-				CreditsRemaining: 10.0, // 90% used
-			},
+			info: MakeTestInfo("openrouter", "openrouter-credits-low",
+				WithCredits(100.0, 10.0),
+			),
 			threshold: 0.8,
 			want:      true,
 		},
 		{
 			name: "reset time passed - should not throttle",
-			info: &Info{
-				Provider:          "anthropic",
-				Model:             "model-reset-passed",
-				RequestsLimit:     1000,
-				RequestsRemaining: 0, // 100% used but reset passed
-				RequestsReset:     now.Add(-time.Minute),
-			},
+			info: func() *Info {
+				i := MakeTestInfo("anthropic", "model-reset-passed",
+					WithRequests(1000, 0, ""),
+				)
+				i.RequestsReset = now.Add(-time.Minute)
+				return i
+			}(),
 			threshold: 0.8,
 			want:      false,
 		},
 		{
 			name: "invalid threshold - uses default",
-			info: &Info{
-				Provider:          "anthropic",
-				Model:             "model-invalid-threshold",
-				RequestsLimit:     1000,
-				RequestsRemaining: 100, // 90% used
-				RequestsReset:     now.Add(time.Hour),
-			},
+			info: func() *Info {
+				i := MakeTestInfo("anthropic", "model-invalid-threshold",
+					WithRequests(1000, 100, ""),
+				)
+				i.RequestsReset = now.Add(time.Hour)
+				return i
+			}(),
 			threshold: 1.5, // Invalid, will use 0.8 default
 			want:      true,
 		},
@@ -526,14 +486,11 @@ func TestTracker_Concurrent(t *testing.T) {
 		go func(id int) {
 			defer wg.Done()
 			for j := 0; j < numOperations; j++ {
-				info := &Info{
-					Provider:          "test-provider",
-					Model:             "test-model",
-					Timestamp:         now,
-					RequestsLimit:     1000,
-					RequestsRemaining: 1000 - (id*numOperations + j),
-					RequestsReset:     now.Add(time.Hour),
-				}
+				info := MakeTestInfo("test-provider", "test-model",
+					WithRequests(1000, 1000-(id*numOperations+j), ""),
+				)
+				info.Timestamp = now
+				info.RequestsReset = now.Add(time.Hour)
 				tracker.Update(info)
 			}
 		}(i)
@@ -615,16 +572,12 @@ func TestInfo_ProviderSpecificFields(t *testing.T) {
 
 // testAnthropicProviderFields tests Anthropic-specific fields
 func testAnthropicProviderFields(t *testing.T, tracker *Tracker, now time.Time) {
-	anthropicInfo := &Info{
-		Provider:              "anthropic",
-		Model:                 "claude-3-opus-20240229",
-		InputTokensLimit:      10000,
-		InputTokensRemaining:  9500,
-		InputTokensReset:      now.Add(time.Hour),
-		OutputTokensLimit:     20000,
-		OutputTokensRemaining: 19000,
-		OutputTokensReset:     now.Add(time.Hour),
-	}
+	anthropicInfo := MakeTestInfo("anthropic", "claude-3-opus-20240229",
+		WithInputTokens(10000, 9500, ""),
+		WithOutputTokens(20000, 19000, ""),
+	)
+	anthropicInfo.InputTokensReset = now.Add(time.Hour)
+	anthropicInfo.OutputTokensReset = now.Add(time.Hour)
 	tracker.Update(anthropicInfo)
 
 	retrieved, exists := tracker.Get("claude-3-opus-20240229")
@@ -642,13 +595,10 @@ func testAnthropicProviderFields(t *testing.T, tracker *Tracker, now time.Time) 
 
 // testCerebrasProviderFields tests Cerebras-specific fields
 func testCerebrasProviderFields(t *testing.T, tracker *Tracker, now time.Time) {
-	cerebrasInfo := &Info{
-		Provider:               "cerebras",
-		Model:                  "cerebras-model",
-		DailyRequestsLimit:     1000,
-		DailyRequestsRemaining: 950,
-		DailyRequestsReset:     now.Add(24 * time.Hour),
-	}
+	cerebrasInfo := MakeTestInfo("cerebras", "cerebras-model",
+		WithDailyRequests(1000, 950, ""),
+	)
+	cerebrasInfo.DailyRequestsReset = now.Add(24 * time.Hour)
 	tracker.Update(cerebrasInfo)
 
 	retrieved, exists := tracker.Get("cerebras-model")
@@ -663,13 +613,10 @@ func testCerebrasProviderFields(t *testing.T, tracker *Tracker, now time.Time) {
 
 // testOpenRouterProviderFields tests OpenRouter-specific fields
 func testOpenRouterProviderFields(t *testing.T, tracker *Tracker) {
-	openrouterInfo := &Info{
-		Provider:         "openrouter",
-		Model:            "openrouter-model",
-		CreditsLimit:     100.5,
-		CreditsRemaining: 75.25,
-		IsFreeTier:       true,
-	}
+	openrouterInfo := MakeTestInfo("openrouter", "openrouter-model",
+		WithCredits(100.5, 75.25),
+		WithFreeTier(true),
+	)
 	tracker.Update(openrouterInfo)
 
 	retrieved, exists := tracker.Get("openrouter-model")
@@ -690,16 +637,14 @@ func testOpenRouterProviderFields(t *testing.T, tracker *Tracker) {
 
 // testGenericProviderFields tests generic fields
 func testGenericProviderFields(t *testing.T, tracker *Tracker) {
-	genericInfo := &Info{
-		Provider:   "generic",
-		Model:      "generic-model",
-		RequestID:  "req-12345",
-		RetryAfter: 60 * time.Second,
-		CustomData: map[string]interface{}{
+	genericInfo := MakeTestInfo("generic", "generic-model",
+		WithRequestID("req-12345"),
+		WithRetryAfter(60*time.Second),
+		WithCustomData(map[string]interface{}{
 			"custom_field":  "custom_value",
 			"numeric_field": 42,
-		},
-	}
+		}),
+	)
 	tracker.Update(genericInfo)
 
 	retrieved, exists := tracker.Get("generic-model")

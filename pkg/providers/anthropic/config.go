@@ -12,7 +12,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cecil-the-coder/ai-provider-kit/internal/clientpool"
 	"github.com/cecil-the-coder/ai-provider-kit/internal/common"
 	"github.com/cecil-the-coder/ai-provider-kit/internal/common/auth"
 	commonconfig "github.com/cecil-the-coder/ai-provider-kit/internal/common/config"
@@ -41,28 +40,30 @@ type AnthropicConfig struct {
 
 // NewAnthropicProvider creates a new Anthropic provider
 func NewAnthropicProvider(config types.ProviderConfig) *AnthropicProvider {
-	// Use the shared config helper
-	configHelper := commonconfig.NewConfigHelper("Anthropic", types.ProviderTypeAnthropic)
-
-	// Merge with defaults and extract configuration
-	mergedConfig := configHelper.MergeWithDefaults(config)
+	// Use the shared provider initializer
+	result, err := common.InitializeProvider("Anthropic", types.ProviderTypeAnthropic, config, common.ProviderInitializerOptions{})
+	if err != nil {
+		// In constructor, we log but continue with defaults
+		log.Printf("Warning: failed to initialize Anthropic provider: %v", err)
+		// Fall through to create provider anyway
+	}
 
 	// Extract Anthropic-specific config
 	var anthropicConfig AnthropicConfig
-	if err := configHelper.ExtractProviderSpecificConfig(mergedConfig, &anthropicConfig); err != nil {
+	if err := result.ConfigHelper.ExtractProviderSpecificConfig(result.MergedConfig, &anthropicConfig); err != nil {
 		// If extraction fails, use empty config and let helper handle defaults
 		anthropicConfig = AnthropicConfig{}
 	}
 
 	// Apply top-level overrides using helper
-	if err := configHelper.ApplyTopLevelOverrides(mergedConfig, &anthropicConfig); err != nil {
+	if err := result.ConfigHelper.ApplyTopLevelOverrides(result.MergedConfig, &anthropicConfig); err != nil {
 		// In constructor, we log the error but continue with default config
 		log.Printf("Warning: failed to apply top-level overrides in NewAnthropicProvider: %v", err)
 	}
 
 	// Set default OAuth client ID if not configured
 	if anthropicConfig.OAuthClientID == "" {
-		anthropicConfig.OAuthClientID = configHelper.ExtractDefaultOAuthClientID()
+		anthropicConfig.OAuthClientID = result.ConfigHelper.ExtractDefaultOAuthClientID()
 	}
 
 	// Determine base URL
@@ -71,35 +72,24 @@ func NewAnthropicProvider(config types.ProviderConfig) *AnthropicProvider {
 		baseURL = "https://api.anthropic.com"
 	}
 
-	// Get shared HTTP client from pool keyed by base URL
-	timeout := configHelper.ExtractTimeout(mergedConfig)
-	httpClient := clientpool.GetClientWithTimeout(baseURL, timeout)
-
-	// Extract the underlying http.Client for compatibility with existing code
-	client := httpClient.Client()
-
-	// Create auth helper
-	authHelper := auth.NewAuthHelper("anthropic", mergedConfig, client)
-
 	// Create rate limit helper
 	rateLimitHelper := common.NewRateLimitHelper(ratelimit.NewAnthropicParser())
 
 	provider := &AnthropicProvider{
-		BaseProvider:      base.NewBaseProvider("anthropic", mergedConfig, client, log.Default()),
-		authHelper:        authHelper,
-		client:            client,
+		BaseProvider:      base.NewBaseProvider("anthropic", result.MergedConfig, result.HTTPClient, log.Default()),
+		authHelper:        result.AuthHelper,
+		client:            result.HTTPClient,
 		displayName:       anthropicConfig.DisplayName,
 		config:            anthropicConfig,
 		modelCache:        models.NewModelCache(6 * time.Hour), // 6 hour cache for Anthropic
 		connectivityCache: common.NewDefaultConnectivityCache(),
 		rateLimitHelper:   rateLimitHelper,
-		requestHandler:    base.NewDefaultRequestHandler(client, authHelper, baseURL),
+		requestHandler:    base.NewDefaultRequestHandler(result.HTTPClient, result.AuthHelper, baseURL),
 		responseParser:    base.NewDefaultResponseParser(rateLimitHelper),
 	}
 
-	// Setup authentication with initial config
-	provider.authHelper.SetupAPIKeys()
-	refreshFactory := auth.NewRefreshFuncFactory("anthropic", client)
+	// Setup OAuth with provider-specific refresh function
+	refreshFactory := auth.NewRefreshFuncFactory("anthropic", result.HTTPClient)
 	provider.authHelper.SetupOAuth(refreshFactory.CreateAnthropicRefreshFunc())
 
 	return provider

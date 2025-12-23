@@ -32,23 +32,13 @@ func TestAnthropicParser_Parse(t *testing.T) {
 				"Request-Id": []string{"req_123456789"},
 			},
 			model: "claude-3-opus-20240229",
-			want: &Info{
-				Provider:              "anthropic",
-				Model:                 "claude-3-opus-20240229",
-				RequestsLimit:         1000,
-				RequestsRemaining:     999,
-				RequestsReset:         mustParseTime("2024-03-26T20:00:00Z"),
-				TokensLimit:           200000,
-				TokensRemaining:       190000,
-				TokensReset:           mustParseTime("2024-03-26T20:00:00Z"),
-				InputTokensLimit:      100000,
-				InputTokensRemaining:  95000,
-				InputTokensReset:      mustParseTime("2024-03-26T20:00:00Z"),
-				OutputTokensLimit:     100000,
-				OutputTokensRemaining: 98000,
-				OutputTokensReset:     mustParseTime("2024-03-26T20:00:00Z"),
-				RequestID:             "req_123456789",
-			},
+			want: MakeTestInfo("anthropic", "claude-3-opus-20240229",
+				WithRequests(1000, 999, "2024-03-26T20:00:00Z"),
+				WithTokens(200000, 190000, "2024-03-26T20:00:00Z"),
+				WithInputTokens(100000, 95000, "2024-03-26T20:00:00Z"),
+				WithOutputTokens(100000, 98000, "2024-03-26T20:00:00Z"),
+				WithRequestID("req_123456789"),
+			),
 			wantErr: false,
 		},
 		{
@@ -60,14 +50,10 @@ func TestAnthropicParser_Parse(t *testing.T) {
 				"Request-Id":                             []string{"req_abc123"},
 			},
 			model: "claude-3-sonnet-20240229",
-			want: &Info{
-				Provider:          "anthropic",
-				Model:             "claude-3-sonnet-20240229",
-				RequestsLimit:     500,
-				RequestsRemaining: 450,
-				RequestsReset:     mustParseTime("2024-03-26T21:00:00Z"),
-				RequestID:         "req_abc123",
-			},
+			want: MakeTestInfo("anthropic", "claude-3-sonnet-20240229",
+				WithRequests(500, 450, "2024-03-26T21:00:00Z"),
+				WithRequestID("req_abc123"),
+			),
 			wantErr: false,
 		},
 		{
@@ -81,16 +67,10 @@ func TestAnthropicParser_Parse(t *testing.T) {
 				"Anthropic-Ratelimit-Output-Tokens-Reset":     []string{"2024-03-26T22:00:00Z"},
 			},
 			model: "claude-3-haiku-20240307",
-			want: &Info{
-				Provider:              "anthropic",
-				Model:                 "claude-3-haiku-20240307",
-				InputTokensLimit:      50000,
-				InputTokensRemaining:  45000,
-				InputTokensReset:      mustParseTime("2024-03-26T22:00:00Z"),
-				OutputTokensLimit:     50000,
-				OutputTokensRemaining: 48000,
-				OutputTokensReset:     mustParseTime("2024-03-26T22:00:00Z"),
-			},
+			want: MakeTestInfo("anthropic", "claude-3-haiku-20240307",
+				WithInputTokens(50000, 45000, "2024-03-26T22:00:00Z"),
+				WithOutputTokens(50000, 48000, "2024-03-26T22:00:00Z"),
+			),
 			wantErr: false,
 		},
 		{
@@ -103,25 +83,18 @@ func TestAnthropicParser_Parse(t *testing.T) {
 				"Request-Id":                             []string{"req_rate_limited"},
 			},
 			model: "claude-3-opus-20240229",
-			want: &Info{
-				Provider:          "anthropic",
-				Model:             "claude-3-opus-20240229",
-				RequestsLimit:     100,
-				RequestsRemaining: 0,
-				RequestsReset:     mustParseTime("2024-03-26T20:30:00Z"),
-				RetryAfter:        45 * time.Second,
-				RequestID:         "req_rate_limited",
-			},
+			want: MakeTestInfo("anthropic", "claude-3-opus-20240229",
+				WithRequests(100, 0, "2024-03-26T20:30:00Z"),
+				WithRetryAfter(45*time.Second),
+				WithRequestID("req_rate_limited"),
+			),
 			wantErr: false,
 		},
 		{
 			name:    "Empty headers",
 			headers: http.Header{},
 			model:   "claude-3-opus-20240229",
-			want: &Info{
-				Provider: "anthropic",
-				Model:    "claude-3-opus-20240229",
-			},
+			want:    MakeTestInfo("anthropic", "claude-3-opus-20240229"),
 			wantErr: false,
 		},
 		{
@@ -133,14 +106,10 @@ func TestAnthropicParser_Parse(t *testing.T) {
 				"Request-Id":                             []string{"req_malformed"},
 			},
 			model: "claude-3-opus-20240229",
-			want: &Info{
-				Provider:          "anthropic",
-				Model:             "claude-3-opus-20240229",
-				RequestsLimit:     1000,
-				RequestsRemaining: 999,
-				RequestID:         "req_malformed",
-				// RequestsReset should be zero time due to parse error
-			},
+			want: MakeTestInfo("anthropic", "claude-3-opus-20240229",
+				WithRequests(1000, 999, ""),
+				WithRequestID("req_malformed"),
+			),
 			wantErr: false,
 		},
 		{
@@ -151,13 +120,9 @@ func TestAnthropicParser_Parse(t *testing.T) {
 				"Anthropic-Ratelimit-Requests-Reset":     []string{"2024-03-26T20:00:00Z"},
 			},
 			model: "claude-3-opus-20240229",
-			want: &Info{
-				Provider:          "anthropic",
-				Model:             "claude-3-opus-20240229",
-				RequestsRemaining: 999,
-				RequestsReset:     mustParseTime("2024-03-26T20:00:00Z"),
-				// RequestsLimit should be 0 due to parse error
-			},
+			want: MakeTestInfo("anthropic", "claude-3-opus-20240229",
+				WithRequests(0, 999, "2024-03-26T20:00:00Z"),
+			),
 			wantErr: false,
 		},
 		{
@@ -168,13 +133,9 @@ func TestAnthropicParser_Parse(t *testing.T) {
 				"Anthropic-Ratelimit-Requests-Reset":     []string{"2024-03-26T15:00:00-05:00"},
 			},
 			model: "claude-3-opus-20240229",
-			want: &Info{
-				Provider:          "anthropic",
-				Model:             "claude-3-opus-20240229",
-				RequestsLimit:     1000,
-				RequestsRemaining: 999,
-				RequestsReset:     mustParseTime("2024-03-26T15:00:00-05:00"),
-			},
+			want: MakeTestInfo("anthropic", "claude-3-opus-20240229",
+				WithRequests(1000, 999, "2024-03-26T15:00:00-05:00"),
+			),
 			wantErr: false,
 		},
 		{
@@ -188,13 +149,9 @@ func TestAnthropicParser_Parse(t *testing.T) {
 				return h
 			}(),
 			model: "claude-3-opus-20240229",
-			want: &Info{
-				Provider:          "anthropic",
-				Model:             "claude-3-opus-20240229",
-				RequestsLimit:     1000,
-				RequestsRemaining: 999,
-				RequestsReset:     mustParseTime("2024-03-26T20:00:00Z"),
-			},
+			want: MakeTestInfo("anthropic", "claude-3-opus-20240229",
+				WithRequests(1000, 999, "2024-03-26T20:00:00Z"),
+			),
 			wantErr: false,
 		},
 	}
@@ -374,18 +331,6 @@ func TestAnthropicParser_RFC3339Timestamps(t *testing.T) {
 			}
 		})
 	}
-}
-
-// mustParseTime is a helper function to parse RFC3339 timestamps for test data
-func mustParseTime(s string) time.Time {
-	if s == "" {
-		return time.Time{}
-	}
-	t, err := time.Parse(time.RFC3339, s)
-	if err != nil {
-		panic(err)
-	}
-	return t
 }
 
 // assertRateLimitInfoEqual compares all fields of two Info structs

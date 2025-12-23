@@ -158,8 +158,9 @@ func (fts *FileTokenStorage) StoreToken(key string, token *types.OAuthConfig) er
 	// Create backup if enabled
 	if fts.config.Backup.Enabled {
 		if err := fts.createBackup(key, encrypted); err != nil {
-			// Log error but don't fail the operation
-			fmt.Printf("Warning: failed to create backup for token %s: %v\n", key, err)
+			// Backup creation failure is logged prominently but does not fail the store operation.
+			// Backup is a safety net; token storage should succeed even if backup fails.
+			fmt.Printf("[WARN] auth/storage: failed to create backup for token %q: %v\n", key, err)
 		}
 	}
 
@@ -215,8 +216,9 @@ func (fts *FileTokenStorage) RetrieveToken(key string) (*types.OAuthConfig, erro
 		// Token is expired, delete it and return error
 		// We need to acquire a write lock for deletion
 		if err := fts.DeleteToken(key); err != nil {
-			// Log the deletion error but still return the expired token error
-			fmt.Printf("Warning: failed to delete expired token for %s: %v\n", key, err)
+			// Failed to delete expired token; log prominently but still return expired error
+			// to caller. Cleanup failure should not prevent returning the expected error.
+			fmt.Printf("[WARN] auth/storage: failed to delete expired token for %q: %v\n", key, err)
 		}
 		return nil, fmt.Errorf("token expired for key: %s", key)
 	}
@@ -240,8 +242,9 @@ func (fts *FileTokenStorage) DeleteToken(key string) error {
 	if fts.config.Backup.Enabled {
 		backupDir := filepath.Join(fts.config.Backup.Directory, fts.sanitizeFilename(key))
 		if err := os.RemoveAll(backupDir); err != nil {
-			// Log the backup deletion error but don't fail the main deletion operation
-			fmt.Printf("Warning: failed to delete backup directory for %s: %v\n", key, err)
+			// Backup deletion failure is logged prominently but does not fail the delete operation.
+			// The main token file has been deleted; backup cleanup is best-effort.
+			fmt.Printf("[WARN] auth/storage: failed to delete backup directory for %q: %v\n", key, err)
 		}
 	}
 

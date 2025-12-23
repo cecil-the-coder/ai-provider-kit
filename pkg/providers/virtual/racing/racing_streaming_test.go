@@ -4,6 +4,8 @@ import (
 	"io"
 	"testing"
 	"time"
+
+	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/virtual/common"
 )
 
 // ============================================================================
@@ -13,9 +15,8 @@ import (
 func TestRacingStream_AddsMetadata(t *testing.T) {
 	mockInner := &mockStream{content: "test"}
 	rs := &racingStream{
-		inner:    mockInner,
-		provider: "test-provider",
-		latency:  123 * time.Millisecond,
+		StreamWrapper: common.NewStreamWrapper(mockInner, "racing_winner", "test-provider"),
+		latency:       123 * time.Millisecond,
 	}
 
 	chunk, err := rs.Next()
@@ -41,9 +42,8 @@ func TestRacingStream_AddsMetadata(t *testing.T) {
 func TestRacingStream_PreservesExistingMetadata(t *testing.T) {
 	mockInner := &mockStream{content: "test"}
 	rs := &racingStream{
-		inner:    mockInner,
-		provider: "test-provider",
-		latency:  50 * time.Millisecond,
+		StreamWrapper: common.NewStreamWrapper(mockInner, "racing_winner", "test-provider"),
+		latency:       50 * time.Millisecond,
 	}
 
 	_, _ = rs.Next()
@@ -59,9 +59,8 @@ func TestRacingStream_PreservesExistingMetadata(t *testing.T) {
 func TestRacingStream_Close(t *testing.T) {
 	mockInner := &mockStream{content: "test"}
 	rs := &racingStream{
-		inner:    mockInner,
-		provider: "test-provider",
-		latency:  50 * time.Millisecond,
+		StreamWrapper: common.NewStreamWrapper(mockInner, "racing_winner", "test-provider"),
+		latency:       50 * time.Millisecond,
 	}
 
 	err := rs.Close()

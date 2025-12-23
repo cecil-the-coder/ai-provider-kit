@@ -38,66 +38,37 @@ func NewGenerateHandler(providers map[string]types.Provider, ext extensions.Exte
 
 // Generate handles POST requests for text/chat generation
 func (h *GenerateHandler) Generate(w http.ResponseWriter, r *http.Request) {
-	// 1. Parse request
-	var req backendtypes.GenerateRequest
-	if err := ParseJSON(r, &req); err != nil {
-		SendError(w, r, "INVALID_REQUEST", "Invalid JSON: "+err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	// Validate request has content
-	if req.Prompt == "" && len(req.Messages) == 0 {
-		SendError(w, r, "INVALID_REQUEST", "Either 'prompt' or 'messages' must be provided", http.StatusBadRequest)
+	// 1. Parse and validate request
+	req, err := h.parseAndValidateRequest(w, r)
+	if err != nil {
 		return
 	}
 
 	// 2. Select provider
-	providerName := req.Provider
-	if providerName == "" {
-		providerName = h.defaultProvider
-	}
-
-	provider, ok := h.providers[providerName]
-	if !ok {
-		SendError(w, r, "PROVIDER_NOT_FOUND", fmt.Sprintf("Provider '%s' not found", providerName), http.StatusNotFound)
+	provider, providerName, err := h.selectProvider(req)
+	if err != nil {
+		h.sendProviderError(w, r, req.Provider, err)
 		return
 	}
 
-	// Get context from request
 	ctx := r.Context()
 
 	// 3. Call extension BeforeGenerate hooks
-	if h.extensions != nil {
-		for _, ext := range h.extensions.List() {
-			extReq := convertToExtensionRequest(&req)
-			if err := ext.BeforeGenerate(ctx, extReq); err != nil {
-				SendError(w, r, "EXTENSION_ERROR", "BeforeGenerate hook failed: "+err.Error(), http.StatusInternalServerError)
-				return
-			}
-			// Update request with any modifications from extension
-			updateFromExtensionRequest(&req, extReq)
-		}
-
-		// Call OnProviderSelected hook
-		for _, ext := range h.extensions.List() {
-			if err := ext.OnProviderSelected(ctx, provider); err != nil {
-				SendError(w, r, "EXTENSION_ERROR", "OnProviderSelected hook failed: "+err.Error(), http.StatusInternalServerError)
-				return
-			}
-		}
+	if err := h.callBeforeGenerateHooks(ctx, &req); err != nil {
+		SendError(w, r, "EXTENSION_ERROR", "BeforeGenerate hook failed: "+err.Error(), http.StatusInternalServerError)
+		return
 	}
 
-	// 4. Generate using provider
-	options := buildGenerateOptions(&req, ctx)
+	// 4. Call OnProviderSelected hooks
+	if err := h.callOnProviderSelectedHooks(ctx, provider); err != nil {
+		SendError(w, r, "EXTENSION_ERROR", "OnProviderSelected hook failed: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
 
-	stream, err := provider.GenerateChatCompletion(ctx, options)
+	// 5. Generate using provider
+	stream, err := h.generateResponse(ctx, provider, req)
 	if err != nil {
-		// Call OnProviderError hooks
-		if h.extensions != nil {
-			for _, ext := range h.extensions.List() {
-				_ = ext.OnProviderError(ctx, provider, err)
-			}
-		}
+		h.callOnProviderErrorHooks(ctx, provider, err)
 		SendError(w, r, "GENERATION_ERROR", "Failed to generate: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -105,44 +76,148 @@ func (h *GenerateHandler) Generate(w http.ResponseWriter, r *http.Request) {
 		_ = stream.Close() // Explicitly ignore close error in cleanup
 	}()
 
-	// For non-streaming requests, collect the full response
-	if !req.Stream {
-		response, usage, err := h.collectStreamResponse(stream)
-		if err != nil {
-			SendError(w, r, "GENERATION_ERROR", "Failed to collect response: "+err.Error(), http.StatusInternalServerError)
-			return
-		}
-
-		// Build response
-		genResp := &backendtypes.GenerateResponse{
-			Content:  response,
-			Model:    req.Model,
-			Provider: providerName,
-			Usage:    usage,
-			Metadata: req.Metadata,
-		}
-
-		// 5. Call extension AfterGenerate hooks
-		if h.extensions != nil {
-			for _, ext := range h.extensions.List() {
-				extReq := convertToExtensionRequest(&req)
-				extResp := convertToExtensionResponse(genResp)
-				if err := ext.AfterGenerate(ctx, extReq, extResp); err != nil {
-					SendError(w, r, "EXTENSION_ERROR", "AfterGenerate hook failed: "+err.Error(), http.StatusInternalServerError)
-					return
-				}
-				// Update response with any modifications from extension
-				updateFromExtensionResponse(genResp, extResp)
-			}
-		}
-
-		// 6. Return response
-		SendSuccess(w, r, genResp)
+	// 6. Handle response based on streaming mode
+	if req.Stream {
+		h.handleStreamingRequest(w, r, &req, provider, providerName, ctx)
 		return
 	}
 
-	// For streaming requests, use SSE (Server-Sent Events)
-	h.handleStreamingRequest(w, r, &req, provider, providerName, ctx)
+	h.handleNonStreamingResponse(w, r, &req, providerName, ctx, stream)
+}
+
+// parseAndValidateRequest parses and validates the incoming request
+// Returns empty request with error if validation fails
+func (h *GenerateHandler) parseAndValidateRequest(w http.ResponseWriter, r *http.Request) (backendtypes.GenerateRequest, error) {
+	var req backendtypes.GenerateRequest
+	if err := ParseJSON(r, &req); err != nil {
+		SendError(w, r, "INVALID_REQUEST", "Invalid JSON: "+err.Error(), http.StatusBadRequest)
+		return backendtypes.GenerateRequest{}, err
+	}
+
+	// Validate request has content
+	if req.Prompt == "" && len(req.Messages) == 0 {
+		SendError(w, r, "INVALID_REQUEST", "Either 'prompt' or 'messages' must be provided", http.StatusBadRequest)
+		return backendtypes.GenerateRequest{}, fmt.Errorf("invalid request: missing content")
+	}
+
+	return req, nil
+}
+
+// selectProvider selects the appropriate provider for the request
+func (h *GenerateHandler) selectProvider(req backendtypes.GenerateRequest) (types.Provider, string, error) {
+	providerName := req.Provider
+	if providerName == "" {
+		providerName = h.defaultProvider
+	}
+
+	provider, ok := h.providers[providerName]
+	if !ok {
+		return nil, providerName, fmt.Errorf("provider '%s' not found", providerName)
+	}
+
+	return provider, providerName, nil
+}
+
+// sendProviderError sends a provider not found error response
+func (h *GenerateHandler) sendProviderError(w http.ResponseWriter, r *http.Request, providerName string, err error) {
+	SendError(w, r, "PROVIDER_NOT_FOUND", err.Error(), http.StatusNotFound)
+}
+
+// callBeforeGenerateHooks calls all BeforeGenerate extension hooks
+func (h *GenerateHandler) callBeforeGenerateHooks(ctx context.Context, req *backendtypes.GenerateRequest) error {
+	if h.extensions == nil {
+		return nil
+	}
+
+	for _, ext := range h.extensions.List() {
+		extReq := convertToExtensionRequest(req)
+		if err := ext.BeforeGenerate(ctx, extReq); err != nil {
+			return err
+		}
+		// Update request with any modifications from extension
+		updateFromExtensionRequest(req, extReq)
+	}
+
+	return nil
+}
+
+// callOnProviderSelectedHooks calls all OnProviderSelected extension hooks
+func (h *GenerateHandler) callOnProviderSelectedHooks(ctx context.Context, provider types.Provider) error {
+	if h.extensions == nil {
+		return nil
+	}
+
+	for _, ext := range h.extensions.List() {
+		if err := ext.OnProviderSelected(ctx, provider); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// callOnProviderErrorHooks calls all OnProviderError extension hooks
+func (h *GenerateHandler) callOnProviderErrorHooks(ctx context.Context, provider types.Provider, err error) {
+	if h.extensions == nil {
+		return
+	}
+
+	for _, ext := range h.extensions.List() {
+		_ = ext.OnProviderError(ctx, provider, err)
+	}
+}
+
+// generateResponse generates a chat completion stream from the provider
+func (h *GenerateHandler) generateResponse(ctx context.Context, provider types.Provider, req backendtypes.GenerateRequest) (types.ChatCompletionStream, error) {
+	options := buildGenerateOptions(&req, ctx)
+	return provider.GenerateChatCompletion(ctx, options)
+}
+
+// handleNonStreamingResponse handles non-streaming responses
+func (h *GenerateHandler) handleNonStreamingResponse(w http.ResponseWriter, r *http.Request, req *backendtypes.GenerateRequest, providerName string, ctx context.Context, stream types.ChatCompletionStream) {
+	// Collect the full response
+	response, usage, err := h.collectStreamResponse(stream)
+	if err != nil {
+		SendError(w, r, "GENERATION_ERROR", "Failed to collect response: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Build response
+	genResp := &backendtypes.GenerateResponse{
+		Content:  response,
+		Model:    req.Model,
+		Provider: providerName,
+		Usage:    usage,
+		Metadata: req.Metadata,
+	}
+
+	// Call extension AfterGenerate hooks
+	if err := h.callAfterGenerateHooks(ctx, req, genResp); err != nil {
+		SendError(w, r, "EXTENSION_ERROR", "AfterGenerate hook failed: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Return response
+	SendSuccess(w, r, genResp)
+}
+
+// callAfterGenerateHooks calls all AfterGenerate extension hooks
+func (h *GenerateHandler) callAfterGenerateHooks(ctx context.Context, req *backendtypes.GenerateRequest, resp *backendtypes.GenerateResponse) error {
+	if h.extensions == nil {
+		return nil
+	}
+
+	for _, ext := range h.extensions.List() {
+		extReq := convertToExtensionRequest(req)
+		extResp := convertToExtensionResponse(resp)
+		if err := ext.AfterGenerate(ctx, extReq, extResp); err != nil {
+			return err
+		}
+		// Update response with any modifications from extension
+		updateFromExtensionResponse(resp, extResp)
+	}
+
+	return nil
 }
 
 // collectStreamResponse collects all chunks from a stream into a single response
@@ -268,36 +343,20 @@ func (h *GenerateHandler) handleStreamingRequest(w http.ResponseWriter, r *http.
 	}
 
 	// Run extension hooks before generation (with SSE error handling)
-	if h.extensions != nil {
-		for _, ext := range h.extensions.List() {
-			extReq := convertToExtensionRequest(req)
-			if err := ext.BeforeGenerate(ctx, extReq); err != nil {
-				sseWriter.WriteError("EXTENSION_ERROR", "BeforeGenerate hook failed: "+err.Error())
-				return
-			}
-			updateFromExtensionRequest(req, extReq)
-		}
+	if err := h.callBeforeGenerateHooks(ctx, req); err != nil {
+		sseWriter.WriteError("EXTENSION_ERROR", "BeforeGenerate hook failed: "+err.Error())
+		return
+	}
 
-		for _, ext := range h.extensions.List() {
-			if err := ext.OnProviderSelected(ctx, provider); err != nil {
-				sseWriter.WriteError("EXTENSION_ERROR", "OnProviderSelected hook failed: "+err.Error())
-				return
-			}
-		}
+	if err := h.callOnProviderSelectedHooks(ctx, provider); err != nil {
+		sseWriter.WriteError("EXTENSION_ERROR", "OnProviderSelected hook failed: "+err.Error())
+		return
 	}
 
 	// Generate stream
-	options := buildGenerateOptions(req, ctx)
-	options.Stream = true
-
-	stream, err := provider.GenerateChatCompletion(ctx, options)
+	stream, err := h.generateStreamingResponse(ctx, provider, req)
 	if err != nil {
-		// Call OnProviderError hooks
-		if h.extensions != nil {
-			for _, ext := range h.extensions.List() {
-				_ = ext.OnProviderError(ctx, provider, err)
-			}
-		}
+		h.callOnProviderErrorHooks(ctx, provider, err)
 		sseWriter.WriteError("GENERATION_ERROR", "Failed to generate: "+err.Error())
 		return
 	}
@@ -312,27 +371,45 @@ func (h *GenerateHandler) handleStreamingRequest(w http.ResponseWriter, r *http.
 	}
 
 	// Run extension hooks after generation
-	if h.extensions != nil {
-		genResp := &backendtypes.GenerateResponse{
-			Content:  fullContent,
-			Model:    req.Model,
-			Provider: providerName,
-			Usage:    usage,
-			Metadata: req.Metadata,
-		}
-
-		for _, ext := range h.extensions.List() {
-			extReq := convertToExtensionRequest(req)
-			extResp := convertToExtensionResponse(genResp)
-			if err := ext.AfterGenerate(ctx, extReq, extResp); err != nil {
-				sseWriter.WriteError("EXTENSION_ERROR", "AfterGenerate hook failed: "+err.Error())
-				return
-			}
-		}
+	if err := h.callAfterGenerateHooksSSE(ctx, req, providerName, fullContent, usage, sseWriter); err != nil {
+		return // Error already sent via SSE
 	}
 
 	// Send completion event
 	sseWriter.WriteDone()
+}
+
+// generateStreamingResponse generates a streaming chat completion from the provider
+func (h *GenerateHandler) generateStreamingResponse(ctx context.Context, provider types.Provider, req *backendtypes.GenerateRequest) (types.ChatCompletionStream, error) {
+	options := buildGenerateOptions(req, ctx)
+	options.Stream = true
+	return provider.GenerateChatCompletion(ctx, options)
+}
+
+// callAfterGenerateHooksSSE calls all AfterGenerate extension hooks with SSE error handling
+func (h *GenerateHandler) callAfterGenerateHooksSSE(ctx context.Context, req *backendtypes.GenerateRequest, providerName, fullContent string, usage *backendtypes.UsageInfo, sseWriter *SSEWriter) error {
+	if h.extensions == nil {
+		return nil
+	}
+
+	genResp := &backendtypes.GenerateResponse{
+		Content:  fullContent,
+		Model:    req.Model,
+		Provider: providerName,
+		Usage:    usage,
+		Metadata: req.Metadata,
+	}
+
+	for _, ext := range h.extensions.List() {
+		extReq := convertToExtensionRequest(req)
+		extResp := convertToExtensionResponse(genResp)
+		if err := ext.AfterGenerate(ctx, extReq, extResp); err != nil {
+			sseWriter.WriteError("EXTENSION_ERROR", "AfterGenerate hook failed: "+err.Error())
+			return err
+		}
+	}
+
+	return nil
 }
 
 // processSSEStreamChunks processes all chunks from the stream and sends them via SSE

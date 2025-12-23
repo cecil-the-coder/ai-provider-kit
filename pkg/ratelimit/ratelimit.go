@@ -9,10 +9,9 @@ import (
 	"time"
 )
 
-// Info contains rate limit information for a specific model from an AI provider.
-// It includes standard rate limit fields as well as provider-specific fields
-// to accommodate the varying rate limit schemes used by different AI providers.
-type Info struct {
+// BaseInfo contains the common rate limit fields shared across all providers.
+// This provides the foundation for provider-specific rate limit information.
+type BaseInfo struct {
 	// Provider is the name of the AI provider (e.g., "anthropic", "openai")
 	Provider string `json:"provider"`
 
@@ -42,48 +41,6 @@ type Info struct {
 	// TokensReset is when the token limit counter will reset
 	TokensReset time.Time `json:"tokens_reset"`
 
-	// Anthropic-specific fields
-
-	// InputTokensLimit is the maximum number of input tokens allowed (Anthropic)
-	InputTokensLimit int `json:"input_tokens_limit,omitempty"`
-
-	// InputTokensRemaining is the number of input tokens remaining (Anthropic)
-	InputTokensRemaining int `json:"input_tokens_remaining,omitempty"`
-
-	// InputTokensReset is when the input token limit resets (Anthropic)
-	InputTokensReset time.Time `json:"input_tokens_reset,omitempty"`
-
-	// OutputTokensLimit is the maximum number of output tokens allowed (Anthropic)
-	OutputTokensLimit int `json:"output_tokens_limit,omitempty"`
-
-	// OutputTokensRemaining is the number of output tokens remaining (Anthropic)
-	OutputTokensRemaining int `json:"output_tokens_remaining,omitempty"`
-
-	// OutputTokensReset is when the output token limit resets (Anthropic)
-	OutputTokensReset time.Time `json:"output_tokens_reset,omitempty"`
-
-	// Cerebras-specific fields
-
-	// DailyRequestsLimit is the maximum number of requests per day (Cerebras)
-	DailyRequestsLimit int `json:"daily_requests_limit,omitempty"`
-
-	// DailyRequestsRemaining is the number of daily requests remaining (Cerebras)
-	DailyRequestsRemaining int `json:"daily_requests_remaining,omitempty"`
-
-	// DailyRequestsReset is when the daily request limit resets (Cerebras)
-	DailyRequestsReset time.Time `json:"daily_requests_reset,omitempty"`
-
-	// OpenRouter-specific fields
-
-	// CreditsLimit is the maximum credits available (OpenRouter)
-	CreditsLimit float64 `json:"credits_limit,omitempty"`
-
-	// CreditsRemaining is the number of credits remaining (OpenRouter)
-	CreditsRemaining float64 `json:"credits_remaining,omitempty"`
-
-	// IsFreeTier indicates if the account is on the free tier (OpenRouter)
-	IsFreeTier bool `json:"is_free_tier,omitempty"`
-
 	// Generic fields for additional data
 
 	// RequestID is the unique identifier for the request that generated this info
@@ -94,6 +51,70 @@ type Info struct {
 
 	// CustomData holds any additional provider-specific data that doesn't fit standard fields
 	CustomData map[string]interface{} `json:"custom_data,omitempty"`
+}
+
+// AnthropicInfo contains Anthropic-specific rate limit fields.
+// Anthropic tracks input and output tokens separately from aggregate tokens.
+type AnthropicInfo struct {
+	// InputTokensLimit is the maximum number of input tokens allowed
+	InputTokensLimit int `json:"input_tokens_limit,omitempty"`
+
+	// InputTokensRemaining is the number of input tokens remaining
+	InputTokensRemaining int `json:"input_tokens_remaining,omitempty"`
+
+	// InputTokensReset is when the input token limit resets
+	InputTokensReset time.Time `json:"input_tokens_reset,omitempty"`
+
+	// OutputTokensLimit is the maximum number of output tokens allowed
+	OutputTokensLimit int `json:"output_tokens_limit,omitempty"`
+
+	// OutputTokensRemaining is the number of output tokens remaining
+	OutputTokensRemaining int `json:"output_tokens_remaining,omitempty"`
+
+	// OutputTokensReset is when the output token limit resets
+	OutputTokensReset time.Time `json:"output_tokens_reset,omitempty"`
+}
+
+// CerebrasInfo contains Cerebras-specific rate limit fields.
+// Cerebras provides daily request limits in addition to standard rate limits.
+type CerebrasInfo struct {
+	// DailyRequestsLimit is the maximum number of requests per day
+	DailyRequestsLimit int `json:"daily_requests_limit,omitempty"`
+
+	// DailyRequestsRemaining is the number of daily requests remaining
+	DailyRequestsRemaining int `json:"daily_requests_remaining,omitempty"`
+
+	// DailyRequestsReset is when the daily request limit resets
+	DailyRequestsReset time.Time `json:"daily_requests_reset,omitempty"`
+}
+
+// OpenRouterInfo contains OpenRouter-specific rate limit fields.
+// OpenRouter uses a credit-based system for rate limiting.
+type OpenRouterInfo struct {
+	// CreditsLimit is the maximum credits available
+	CreditsLimit float64 `json:"credits_limit,omitempty"`
+
+	// CreditsRemaining is the number of credits remaining
+	CreditsRemaining float64 `json:"credits_remaining,omitempty"`
+
+	// IsFreeTier indicates if the account is on the free tier
+	IsFreeTier bool `json:"is_free_tier,omitempty"`
+}
+
+// Info contains rate limit information for a specific model from an AI provider.
+// It uses composition to include common fields along with provider-specific fields.
+// This structure allows for clean separation while maintaining backward compatibility.
+type Info struct {
+	BaseInfo
+
+	// Anthropic-specific fields (embedded for direct access)
+	AnthropicInfo
+
+	// Cerebras-specific fields (embedded for direct access)
+	CerebrasInfo
+
+	// OpenRouter-specific fields (embedded for direct access)
+	OpenRouterInfo
 }
 
 // Parser is the interface that must be implemented by provider-specific rate limit parsers.

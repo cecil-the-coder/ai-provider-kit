@@ -106,22 +106,70 @@ func (m *OAuthKeyManager) MarkForRotation(credentialID string, newCredential *ty
 		return fmt.Errorf("new credential cannot be nil")
 	}
 
-	m.mu.Lock()
+	// Validate existing credential state
+	state, err := m.validateCredentialForRotation(credentialID)
+	if err != nil {
+		return err
+	}
 
-	// Check if the credential exists
+	// Perform rotation with lock held
+	rotationCallback := m.executeRotation(credentialID, newCredential, state)
+
+	// Call the rotation callback if provided
+	if rotationCallback != nil {
+		if err := rotationCallback(credentialID); err != nil {
+			// Log but don't fail
+			fmt.Printf("Warning: rotation callback failed for %s: %v\n", credentialID, err)
+		}
+	}
+
+	// Send rotation notification
+	m.notifyRotation(credentialID, newCredential.ID)
+
+	return nil
+}
+
+// validateCredentialForRotation validates that a credential can be marked for rotation
+func (m *OAuthKeyManager) validateCredentialForRotation(credentialID string) (*credentialRotationState, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	state, exists := m.rotationState[credentialID]
 	if !exists {
-		m.mu.Unlock()
-		return fmt.Errorf("credential %s not found", credentialID)
+		return nil, fmt.Errorf("credential %s not found", credentialID)
 	}
 
-	// Check if already marked for rotation
 	if state.MarkedForRotation {
-		m.mu.Unlock()
-		return fmt.Errorf("credential %s is already marked for rotation", credentialID)
+		return nil, fmt.Errorf("credential %s is already marked for rotation", credentialID)
 	}
+
+	return state, nil
+}
+
+// executeRotation performs the credential rotation operations
+//
+//nolint:unparam // credentialID is kept for API consistency but not directly used
+func (m *OAuthKeyManager) executeRotation(credentialID string, newCredential *types.OAuthCredentialSet, state *credentialRotationState) func(string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 
 	// Add the new credential
+	m.addCredentialWithTracking(newCredential)
+
+	// Mark the old credential for rotation
+	m.markCredentialForRotation(state, newCredential.ID)
+
+	// Get rotation policy for callbacks (before releasing lock)
+	var rotationCallback func(string) error
+	if m.rotationPolicy != nil {
+		rotationCallback = m.rotationPolicy.OnRotationNeeded
+	}
+
+	return rotationCallback
+}
+
+// addCredentialWithTracking adds a new credential with all necessary tracking
+func (m *OAuthKeyManager) addCredentialWithTracking(newCredential *types.OAuthCredentialSet) {
 	m.credentials = append(m.credentials, newCredential)
 
 	// Initialize health tracking for new credential
@@ -137,11 +185,13 @@ func (m *OAuthKeyManager) MarkForRotation(credentialID string, newCredential *ty
 	m.rotationState[newCredential.ID] = &credentialRotationState{
 		CreatedAt: time.Now(),
 	}
+}
 
-	// Mark the old credential for rotation
+// markCredentialForRotation marks a credential state for rotation
+func (m *OAuthKeyManager) markCredentialForRotation(state *credentialRotationState, replacementID string) {
 	state.MarkedForRotation = true
 	state.RotationStartedAt = time.Now()
-	state.ReplacementID = newCredential.ID
+	state.ReplacementID = replacementID
 
 	// Calculate decommission time
 	if m.rotationPolicy != nil {
@@ -149,28 +199,6 @@ func (m *OAuthKeyManager) MarkForRotation(credentialID string, newCredential *ty
 	} else {
 		state.DecommissionAt = time.Now().Add(7 * 24 * time.Hour) // Default 7 days
 	}
-
-	// Get rotation policy for callbacks (before releasing lock)
-	var rotationCallback func(string) error
-	if m.rotationPolicy != nil {
-		rotationCallback = m.rotationPolicy.OnRotationNeeded
-	}
-
-	// Release lock before calling callbacks/notifications
-	m.mu.Unlock()
-
-	// Call the rotation callback if provided
-	if rotationCallback != nil {
-		if err := rotationCallback(credentialID); err != nil {
-			// Log but don't fail
-			fmt.Printf("Warning: rotation callback failed for %s: %v\n", credentialID, err)
-		}
-	}
-
-	// Send rotation notification
-	m.notifyRotation(credentialID, newCredential.ID)
-
-	return nil
 }
 
 // CompleteRotation removes a credential that has completed its rotation grace period

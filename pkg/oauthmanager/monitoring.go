@@ -213,53 +213,65 @@ func (m *OAuthKeyManager) checkFailureRateAlerts() []WebhookEvent {
 		return nil
 	}
 
-	alertCount := len(metrics)
-	alerts := make([]WebhookEvent, 0, alertCount) // Pre-allocate based on metrics size
+	alerts := make([]WebhookEvent, 0, len(metrics))
 
 	for credID, credMetrics := range metrics {
-		successRate := credMetrics.GetSuccessRate()
-		failureRate := 1.0 - successRate
-
-		// Skip if failure rate is below threshold
-		if failureRate <= config.FailureRateThreshold {
-			continue
-		}
-
-		// Skip if we have too few requests to make a determination
-		snapshot := credMetrics.GetSnapshot()
-		if snapshot.RequestCount < 10 {
-			continue
-		}
-
-		// Check alert cooldown
-		alertKey := fmt.Sprintf("failure:%s", credID)
-		if m.alertHistory != nil && !m.alertHistory.shouldSendAlert(alertKey) {
-			continue
-		}
-
-		// Create alert
-		alert := WebhookEvent{
-			Type:         "failure",
-			CredentialID: credID,
-			Timestamp:    time.Now(),
-			Message:      fmt.Sprintf("High failure rate detected: %.1f%%", failureRate*100),
-			Details: map[string]interface{}{
-				"failure_rate":   failureRate,
-				"success_rate":   successRate,
-				"total_requests": snapshot.RequestCount,
-				"error_count":    snapshot.ErrorCount,
-			},
-		}
-
-		alerts = append(alerts, alert)
-
-		// Record alert
-		if m.alertHistory != nil {
-			m.alertHistory.recordAlert(alertKey)
+		if alert := m.evaluateCredentialForFailureAlert(credID, credMetrics, config); alert != nil {
+			alerts = append(alerts, *alert)
 		}
 	}
 
 	return alerts
+}
+
+// evaluateCredentialForFailureAlert checks if a credential should trigger a failure alert
+func (m *OAuthKeyManager) evaluateCredentialForFailureAlert(credID string, credMetrics *CredentialMetrics, config *MonitoringConfig) *WebhookEvent {
+	// Calculate failure rate
+	successRate := credMetrics.GetSuccessRate()
+	failureRate := 1.0 - successRate
+
+	// Skip if failure rate is below threshold
+	if failureRate <= config.FailureRateThreshold {
+		return nil
+	}
+
+	// Skip if we have too few requests to make a determination
+	snapshot := credMetrics.GetSnapshot()
+	if snapshot.RequestCount < 10 {
+		return nil
+	}
+
+	// Check alert cooldown
+	alertKey := fmt.Sprintf("failure:%s", credID)
+	if m.alertHistory != nil && !m.alertHistory.shouldSendAlert(alertKey) {
+		return nil
+	}
+
+	// Create the alert
+	alert := m.createFailureRateAlert(credID, failureRate, successRate, snapshot)
+
+	// Record alert was sent
+	if m.alertHistory != nil {
+		m.alertHistory.recordAlert(alertKey)
+	}
+
+	return &alert
+}
+
+// createFailureRateAlert creates a webhook event for high failure rate
+func (m *OAuthKeyManager) createFailureRateAlert(credID string, failureRate, successRate float64, snapshot *CredentialMetrics) WebhookEvent {
+	return WebhookEvent{
+		Type:         "failure",
+		CredentialID: credID,
+		Timestamp:    time.Now(),
+		Message:      fmt.Sprintf("High failure rate detected: %.1f%%", failureRate*100),
+		Details: map[string]interface{}{
+			"failure_rate":   failureRate,
+			"success_rate":   successRate,
+			"total_requests": snapshot.RequestCount,
+			"error_count":    snapshot.ErrorCount,
+		},
+	}
 }
 
 // checkExpiryAlerts checks for credentials that will expire soon

@@ -11,7 +11,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/cecil-the-coder/ai-provider-kit/internal/clientpool"
 	"github.com/cecil-the-coder/ai-provider-kit/internal/common"
 	"github.com/cecil-the-coder/ai-provider-kit/internal/common/auth"
 	commonconfig "github.com/cecil-the-coder/ai-provider-kit/internal/common/config"
@@ -41,30 +40,19 @@ type OpenAIProvider struct {
 
 // NewOpenAIProvider creates a new OpenAI provider
 func NewOpenAIProvider(config types.ProviderConfig) *OpenAIProvider {
-	// Use the shared config helper
-	configHelper := commonconfig.NewConfigHelper("OpenAI", types.ProviderTypeOpenAI)
-
-	// Merge with defaults and extract configuration
-	mergedConfig := configHelper.MergeWithDefaults(config)
+	// Use the shared provider initializer
+	result, err := common.InitializeProvider("OpenAI", types.ProviderTypeOpenAI, config, common.ProviderInitializerOptions{})
+	if err != nil {
+		// In constructor, we log but continue with defaults
+		log.Printf("Warning: failed to initialize OpenAI provider: %v", err)
+	}
 
 	// Extract configuration using helper
-	baseURL := configHelper.ExtractBaseURL(mergedConfig)
-	timeout := configHelper.ExtractTimeout(mergedConfig)
-	organizationID := configHelper.ExtractStringField(mergedConfig, "organization_id", "")
-
-	// Get shared HTTP client from pool keyed by base URL
-	httpClient := clientpool.GetClientWithTimeout(baseURL, timeout)
-
-	// Create auth helper with the underlying http.Client
-	authHelper := auth.NewAuthHelper("openai", mergedConfig, httpClient.Client())
-
-	// Setup API keys using shared helper
-	authHelper.SetupAPIKeys()
-
-	// OpenAI doesn't use OAuth, so no OAuth setup needed
+	baseURL := result.ConfigHelper.ExtractBaseURL(result.MergedConfig)
+	organizationID := result.ConfigHelper.ExtractStringField(result.MergedConfig, "organization_id", "")
 
 	// Handle capability flags properly - preserve explicit values from config
-	useResponsesAPI := mergedConfig.SupportsResponsesAPI
+	useResponsesAPI := result.MergedConfig.SupportsResponsesAPI
 	if !config.SupportsResponsesAPI {
 		useResponsesAPI = false
 	} else if config.SupportsResponsesAPI {
@@ -72,10 +60,10 @@ func NewOpenAIProvider(config types.ProviderConfig) *OpenAIProvider {
 	}
 
 	provider := &OpenAIProvider{
-		BaseProvider:      base.NewBaseProvider("openai", mergedConfig, httpClient.Client(), log.Default()),
-		authHelper:        authHelper,
-		httpClient:        httpClient,
-		client:            httpClient.Client(),
+		BaseProvider:      base.NewBaseProvider("openai", result.MergedConfig, result.HTTPClient, log.Default()),
+		authHelper:        result.AuthHelper,
+		httpClient:        result.PooledClient,
+		client:            result.HTTPClient,
 		baseURL:           baseURL,
 		useResponsesAPI:   useResponsesAPI,
 		rateLimitHelper:   common.NewRateLimitHelper(ratelimit.NewOpenAIParser()),

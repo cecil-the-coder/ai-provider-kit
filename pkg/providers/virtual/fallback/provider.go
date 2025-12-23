@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/virtual/common"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 )
 
@@ -98,8 +99,7 @@ func (f *FallbackProvider) GenerateChatCompletion(ctx context.Context, opts type
 			}
 
 			return &fallbackStream{
-				inner:         stream,
-				providerName:  provider.Name(),
+				StreamWrapper: common.NewStreamWrapper(stream, "fallback_provider", provider.Name()),
 				providerIndex: i,
 			}, nil
 		}
@@ -151,21 +151,16 @@ func (f *FallbackProvider) GenerateChatCompletion(ctx context.Context, opts type
 }
 
 type fallbackStream struct {
-	inner         types.ChatCompletionStream
-	providerName  string
+	*common.StreamWrapper
 	providerIndex int
 }
 
 func (s *fallbackStream) Next() (types.ChatCompletionChunk, error) {
-	chunk, err := s.inner.Next()
-	if chunk.Metadata == nil {
-		chunk.Metadata = make(map[string]interface{})
+	chunk, err := s.StreamWrapper.Next()
+	if err != nil {
+		return chunk, err
 	}
-	chunk.Metadata["fallback_provider"] = s.providerName
-	chunk.Metadata["fallback_index"] = s.providerIndex
-	return chunk, err
-}
-
-func (s *fallbackStream) Close() error {
-	return s.inner.Close()
+	// Add fallback-specific metadata
+	s.StreamWrapper.AddMetadata(&chunk, "fallback_index", s.providerIndex)
+	return chunk, nil
 }

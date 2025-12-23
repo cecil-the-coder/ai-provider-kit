@@ -41,11 +41,9 @@ func TestNewRateLimitHelper(t *testing.T) {
 }
 
 func TestRateLimitHelper_ParseAndUpdateRateLimits(t *testing.T) {
-	info := &ratelimit.Info{
-		Model:             "gpt-4",
-		RequestsLimit:     1000,
-		RequestsRemaining: 900,
-	}
+	info := ratelimit.MakeTestInfo("openai", "gpt-4",
+		ratelimit.WithRequests(1000, 900, ""),
+	)
 
 	parser := &MockParser{
 		providerName: "openai",
@@ -69,13 +67,10 @@ func TestRateLimitHelper_ParseAndUpdateRateLimits(t *testing.T) {
 }
 
 func TestRateLimitHelper_CanMakeRequest(t *testing.T) {
-	info := &ratelimit.Info{
-		Model:             "gpt-4",
-		RequestsLimit:     1000,
-		RequestsRemaining: 100,
-		TokensLimit:       100000,
-		TokensRemaining:   50000,
-	}
+	info := ratelimit.MakeTestInfo("openai", "gpt-4",
+		ratelimit.WithRequests(1000, 100, ""),
+		ratelimit.WithTokens(100000, 50000, ""),
+	)
 
 	parser := &MockParser{
 		providerName: "openai",
@@ -104,13 +99,10 @@ func TestRateLimitHelper_GetWaitTime(t *testing.T) {
 }
 
 func TestRateLimitHelper_CheckRateLimitAndWait(t *testing.T) {
-	info := &ratelimit.Info{
-		Model:             "gpt-4",
-		RequestsLimit:     1000,
-		RequestsRemaining: 100,
-		TokensLimit:       100000,
-		TokensRemaining:   50000,
-	}
+	info := ratelimit.MakeTestInfo("openai", "gpt-4",
+		ratelimit.WithRequests(1000, 100, ""),
+		ratelimit.WithTokens(100000, 50000, ""),
+	)
 
 	parser := &MockParser{
 		providerName: "openai",
@@ -128,11 +120,9 @@ func TestRateLimitHelper_CheckRateLimitAndWait(t *testing.T) {
 }
 
 func TestRateLimitHelper_GetRateLimitInfo(t *testing.T) {
-	info := &ratelimit.Info{
-		Model:             "gpt-4",
-		RequestsLimit:     1000,
-		RequestsRemaining: 500,
-	}
+	info := ratelimit.MakeTestInfo("test", "gpt-4",
+		ratelimit.WithRequests(1000, 500, ""),
+	)
 
 	parser := &MockParser{providerName: "test"}
 	helper := NewRateLimitHelper(parser)
@@ -158,11 +148,9 @@ func TestRateLimitHelper_GetRateLimitInfo(t *testing.T) {
 }
 
 func TestRateLimitHelper_ShouldThrottle(t *testing.T) {
-	info := &ratelimit.Info{
-		Model:             "gpt-4",
-		RequestsLimit:     1000,
-		RequestsRemaining: 100, // 10% remaining
-	}
+	info := ratelimit.MakeTestInfo("test", "gpt-4",
+		ratelimit.WithRequests(1000, 100, ""), // 10% remaining
+	)
 
 	parser := &MockParser{providerName: "test"}
 	helper := NewRateLimitHelper(parser)
@@ -183,11 +171,9 @@ func TestRateLimitHelper_UpdateRateLimitInfo(t *testing.T) {
 	helper.UpdateRateLimitInfo(nil)
 
 	// Update with valid info
-	info := &ratelimit.Info{
-		Model:             "gpt-4",
-		RequestsLimit:     1000,
-		RequestsRemaining: 500,
-	}
+	info := ratelimit.MakeTestInfo("test", "gpt-4",
+		ratelimit.WithRequests(1000, 500, ""),
+	)
 
 	helper.UpdateRateLimitInfo(info)
 
@@ -228,60 +214,61 @@ func TestRateLimitHelper_GetParser(t *testing.T) {
 func TestRateLimitHelper_ProviderSpecificLogging(t *testing.T) {
 	tests := []struct {
 		providerName string
-		info         *ratelimit.Info
+		info         func() *ratelimit.Info
 	}{
 		{
 			providerName: "anthropic",
-			info: &ratelimit.Info{
-				Model:                 "claude-3",
-				InputTokensRemaining:  10000,
-				InputTokensLimit:      100000,
-				OutputTokensRemaining: 5000,
-				OutputTokensLimit:     50000,
+			info: func() *ratelimit.Info {
+				i := ratelimit.MakeTestInfo("anthropic", "claude-3",
+					ratelimit.WithInputTokens(100000, 10000, ""),
+					ratelimit.WithOutputTokens(50000, 5000, ""),
+				)
+				return i
 			},
 		},
 		{
 			providerName: "openai",
-			info: &ratelimit.Info{
-				Model:             "gpt-4",
-				RequestsRemaining: 100,
-				RequestsLimit:     1000,
-				TokensRemaining:   50000,
-				TokensLimit:       100000,
+			info: func() *ratelimit.Info {
+				return ratelimit.MakeTestInfo("openai", "gpt-4",
+					ratelimit.WithRequests(1000, 100, ""),
+					ratelimit.WithTokens(100000, 50000, ""),
+				)
 			},
 		},
 		{
 			providerName: "cerebras",
-			info: &ratelimit.Info{
-				Model:                  "llama3.1-70b",
-				DailyRequestsRemaining: 500,
-				RequestsRemaining:      50,
+			info: func() *ratelimit.Info {
+				return ratelimit.MakeTestInfo("cerebras", "llama3.1-70b",
+					ratelimit.WithRequests(0, 50, ""),
+					ratelimit.WithDailyRequests(0, 500, ""),
+				)
 			},
 		},
 		{
 			providerName: "openrouter",
-			info: &ratelimit.Info{
-				Model:             "auto",
-				RequestsRemaining: 200,
-				RequestsLimit:     1000,
+			info: func() *ratelimit.Info {
+				return ratelimit.MakeTestInfo("openrouter", "auto",
+					ratelimit.WithRequests(1000, 200, ""),
+				)
 			},
 		},
 		{
 			providerName: "gemini",
-			info: &ratelimit.Info{
-				Model:             "gemini-pro",
-				RequestsRemaining: 100,
-				RequestsLimit:     500,
-				RequestsReset:     time.Now().Add(time.Hour),
+			info: func() *ratelimit.Info {
+				i := ratelimit.MakeTestInfo("gemini", "gemini-pro",
+					ratelimit.WithRequests(500, 100, ""),
+				)
+				i.RequestsReset = time.Now().Add(time.Hour)
+				return i
 			},
 		},
 		{
 			providerName: "qwen",
-			info: &ratelimit.Info{
-				Model:             "qwen-max",
-				RequestsRemaining: 50,
-				RequestsLimit:     100,
-				CustomData:        map[string]interface{}{"test": "value"},
+			info: func() *ratelimit.Info {
+				return ratelimit.MakeTestInfo("qwen", "qwen-max",
+					ratelimit.WithRequests(100, 50, ""),
+					ratelimit.WithCustomData(map[string]interface{}{"test": "value"}),
+				)
 			},
 		},
 	}
@@ -290,13 +277,13 @@ func TestRateLimitHelper_ProviderSpecificLogging(t *testing.T) {
 		t.Run(tt.providerName, func(t *testing.T) {
 			parser := &MockParser{
 				providerName: tt.providerName,
-				info:         tt.info,
+				info:         tt.info(),
 			}
 
 			helper := NewRateLimitHelper(parser)
 
 			// This should not crash - just testing the logging paths
-			helper.UpdateRateLimitInfo(tt.info)
+			helper.UpdateRateLimitInfo(tt.info())
 		})
 	}
 }
@@ -305,11 +292,9 @@ func TestRateLimitHelper_ThreadSafety(t *testing.T) {
 	parser := &MockParser{providerName: "test"}
 	helper := NewRateLimitHelper(parser)
 
-	info := &ratelimit.Info{
-		Model:             "gpt-4",
-		RequestsLimit:     1000,
-		RequestsRemaining: 500,
-	}
+	info := ratelimit.MakeTestInfo("test", "gpt-4",
+		ratelimit.WithRequests(1000, 500, ""),
+	)
 
 	// Concurrent operations
 	done := make(chan bool)

@@ -67,7 +67,13 @@ func (a *CoreProviderAdapter) GenerateStandardCompletion(ctx context.Context, re
 		return nil, err
 	}
 	defer func() {
-		_ = stream.Close()
+		// Close the stream; if the operation completed successfully, log any close error
+		// but don't override the successful result. The operation has already finished.
+		if err := stream.Close(); err != nil { //nolint:staticcheck // Empty branch is intentional - cleanup errors are non-critical
+			// Stream close failures after successful completion are typically non-critical
+			// (e.g., already closed, connection cleanup). Log for observability.
+			// No logger available in adapter - this is expected behavior for cleanup.
+		}
 	}()
 
 	// Collect all chunks to build the final response

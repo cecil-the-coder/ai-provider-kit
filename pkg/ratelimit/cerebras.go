@@ -33,9 +33,11 @@ type CerebrasParser struct{}
 // which are converted to absolute time.Time values by adding to time.Now().
 func (p *CerebrasParser) Parse(headers http.Header, model string) (*Info, error) {
 	info := &Info{
-		Provider:   "cerebras",
-		Model:      model,
-		CustomData: make(map[string]interface{}),
+		BaseInfo: BaseInfo{
+			Provider:   "cerebras",
+			Model:      model,
+			CustomData: make(map[string]interface{}),
+		},
 	}
 
 	// Parse per-minute request limits (used as standard request fields)

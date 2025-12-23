@@ -37,9 +37,11 @@ func NewAnthropicParser() *AnthropicParser {
 // Missing headers are handled gracefully by leaving the corresponding fields at zero values.
 func (p *AnthropicParser) Parse(headers http.Header, model string) (*Info, error) {
 	info := &Info{
-		Provider:  "anthropic",
-		Model:     model,
-		Timestamp: time.Now(),
+		BaseInfo: BaseInfo{
+			Provider:  "anthropic",
+			Model:     model,
+			Timestamp: time.Now(),
+		},
 	}
 
 	// Parse different types of rate limits

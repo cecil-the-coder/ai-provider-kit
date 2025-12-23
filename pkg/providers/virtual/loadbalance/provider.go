@@ -7,6 +7,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/virtual/common"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 )
 
@@ -124,27 +125,12 @@ func (lb *LoadBalanceProvider) GenerateChatCompletion(ctx context.Context, opts 
 	}
 
 	return &loadBalanceStream{
-		inner:        stream,
-		providerName: provider.Name(),
+		StreamWrapper: common.NewStreamWrapper(stream, "loadbalance_provider", provider.Name()),
 	}, nil
 }
 
 type loadBalanceStream struct {
-	inner        types.ChatCompletionStream
-	providerName string
-}
-
-func (s *loadBalanceStream) Next() (types.ChatCompletionChunk, error) {
-	chunk, err := s.inner.Next()
-	if chunk.Metadata == nil {
-		chunk.Metadata = make(map[string]interface{})
-	}
-	chunk.Metadata["loadbalance_provider"] = s.providerName
-	return chunk, err
-}
-
-func (s *loadBalanceStream) Close() error {
-	return s.inner.Close()
+	*common.StreamWrapper
 }
 
 func (lb *LoadBalanceProvider) selectProvider() types.Provider {

@@ -12,7 +12,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/cecil-the-coder/ai-provider-kit/internal/clientpool"
 	"github.com/cecil-the-coder/ai-provider-kit/internal/common"
 	"github.com/cecil-the-coder/ai-provider-kit/internal/common/auth"
 	commonconfig "github.com/cecil-the-coder/ai-provider-kit/internal/common/config"
@@ -61,47 +60,29 @@ type GeminiConfig struct {
 
 // NewGeminiProvider creates a new Gemini provider
 func NewGeminiProvider(config types.ProviderConfig) *GeminiProvider {
-	// Use the shared config helper
-	configHelper := commonconfig.NewConfigHelper("Gemini", types.ProviderTypeGemini)
-
-	// Merge with defaults and extract configuration
-	mergedConfig := configHelper.MergeWithDefaults(config)
+	// Use the shared provider initializer
+	result, err := common.InitializeProvider("Gemini", types.ProviderTypeGemini, config, common.ProviderInitializerOptions{})
+	if err != nil {
+		// In constructor, we log but continue with defaults
+		log.Printf("Warning: failed to initialize Gemini provider: %v", err)
+	}
 
 	// Extract Gemini-specific config
 	var geminiConfig GeminiConfig
-	if err := configHelper.ExtractProviderSpecificConfig(mergedConfig, &geminiConfig); err != nil {
+	if err := result.ConfigHelper.ExtractProviderSpecificConfig(result.MergedConfig, &geminiConfig); err != nil {
 		// If extraction fails, use empty config and let helper handle defaults
 		geminiConfig = GeminiConfig{}
 	}
 
 	// Apply top-level overrides using helper
-	if err := configHelper.ApplyTopLevelOverrides(mergedConfig, &geminiConfig); err != nil {
+	if err := result.ConfigHelper.ApplyTopLevelOverrides(result.MergedConfig, &geminiConfig); err != nil {
 		// In constructor, we log the error but continue with default config
 		log.Printf("Warning: failed to apply top-level overrides in NewGeminiProvider: %v", err)
 	}
 
-	// Determine base URL for client pooling
-	baseURL := geminiConfig.BaseURL
-	if baseURL == "" {
-		baseURL = standardGeminiBaseURL
-	}
-
-	// Get shared HTTP client from pool keyed by base URL
-	timeout := configHelper.ExtractTimeout(mergedConfig)
-	httpClient := clientpool.GetClientWithTimeout(baseURL, timeout)
-
-	// Extract the underlying http.Client for compatibility with existing code
-	client := httpClient.Client()
-
-	// Create auth helper
-	authHelper := auth.NewAuthHelper("gemini", mergedConfig, client)
-
-	// Setup API keys using shared helper
-	authHelper.SetupAPIKeys()
-
 	// Setup OAuth using shared helper with refresh function factory
-	refreshFactory := auth.NewRefreshFuncFactory("gemini", client)
-	authHelper.SetupOAuth(refreshFactory.CreateGeminiRefreshFunc())
+	refreshFactory := auth.NewRefreshFuncFactory("gemini", result.HTTPClient)
+	result.AuthHelper.SetupOAuth(refreshFactory.CreateGeminiRefreshFunc())
 
 	// Initialize backend router with auto-detection
 	clientConfig := &ClientConfig{
@@ -120,16 +101,16 @@ func NewGeminiProvider(config types.ProviderConfig) *GeminiProvider {
 	var codeAssistClient *CodeAssistClient
 	if backendRouter.GetBackend() == BackendCodeAssist {
 		// Get OAuth token from auth helper for Code Assist API
-		creds := authHelper.OAuthManager.GetCredentials()
+		creds := result.AuthHelper.OAuthManager.GetCredentials()
 		if len(creds) > 0 {
-			codeAssistClient = NewCodeAssistClient(client, creds[0].AccessToken)
+			codeAssistClient = NewCodeAssistClient(result.HTTPClient, creds[0].AccessToken)
 		}
 	}
 
 	provider := &GeminiProvider{
-		BaseProvider:    base.NewBaseProvider("gemini", mergedConfig, client, log.Default()),
-		authHelper:      authHelper,
-		client:          client,
+		BaseProvider:    base.NewBaseProvider("gemini", result.MergedConfig, result.HTTPClient, log.Default()),
+		authHelper:      result.AuthHelper,
+		client:          result.HTTPClient,
 		config:          geminiConfig,
 		displayName:     geminiConfig.DisplayName,
 		rateLimitHelper: common.NewRateLimitHelper(ratelimit.NewGeminiParser()),

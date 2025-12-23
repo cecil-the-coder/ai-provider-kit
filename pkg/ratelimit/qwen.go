@@ -52,9 +52,11 @@ type QwenParser struct {
 // The implementation is deliberately flexible to accommodate various possible formats.
 func (p *QwenParser) Parse(headers http.Header, model string) (*Info, error) {
 	info := &Info{
-		Provider:   "qwen",
-		Model:      model,
-		CustomData: make(map[string]interface{}),
+		BaseInfo: BaseInfo{
+			Provider:   "qwen",
+			Model:      model,
+			CustomData: make(map[string]interface{}),
+		},
 	}
 
 	// Log all headers if debugging is enabled (useful for documenting real API behavior)

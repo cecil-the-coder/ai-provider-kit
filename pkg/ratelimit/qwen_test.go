@@ -335,20 +335,18 @@ func TestQwenParser_UnixTimestampReset(t *testing.T) {
 
 // TestFormatQwenInfo tests the formatting helper function
 func TestFormatQwenInfo(t *testing.T) {
-	info := &Info{
-		Provider:          "qwen",
-		Model:             "qwen-turbo",
-		RequestsLimit:     100,
-		RequestsRemaining: 95,
-		RequestsReset:     time.Now().Add(5 * time.Minute),
-		TokensLimit:       100000,
-		TokensRemaining:   98000,
-		TokensReset:       time.Now().Add(5 * time.Minute),
-		RetryAfter:        60 * time.Second,
-		CustomData: map[string]interface{}{
+	info := MakeTestInfo("qwen", "qwen-turbo",
+		WithRequests(100, 95, ""),
+		WithTokens(100000, 98000, ""),
+		WithRetryAfter(60*time.Second),
+		WithCustomData(map[string]interface{}{
 			"x-request-id": "test-123",
 		},
-	}
+		),
+	)
+	// Set the reset times manually since we need relative times
+	info.RequestsReset = time.Now().Add(5 * time.Minute)
+	info.TokensReset = time.Now().Add(5 * time.Minute)
 
 	formatted := FormatQwenInfo(info)
 	if formatted == "" {

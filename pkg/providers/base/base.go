@@ -206,7 +206,13 @@ func (p *BaseProvider) RecordRequest(ctx context.Context, modelID string) {
 			ModelID:      modelID,
 			Timestamp:    time.Now(),
 		}
-		_ = collector.RecordEvent(ctx, event)
+		if err := collector.RecordEvent(ctx, event); err != nil {
+			// Log metrics collection failure but don't fail the operation
+			// Metrics collection is a best-effort operation for observability
+			if p.logger != nil {
+				p.logger.Printf("provider=%s model=%s: failed to record request metric: %v", p.name, modelID, err)
+			}
+		}
 	}
 }
 
@@ -241,7 +247,13 @@ func (p *BaseProvider) RecordSuccessWithModel(ctx context.Context, latency time.
 			Latency:      latency,
 			TokensUsed:   tokensUsed,
 		}
-		_ = collector.RecordEvent(ctx, event)
+		if err := collector.RecordEvent(ctx, event); err != nil {
+			// Log metrics collection failure but don't fail the operation
+			// Metrics collection is a best-effort operation for observability
+			if p.logger != nil {
+				p.logger.Printf("provider=%s model=%s: failed to record success metric: %v", p.name, modelID, err)
+			}
+		}
 	}
 }
 
@@ -275,7 +287,13 @@ func (p *BaseProvider) RecordErrorWithModel(ctx context.Context, err error, mode
 			ErrorMessage: errorMsg,
 			ErrorType:    errorType,
 		}
-		_ = collector.RecordEvent(ctx, event)
+		if err := collector.RecordEvent(ctx, event); err != nil {
+			// Log metrics collection failure but don't fail the operation
+			// Metrics collection is a best-effort operation for observability
+			if p.logger != nil {
+				p.logger.Printf("provider=%s model=%s: failed to record error metric: %v", p.name, modelID, err)
+			}
+		}
 	}
 }
 
