@@ -1,6 +1,8 @@
 // Command tokenizer_demo demonstrates the tokenizer usage and performance
 // To build and run:
 //   go run -tags=rusttokenizer examples/tokenizer_demo.go -check
+//go:build rusttokenizer
+
 package main
 
 import (

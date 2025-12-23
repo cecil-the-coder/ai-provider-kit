@@ -251,7 +251,6 @@ func TestIntegrationExample_CredentialProviders(t *testing.T) {
 
 // TestIntegrationExample_WaitForCondition demonstrates using WaitForCondition
 func TestIntegrationExample_WaitForCondition(t *testing.T) {
-	t.Parallel()
 	factory := NewProviderFactory()
 	registerMockProvidersForIntegrationTests(factory)
 

@@ -18,7 +18,6 @@ func skipIfNoAPIKey(t *testing.T) {
 }
 
 func TestCerebrasProvider_FactoryIntegration(t *testing.T) {
-	t.Parallel()
 	// Create a new factory
 	f := NewProviderFactory()
 
