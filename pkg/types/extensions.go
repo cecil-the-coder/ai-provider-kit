@@ -24,7 +24,8 @@ func (r *DefaultExtensionRegistry) Register(providerType ProviderType, extension
 	defer r.mutex.Unlock()
 
 	if _, exists := r.extensions[providerType]; exists {
-		return fmt.Errorf("extension already registered for provider type: %s", providerType)
+		return NewInvalidRequestError(providerType, fmt.Sprintf("extension already registered for provider type: %s", providerType)).
+			WithOperation("register_extension")
 	}
 
 	r.extensions[providerType] = extension
@@ -38,7 +39,8 @@ func (r *DefaultExtensionRegistry) Get(providerType ProviderType) (CoreProviderE
 
 	extension, exists := r.extensions[providerType]
 	if !exists {
-		return nil, fmt.Errorf("no extension registered for provider type: %s", providerType)
+		return nil, NewInvalidRequestError(providerType, fmt.Sprintf("no extension registered for provider type: %s", providerType)).
+			WithOperation("get_extension")
 	}
 
 	return extension, nil
@@ -164,7 +166,8 @@ func (api *CoreAPI) ConvertFromProvider(providerType ProviderType, response inte
 		if standardResp, ok := response.(*StandardResponse); ok {
 			return standardResp, nil
 		}
-		return nil, fmt.Errorf("no extension registered for provider type %s and response is not in standard format", providerType)
+		return nil, NewInvalidRequestError(providerType, fmt.Sprintf("no extension registered for provider type %s and response is not in standard format", providerType)).
+			WithOperation("convert_from_provider")
 	}
 
 	return extension.ProviderToStandard(response)
@@ -178,7 +181,8 @@ func (api *CoreAPI) ConvertChunkFromProvider(providerType ProviderType, chunk in
 		if standardChunk, ok := chunk.(*StandardStreamChunk); ok {
 			return standardChunk, nil
 		}
-		return nil, fmt.Errorf("no extension registered for provider type %s and chunk is not in standard format", providerType)
+		return nil, NewInvalidRequestError(providerType, fmt.Sprintf("no extension registered for provider type %s and chunk is not in standard format", providerType)).
+			WithOperation("convert_chunk_from_provider")
 	}
 
 	return extension.ProviderToStandardChunk(chunk)

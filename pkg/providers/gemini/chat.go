@@ -213,11 +213,11 @@ func (p *GeminiProvider) prepareStandardRequest(options types.GenerateOptions) G
 	// Handle structured outputs via ResponseFormat
 	// Gemini supports JSON schema validation with response_schema + response_mime_type="application/json"
 	if options.ResponseFormat != "" {
-		// Try to parse as JSON schema first
-		var schemaObj map[string]interface{}
-		if err := json.Unmarshal([]byte(options.ResponseFormat), &schemaObj); err == nil {
+		// Use shared utility to parse ResponseFormat
+		result := types.ParseResponseFormatSchema(options.ResponseFormat)
+		if result.IsSchema {
 			// It's a valid JSON schema object
-			generationConfig.ResponseSchema = schemaObj
+			generationConfig.ResponseSchema = result.Schema
 			generationConfig.ResponseMimeType = "application/json"
 		} else {
 			// It's a string like "json", just set the mime type

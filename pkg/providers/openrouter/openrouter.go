@@ -187,24 +187,29 @@ func (p *OpenRouterProvider) GetModels(ctx context.Context) ([]types.Model, erro
 // fetchModelsFromAPI fetches models from OpenRouter API
 func (p *OpenRouterProvider) fetchModelsFromAPI(ctx context.Context) ([]types.Model, error) {
 	if !p.authHelper.IsAuthenticated() {
-		return nil, fmt.Errorf("no OpenRouter API key configured")
+		return nil, types.NewAuthError(types.ProviderTypeOpenRouter, "no OpenRouter API key configured").
+			WithOperation("fetch_models")
 	}
 
 	// Get API key from auth helper
 	if p.authHelper.KeyManager == nil || len(p.authHelper.KeyManager.GetKeys()) == 0 {
-		return nil, fmt.Errorf("no valid API key available")
+		return nil, types.NewAuthError(types.ProviderTypeOpenRouter, "no valid API key available").
+			WithOperation("fetch_models")
 	}
 
 	apiKey := p.authHelper.KeyManager.GetKeys()[0] // Simple for now, could be improved
 	if apiKey == "" {
-		return nil, fmt.Errorf("no valid API key available")
+		return nil, types.NewAuthError(types.ProviderTypeOpenRouter, "no valid API key available").
+			WithOperation("fetch_models")
 	}
 
 	url := p.baseURL + "/v1/models"
 
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
+		return nil, types.NewNetworkError(types.ProviderTypeOpenRouter, "failed to create request").
+			WithOperation("fetch_models").
+			WithOriginalErr(err)
 	}
 
 	// Use auth helper to set headers
@@ -214,23 +219,31 @@ func (p *OpenRouterProvider) fetchModelsFromAPI(ctx context.Context) ([]types.Mo
 
 	resp, err := p.client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch models: %w", err)
+		return nil, types.NewNetworkError(types.ProviderTypeOpenRouter, "failed to fetch models").
+			WithOperation("fetch_models").
+			WithOriginalErr(err)
 	}
 	defer func() { _ = resp.Body.Close() }() //nolint:staticcheck // Empty branch is intentional - we ignore close errors //nolint:staticcheck // Empty branch is intentional - we ignore close errors
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("failed to fetch models: HTTP %d - %s", resp.StatusCode, string(body))
+		return nil, types.NewProviderError(types.ProviderTypeOpenRouter, types.ClassifyHTTPError(resp.StatusCode), fmt.Sprintf("failed to fetch models: HTTP %d - %s", resp.StatusCode, string(body))).
+			WithOperation("fetch_models").
+			WithStatusCode(resp.StatusCode)
 	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read response: %w", err)
+		return nil, types.NewNetworkError(types.ProviderTypeOpenRouter, "failed to read response").
+			WithOperation("fetch_models").
+			WithOriginalErr(err)
 	}
 
 	var modelsResp OpenRouterModelsResponse
 	if err := json.Unmarshal(body, &modelsResp); err != nil {
-		return nil, fmt.Errorf("failed to parse models response: %w", err)
+		return nil, types.NewInvalidRequestError(types.ProviderTypeOpenRouter, "failed to parse models response").
+			WithOperation("fetch_models").
+			WithOriginalErr(err)
 	}
 
 	// Convert to internal Model format with pricing data
@@ -282,7 +295,8 @@ func (p *OpenRouterProvider) GenerateChatCompletion(
 	options types.GenerateOptions,
 ) (types.ChatCompletionStream, error) {
 	if !p.authHelper.IsAuthenticated() {
-		return nil, fmt.Errorf("no OpenRouter API key configured")
+		return nil, types.NewAuthError(types.ProviderTypeOpenRouter, "no OpenRouter API key configured").
+			WithOperation("generate_chat_completion")
 	}
 
 	// Prepare the request first to get the model name
@@ -298,11 +312,15 @@ func (p *OpenRouterProvider) GenerateChatCompletion(
 	} else {
 		// Check if we're on free tier with limited requests
 		if rateLimits.IsFreeTier && rateLimits.LimitRemaining != nil && *rateLimits.LimitRemaining <= 0 {
-			return nil, fmt.Errorf("OpenRouter: rate limit exceeded (free tier limit reached)")
+			return nil, types.NewRateLimitError(types.ProviderTypeOpenRouter, 0).
+				WithOperation("generate_chat_completion").
+				WithMessage("rate limit exceeded (free tier limit reached)")
 		}
 		// Check if we have credits remaining (for paid tiers)
 		if rateLimits.Limit != nil && rateLimits.LimitRemaining != nil && *rateLimits.LimitRemaining <= 0 {
-			return nil, fmt.Errorf("OpenRouter: credit limit exceeded")
+			return nil, types.NewRateLimitError(types.ProviderTypeOpenRouter, 0).
+				WithOperation("generate_chat_completion").
+				WithMessage("credit limit exceeded")
 		}
 	}
 
@@ -314,7 +332,8 @@ func (p *OpenRouterProvider) GenerateChatCompletion(
 	if options.Stream {
 		// Try to get an API key and make streaming call
 		if p.authHelper.KeyManager == nil || len(p.authHelper.KeyManager.GetKeys()) == 0 {
-			return nil, fmt.Errorf("no API key available for streaming")
+			return nil, types.NewAuthError(types.ProviderTypeOpenRouter, "no API key available for streaming").
+				WithOperation("generate_chat_completion")
 		}
 
 		apiKey := p.authHelper.KeyManager.GetKeys()[0] // Simple for now, could be improved
@@ -360,7 +379,8 @@ func (p *OpenRouterProvider) GenerateChatCompletion(
 			return openrouterMsg.Content, usage, nil
 		})
 	} else {
-		callErr = fmt.Errorf("no authentication manager available")
+		callErr = types.NewAuthError(types.ProviderTypeOpenRouter, "no authentication manager available").
+			WithOperation("generate_chat_completion")
 	}
 
 	if callErr != nil {
@@ -403,12 +423,14 @@ func (p *OpenRouterProvider) InvokeServerTool(
 	toolName string,
 	params interface{},
 ) (interface{}, error) {
-	return nil, fmt.Errorf("tool invocation not yet implemented for OpenRouter provider")
+	return nil, types.NewInvalidRequestError(types.ProviderTypeOpenRouter, "tool invocation not yet implemented for OpenRouter provider").
+		WithOperation("invoke_server_tool")
 }
 
 func (p *OpenRouterProvider) Authenticate(ctx context.Context, authConfig types.AuthConfig) error {
 	if authConfig.Method != types.AuthMethodAPIKey {
-		return fmt.Errorf("OpenRouter only supports API key authentication")
+		return types.NewInvalidRequestError(types.ProviderTypeOpenRouter, "OpenRouter only supports API key authentication").
+			WithOperation("authenticate")
 	}
 
 	newConfig := p.GetConfig()
@@ -432,7 +454,8 @@ func (p *OpenRouterProvider) Logout(ctx context.Context) error {
 
 func (p *OpenRouterProvider) Configure(config types.ProviderConfig) error {
 	if config.Type != types.ProviderTypeOpenRouter {
-		return fmt.Errorf("invalid provider type for OpenRouter: %s", config.Type)
+		return types.NewInvalidRequestError(types.ProviderTypeOpenRouter, fmt.Sprintf("invalid provider type for OpenRouter: %s", config.Type)).
+			WithOperation("configure")
 	}
 
 	// Extract OpenRouter-specific config
@@ -596,7 +619,8 @@ func (p *OpenRouterProvider) performConnectivityTest(ctx context.Context) error 
 
 func (p *OpenRouterProvider) HealthCheck(ctx context.Context) error {
 	if !p.IsAuthenticated() {
-		return fmt.Errorf("not authenticated")
+		return types.NewAuthError(types.ProviderTypeOpenRouter, "not authenticated").
+			WithOperation("health_check")
 	}
 
 	// Try to get rate limits as a health check
@@ -627,17 +651,20 @@ func (p *OpenRouterProvider) GetLastUsedModel() string {
 // This is the existing approach that makes a dedicated API call to check rate limits.
 func (p *OpenRouterProvider) GetRateLimits(ctx context.Context) (*OpenRouterRateLimits, error) {
 	if !p.authHelper.IsAuthenticated() {
-		return nil, fmt.Errorf("no OpenRouter API key configured")
+		return nil, types.NewAuthError(types.ProviderTypeOpenRouter, "no OpenRouter API key configured").
+			WithOperation("get_rate_limits")
 	}
 
 	// Get the current API key
 	if p.authHelper.KeyManager == nil || len(p.authHelper.KeyManager.GetKeys()) == 0 {
-		return nil, fmt.Errorf("no valid API key available")
+		return nil, types.NewAuthError(types.ProviderTypeOpenRouter, "no valid API key available").
+			WithOperation("get_rate_limits")
 	}
 
 	apiKey := p.authHelper.KeyManager.GetKeys()[0] // Simple for now, could be improved
 	if apiKey == "" {
-		return nil, fmt.Errorf("no valid API key available")
+		return nil, types.NewAuthError(types.ProviderTypeOpenRouter, "no valid API key available").
+			WithOperation("get_rate_limits")
 	}
 
 	// Build the request URL
@@ -645,7 +672,9 @@ func (p *OpenRouterProvider) GetRateLimits(ctx context.Context) (*OpenRouterRate
 
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
+		return nil, types.NewNetworkError(types.ProviderTypeOpenRouter, "failed to create request").
+			WithOperation("get_rate_limits").
+			WithOriginalErr(err)
 	}
 
 	req.Header.Set("Authorization", "Bearer "+apiKey)
@@ -654,22 +683,30 @@ func (p *OpenRouterProvider) GetRateLimits(ctx context.Context) (*OpenRouterRate
 
 	resp, err := p.client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("request failed: %w", err)
+		return nil, types.NewNetworkError(types.ProviderTypeOpenRouter, "request failed").
+			WithOperation("get_rate_limits").
+			WithOriginalErr(err)
 	}
 	defer func() { _ = resp.Body.Close() }() //nolint:staticcheck // Empty branch is intentional - we ignore close errors //nolint:staticcheck // Empty branch is intentional - we ignore close errors
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read response body: %w", err)
+		return nil, types.NewNetworkError(types.ProviderTypeOpenRouter, "failed to read response body").
+			WithOperation("get_rate_limits").
+			WithOriginalErr(err)
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("OpenRouter rate limits API error: %d - %s", resp.StatusCode, string(body))
+		return nil, types.NewProviderError(types.ProviderTypeOpenRouter, types.ClassifyHTTPError(resp.StatusCode), fmt.Sprintf("OpenRouter rate limits API error: %d - %s", resp.StatusCode, string(body))).
+			WithOperation("get_rate_limits").
+			WithStatusCode(resp.StatusCode)
 	}
 
 	var rateLimits OpenRouterRateLimits
 	if err := json.Unmarshal(body, &rateLimits); err != nil {
-		return nil, fmt.Errorf("failed to parse rate limits response: %w", err)
+		return nil, types.NewInvalidRequestError(types.ProviderTypeOpenRouter, "failed to parse rate limits response").
+			WithOperation("get_rate_limits").
+			WithOriginalErr(err)
 	}
 
 	return &rateLimits, nil
@@ -720,7 +757,8 @@ func (p *OpenRouterProvider) StartOAuthFlow(ctx context.Context, callbackURL str
 		// Use configured callback URL if available
 		callbackURL = p.config.OAuthCallbackURL
 		if callbackURL == "" {
-			return "", nil, fmt.Errorf("callback URL is required for OAuth flow")
+			return "", nil, types.NewInvalidRequestError(types.ProviderTypeOpenRouter, "callback URL is required for OAuth flow").
+				WithOperation("start_oauth_flow")
 		}
 	}
 
@@ -730,13 +768,17 @@ func (p *OpenRouterProvider) StartOAuthFlow(ctx context.Context, callbackURL str
 	// Generate PKCE parameters
 	pkceParams, err := helper.GeneratePKCEParams()
 	if err != nil {
-		return "", nil, fmt.Errorf("failed to generate PKCE parameters: %w", err)
+		return "", nil, types.NewInvalidRequestError(types.ProviderTypeOpenRouter, "failed to generate PKCE parameters").
+			WithOperation("start_oauth_flow").
+			WithOriginalErr(err)
 	}
 
 	// Build authorization URL
 	authURL, err = helper.BuildAuthURL(callbackURL, pkceParams)
 	if err != nil {
-		return "", nil, fmt.Errorf("failed to build auth URL: %w", err)
+		return "", nil, types.NewInvalidRequestError(types.ProviderTypeOpenRouter, "failed to build auth URL").
+			WithOperation("start_oauth_flow").
+			WithOriginalErr(err)
 	}
 
 	// Create flow state to track the OAuth flow
@@ -749,15 +791,19 @@ func (p *OpenRouterProvider) StartOAuthFlow(ctx context.Context, callbackURL str
 // The obtained API key is automatically added to the APIKeyManager pool
 func (p *OpenRouterProvider) HandleOAuthCallback(ctx context.Context, authCode string, flowState *OAuthFlowState) (apiKey string, err error) {
 	if authCode == "" {
-		return "", fmt.Errorf("authorization code is required")
+		return "", types.NewInvalidRequestError(types.ProviderTypeOpenRouter, "authorization code is required").
+			WithOperation("handle_oauth_callback")
 	}
 	if flowState == nil {
-		return "", fmt.Errorf("OAuth flow state is required")
+		return "", types.NewInvalidRequestError(types.ProviderTypeOpenRouter, "OAuth flow state is required").
+			WithOperation("handle_oauth_callback")
 	}
 
 	// Validate the flow state
 	if err := flowState.Validate(); err != nil {
-		return "", fmt.Errorf("invalid OAuth flow state: %w", err)
+		return "", types.NewInvalidRequestError(types.ProviderTypeOpenRouter, "invalid OAuth flow state").
+			WithOperation("handle_oauth_callback").
+			WithOriginalErr(err)
 	}
 
 	// Create OAuth helper
@@ -766,12 +812,16 @@ func (p *OpenRouterProvider) HandleOAuthCallback(ctx context.Context, authCode s
 	// Exchange authorization code for API key
 	apiKey, err = helper.ExchangeCodeForAPIKey(ctx, authCode, flowState.CodeVerifier)
 	if err != nil {
-		return "", fmt.Errorf("failed to exchange code for API key: %w", err)
+		return "", types.NewNetworkError(types.ProviderTypeOpenRouter, "failed to exchange code for API key").
+			WithOperation("handle_oauth_callback").
+			WithOriginalErr(err)
 	}
 
 	// Add the obtained API key to the key manager
 	if err := p.AddAPIKey(apiKey); err != nil {
-		return "", fmt.Errorf("failed to add API key to manager: %w", err)
+		return "", types.NewInvalidRequestError(types.ProviderTypeOpenRouter, "failed to add API key to manager").
+			WithOperation("handle_oauth_callback").
+			WithOriginalErr(err)
 	}
 
 	return apiKey, nil
@@ -781,7 +831,8 @@ func (p *OpenRouterProvider) HandleOAuthCallback(ctx context.Context, authCode s
 // This can be used to add OAuth-obtained keys or manually configured keys
 func (p *OpenRouterProvider) AddAPIKey(apiKey string) error {
 	if apiKey == "" {
-		return fmt.Errorf("API key cannot be empty")
+		return types.NewInvalidRequestError(types.ProviderTypeOpenRouter, "API key cannot be empty").
+			WithOperation("add_api_key")
 	}
 
 	p.mutex.Lock()
@@ -833,7 +884,8 @@ func (p *OpenRouterProvider) AddAPIKey(apiKey string) error {
 // RemoveAPIKey removes an API key from the auth helper pool
 func (p *OpenRouterProvider) RemoveAPIKey(apiKey string) error {
 	if apiKey == "" {
-		return fmt.Errorf("API key cannot be empty")
+		return types.NewInvalidRequestError(types.ProviderTypeOpenRouter, "API key cannot be empty").
+			WithOperation("remove_api_key")
 	}
 
 	p.mutex.Lock()
@@ -844,7 +896,8 @@ func (p *OpenRouterProvider) RemoveAPIKey(apiKey string) error {
 	if p.authHelper.KeyManager != nil {
 		currentKeys = p.authHelper.KeyManager.GetKeys()
 	} else {
-		return fmt.Errorf("API key not found in manager")
+		return types.NewInvalidRequestError(types.ProviderTypeOpenRouter, "API key not found in manager").
+			WithOperation("remove_api_key")
 	}
 
 	// Remove the key from the list
@@ -859,7 +912,8 @@ func (p *OpenRouterProvider) RemoveAPIKey(apiKey string) error {
 	}
 
 	if !found {
-		return fmt.Errorf("API key not found in manager")
+		return types.NewInvalidRequestError(types.ProviderTypeOpenRouter, "API key not found in manager").
+			WithOperation("remove_api_key")
 	}
 
 	// Update the base provider config to use only the api_keys array

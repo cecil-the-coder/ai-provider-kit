@@ -275,15 +275,15 @@ func (p *AnthropicProvider) prepareRequest(options types.GenerateOptions, model 
 	// Anthropic supports structured outputs using tool-calling fallback with beta header
 	// The beta header "anthropic-beta: structured-outputs-2025-11-13" enables JSON schema validation
 	if options.ResponseFormat != "" {
-		// Try to parse as JSON schema first
-		var schemaObj map[string]interface{}
-		if err := json.Unmarshal([]byte(options.ResponseFormat), &schemaObj); err == nil {
+		// Use shared utility to parse ResponseFormat
+		result := types.ParseResponseFormatSchema(options.ResponseFormat)
+		if result.IsSchema {
 			// For structured outputs, we use a tool-calling approach with a special tool
 			// The model will be forced to call this tool with the structured output
 			structuredTool := AnthropicTool{
 				Name:        "structured_output",
 				Description: "Generate a structured output matching the required schema",
-				InputSchema: schemaObj,
+				InputSchema: result.Schema,
 			}
 
 			// Add the structured output tool (replacing any existing tools for now)
@@ -300,8 +300,8 @@ func (p *AnthropicProvider) prepareRequest(options types.GenerateOptions, model 
 		} else {
 			// If it's not a valid JSON schema, just set it as response_format
 			// This allows for simple string modes like "json"
-			request.ResponseFormat = options.ResponseFormat
-			log.Printf("🔧 [Anthropic] Set response_format to: %s", options.ResponseFormat)
+			request.ResponseFormat = result.StringValue
+			log.Printf("🔧 [Anthropic] Set response_format to: %s", result.StringValue)
 		}
 	}
 

@@ -181,18 +181,18 @@ func (p *OpenAIProvider) buildOpenAIRequest(options types.GenerateOptions) OpenA
 	// Handle structured outputs via ResponseFormat
 	// OpenAI supports JSON schema validation with {"type":"json_schema", "json_schema": {...}}
 	if options.ResponseFormat != "" {
-		// Try to parse as JSON schema first
-		var schemaObj map[string]interface{}
-		if err := json.Unmarshal([]byte(options.ResponseFormat), &schemaObj); err == nil {
+		// Use shared utility to parse ResponseFormat
+		result := types.ParseResponseFormatSchema(options.ResponseFormat)
+		if result.IsSchema {
 			// It's a valid JSON object - wrap it in OpenAI's json_schema format
 			request.ResponseFormat = map[string]interface{}{
 				"type":        "json_schema",
-				"json_schema": schemaObj,
+				"json_schema": result.Schema,
 			}
 		} else {
 			// It's a string like "json_object", use it directly
 			request.ResponseFormat = map[string]interface{}{
-				"type": options.ResponseFormat,
+				"type": result.StringValue,
 			}
 		}
 	}

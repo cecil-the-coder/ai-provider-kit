@@ -78,6 +78,12 @@ func (e *ProviderError) WithOperation(operation string) *ProviderError {
 	return e
 }
 
+// WithMessage sets the message field and returns the error for chaining
+func (e *ProviderError) WithMessage(message string) *ProviderError {
+	e.Message = message
+	return e
+}
+
 // WithStatusCode sets the status code field and returns the error for chaining
 func (e *ProviderError) WithStatusCode(statusCode int) *ProviderError {
 	e.StatusCode = statusCode

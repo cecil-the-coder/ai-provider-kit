@@ -51,7 +51,8 @@ func (f *DefaultProviderFactory) CreateProvider(providerType types.ProviderType,
 	f.mutex.RUnlock()
 
 	if !exists {
-		return nil, fmt.Errorf("provider type %s not registered", providerType)
+		return nil, types.NewInvalidRequestError(providerType, fmt.Sprintf("provider type %s not registered", providerType)).
+			WithOperation("create_provider")
 	}
 
 	provider := factoryFunc(config)
@@ -206,7 +207,8 @@ func (p *SimpleProviderStub) GenerateChatCompletion(ctx context.Context, options
 	return &FactoryMockStream{}, nil
 }
 func (p *SimpleProviderStub) InvokeServerTool(ctx context.Context, toolName string, params interface{}) (interface{}, error) {
-	return nil, fmt.Errorf("tool calling not implemented")
+	return nil, types.NewInvalidRequestError(p.providerType, "tool calling not implemented").
+		WithOperation("invoke_server_tool")
 }
 func (p *SimpleProviderStub) HealthCheck(ctx context.Context) error { return nil }
 func (p *SimpleProviderStub) GetMetrics() types.ProviderMetrics {

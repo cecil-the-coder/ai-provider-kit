@@ -140,13 +140,19 @@ func (m *OAuthKeyManager) ensureHealthTracking(creds []*types.OAuthCredentialSet
 
 // ExecuteWithFailover attempts an operation with automatic failover to next credential on failure
 // Automatically refreshes tokens if they are expired or expiring soon
-func (m *OAuthKeyManager) ExecuteWithFailover(
+
+// executeWithFailover is a generic template function that handles the common failover logic
+// for operations that return (T, *types.Usage, error)
+func executeWithFailover[T any](
+	m *OAuthKeyManager,
 	ctx context.Context,
-	operation func(context.Context, *types.OAuthCredentialSet) (string, *types.Usage, error),
-) (string, *types.Usage, error) {
+	zeroT T,
+	zeroUsage *types.Usage,
+	operation func(context.Context, *types.OAuthCredentialSet) (T, *types.Usage, error),
+) (T, *types.Usage, error) {
 	credentials := m.getCredentials(ctx)
 	if len(credentials) == 0 {
-		return "", nil, fmt.Errorf("no OAuth credentials configured for %s", m.providerName)
+		return zeroT, zeroUsage, fmt.Errorf("no OAuth credentials configured for %s", m.providerName)
 	}
 
 	var lastErr error
@@ -158,9 +164,9 @@ func (m *OAuthKeyManager) ExecuteWithFailover(
 		if err != nil {
 			// All credentials exhausted or unavailable
 			if lastErr != nil {
-				return "", nil, fmt.Errorf("%s: all OAuth credentials failed, last error: %w", m.providerName, lastErr)
+				return zeroT, zeroUsage, fmt.Errorf("%s: all OAuth credentials failed, last error: %w", m.providerName, lastErr)
 			}
-			return "", nil, err
+			return zeroT, zeroUsage, err
 		}
 
 		// Check if token needs refresh using the refresh strategy
@@ -207,7 +213,85 @@ func (m *OAuthKeyManager) ExecuteWithFailover(
 	}
 
 	// All attempts failed
-	return "", nil, fmt.Errorf("%s: all %d OAuth credential failover attempts failed, last error: %w",
+	return zeroT, zeroUsage, fmt.Errorf("%s: all %d OAuth credential failover attempts failed, last error: %w",
+		m.providerName, attemptsLimit, lastErr)
+}
+
+// ExecuteWithFailover attempts an operation with automatic failover
+// Returns string result and usage metrics
+func (m *OAuthKeyManager) ExecuteWithFailover(
+	ctx context.Context,
+	operation func(context.Context, *types.OAuthCredentialSet) (string, *types.Usage, error),
+) (string, *types.Usage, error) {
+	return executeWithFailover(m, ctx, "", nil, operation)
+}
+
+// executeWithFailoverNoUsage is a generic template function that handles the common failover logic
+// for operations that return (T, error) without Usage (used for streaming)
+func executeWithFailoverNoUsage[T any](
+	m *OAuthKeyManager,
+	ctx context.Context,
+	zeroT T,
+	operation func(context.Context, *types.OAuthCredentialSet) (T, error),
+) (T, error) {
+	credentials := m.getCredentials(ctx)
+	if len(credentials) == 0 {
+		return zeroT, fmt.Errorf("no OAuth credentials configured for %s", m.providerName)
+	}
+
+	var lastErr error
+	attemptsLimit := min(len(credentials), 3) // Try up to 3 credentials or all, whichever is less
+
+	for attempt := 0; attempt < attemptsLimit; attempt++ {
+		// Get next available credential
+		cred, err := m.GetNextCredential(ctx)
+		if err != nil {
+			// All credentials exhausted or unavailable
+			if lastErr != nil {
+				return zeroT, fmt.Errorf("%s: all OAuth credentials failed, last error: %w", m.providerName, lastErr)
+			}
+			return zeroT, err
+		}
+
+		// Check if token needs refresh using the refresh strategy
+		m.mu.RLock()
+		strategy := m.refreshStrategy
+		metrics := m.credMetrics[cred.ID]
+		m.mu.RUnlock()
+
+		if strategy != nil && strategy.ShouldRefresh(cred, metrics) {
+			refreshed, err := m.refreshCredential(ctx, cred)
+			if err != nil {
+				m.ReportFailure(cred.ID, err)
+				lastErr = fmt.Errorf("token refresh failed: %w", err)
+				continue
+			}
+			// Use the refreshed credential for the operation
+			cred = refreshed
+		}
+
+		// Execute the operation
+		startTime := time.Now()
+		result, err := operation(ctx, cred)
+		latency := time.Since(startTime)
+
+		if err != nil {
+			lastErr = err
+			m.ReportFailure(cred.ID, err)
+			// Record failed request metrics (no token count for streaming start)
+			m.RecordRequest(cred.ID, 0, latency, false)
+			continue
+		}
+
+		// Success!
+		m.ReportSuccess(cred.ID)
+		// Record successful request metrics (tokens will be counted as stream is consumed)
+		m.RecordRequest(cred.ID, 0, latency, true)
+		return result, nil
+	}
+
+	// All attempts failed
+	return zeroT, fmt.Errorf("%s: all %d OAuth credential failover attempts failed, last error: %w",
 		m.providerName, attemptsLimit, lastErr)
 }
 
@@ -412,71 +496,7 @@ func (m *OAuthKeyManager) ExecuteWithFailoverMessage(
 	ctx context.Context,
 	operation func(context.Context, *types.OAuthCredentialSet) (types.ChatMessage, *types.Usage, error),
 ) (types.ChatMessage, *types.Usage, error) {
-	credentials := m.getCredentials(ctx)
-	if len(credentials) == 0 {
-		return types.ChatMessage{}, nil, fmt.Errorf("no OAuth credentials configured for %s", m.providerName)
-	}
-
-	var lastErr error
-	attemptsLimit := min(len(credentials), 3) // Try up to 3 credentials or all, whichever is less
-
-	for attempt := 0; attempt < attemptsLimit; attempt++ {
-		// Get next available credential
-		cred, err := m.GetNextCredential(ctx)
-		if err != nil {
-			// All credentials exhausted or unavailable
-			if lastErr != nil {
-				return types.ChatMessage{}, nil, fmt.Errorf("%s: all OAuth credentials failed, last error: %w", m.providerName, lastErr)
-			}
-			return types.ChatMessage{}, nil, err
-		}
-
-		// Check if token needs refresh using the refresh strategy
-		m.mu.RLock()
-		strategy := m.refreshStrategy
-		metrics := m.credMetrics[cred.ID]
-		m.mu.RUnlock()
-
-		if strategy != nil && strategy.ShouldRefresh(cred, metrics) {
-			refreshed, err := m.refreshCredential(ctx, cred)
-			if err != nil {
-				m.ReportFailure(cred.ID, err)
-				lastErr = fmt.Errorf("token refresh failed: %w", err)
-				continue
-			}
-			// Use the refreshed credential for the operation
-			cred = refreshed
-		}
-
-		// Execute the operation and track timing
-		startTime := time.Now()
-		result, usage, err := operation(ctx, cred)
-		latency := time.Since(startTime)
-
-		// Calculate tokens used (if usage is provided)
-		var tokensUsed int64
-		if usage != nil {
-			tokensUsed = int64(usage.PromptTokens + usage.CompletionTokens)
-		}
-
-		if err != nil {
-			lastErr = err
-			m.ReportFailure(cred.ID, err)
-			// Record failed request metrics
-			m.RecordRequest(cred.ID, tokensUsed, latency, false)
-			continue
-		}
-
-		// Success!
-		m.ReportSuccess(cred.ID)
-		// Record successful request metrics
-		m.RecordRequest(cred.ID, tokensUsed, latency, true)
-		return result, usage, nil
-	}
-
-	// All attempts failed
-	return types.ChatMessage{}, nil, fmt.Errorf("%s: all %d OAuth credential failover attempts failed, last error: %w",
-		m.providerName, attemptsLimit, lastErr)
+	return executeWithFailover(m, ctx, types.ChatMessage{}, nil, operation)
 }
 
 // ExecuteWithFailoverStream attempts a streaming operation with automatic failover
@@ -485,65 +505,7 @@ func (m *OAuthKeyManager) ExecuteWithFailoverStream(
 	ctx context.Context,
 	operation func(context.Context, *types.OAuthCredentialSet) (types.ChatCompletionStream, error),
 ) (types.ChatCompletionStream, error) {
-	credentials := m.getCredentials(ctx)
-	if len(credentials) == 0 {
-		return nil, fmt.Errorf("no OAuth credentials configured for %s", m.providerName)
-	}
-
-	var lastErr error
-	attemptsLimit := min(len(credentials), 3) // Try up to 3 credentials or all, whichever is less
-
-	for attempt := 0; attempt < attemptsLimit; attempt++ {
-		// Get next available credential
-		cred, err := m.GetNextCredential(ctx)
-		if err != nil {
-			// All credentials exhausted or unavailable
-			if lastErr != nil {
-				return nil, fmt.Errorf("%s: all OAuth credentials failed, last error: %w", m.providerName, lastErr)
-			}
-			return nil, err
-		}
-
-		// Check if token needs refresh using the refresh strategy
-		m.mu.RLock()
-		strategy := m.refreshStrategy
-		metrics := m.credMetrics[cred.ID]
-		m.mu.RUnlock()
-
-		if strategy != nil && strategy.ShouldRefresh(cred, metrics) {
-			refreshed, err := m.refreshCredential(ctx, cred)
-			if err != nil {
-				m.ReportFailure(cred.ID, err)
-				lastErr = fmt.Errorf("token refresh failed: %w", err)
-				continue
-			}
-			// Use the refreshed credential for the operation
-			cred = refreshed
-		}
-
-		// Execute the operation
-		startTime := time.Now()
-		result, err := operation(ctx, cred)
-		latency := time.Since(startTime)
-
-		if err != nil {
-			lastErr = err
-			m.ReportFailure(cred.ID, err)
-			// Record failed request metrics (no token count for streaming start)
-			m.RecordRequest(cred.ID, 0, latency, false)
-			continue
-		}
-
-		// Success!
-		m.ReportSuccess(cred.ID)
-		// Record successful request metrics (tokens will be counted as stream is consumed)
-		m.RecordRequest(cred.ID, 0, latency, true)
-		return result, nil
-	}
-
-	// All attempts failed
-	return nil, fmt.Errorf("%s: all %d OAuth credential failover attempts failed, last error: %w",
-		m.providerName, attemptsLimit, lastErr)
+	return executeWithFailoverNoUsage(m, ctx, nil, operation)
 }
 
 // updateCredential updates a credential after token refresh

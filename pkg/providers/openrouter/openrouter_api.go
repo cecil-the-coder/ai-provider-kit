@@ -75,18 +75,17 @@ func (p *OpenRouterProvider) prepareRequest(options types.GenerateOptions) (Open
 	// Handle structured outputs via ResponseFormat
 	// OpenRouter uses OpenAI-compatible JSON mode (varies by underlying model)
 	if options.ResponseFormat != "" {
-		// Try to parse as JSON schema first
-		var schemaObj map[string]interface{}
-		if err := json.Unmarshal([]byte(options.ResponseFormat), &schemaObj); err == nil {
-			// For OpenAI-compatible providers like OpenRouter, wrap in {"type":"json_object"}
-			// Note: Actual support depends on the underlying model selected
-			requestData.ResponseFormat = map[string]interface{}{
-				"type": "json_object",
-			}
-		} else {
+		// Use shared utility to parse ResponseFormat
+		result := types.ParseResponseFormatSchema(options.ResponseFormat)
+		// For OpenAI-compatible providers like OpenRouter, wrap in {"type":"json_object"}
+		// Note: Actual support depends on the underlying model selected
+		requestData.ResponseFormat = map[string]interface{}{
+			"type": "json_object",
+		}
+		if !result.IsSchema {
 			// It's a string like "json_object", use it directly
 			requestData.ResponseFormat = map[string]interface{}{
-				"type": options.ResponseFormat,
+				"type": result.StringValue,
 			}
 		}
 	}

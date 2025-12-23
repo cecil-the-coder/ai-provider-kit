@@ -429,17 +429,16 @@ func (p *CerebrasProvider) buildRequest(model string, messages []CerebrasMessage
 	// Handle structured outputs via ResponseFormat
 	// Cerebras uses OpenAI-compatible JSON mode (basic JSON validation only)
 	if options.ResponseFormat != "" {
-		// Try to parse as JSON schema first
-		var schemaObj map[string]interface{}
-		if err := json.Unmarshal([]byte(options.ResponseFormat), &schemaObj); err == nil {
-			// For OpenAI-compatible providers like Cerebras, wrap in {"type":"json_object"}
-			request.ResponseFormat = map[string]interface{}{
-				"type": "json_object",
-			}
-		} else {
+		// Use shared utility to parse ResponseFormat
+		result := types.ParseResponseFormatSchema(options.ResponseFormat)
+		// For OpenAI-compatible providers like Cerebras, wrap in {"type":"json_object"}
+		request.ResponseFormat = map[string]interface{}{
+			"type": "json_object",
+		}
+		if !result.IsSchema {
 			// It's a string like "json_object", use it directly
 			request.ResponseFormat = map[string]interface{}{
-				"type": options.ResponseFormat,
+				"type": result.StringValue,
 			}
 		}
 	}

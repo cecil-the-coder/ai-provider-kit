@@ -98,14 +98,14 @@ func (p *OllamaProvider) buildOllamaChatRequest(options types.GenerateOptions) o
 	// - "json" for basic JSON mode
 	// - A JSON schema object for structured output with schema validation
 	if options.ResponseFormat != "" {
-		// Try to parse as JSON schema first
-		var schemaObj map[string]interface{}
-		if err := json.Unmarshal([]byte(options.ResponseFormat), &schemaObj); err == nil {
+		// Use shared utility to parse ResponseFormat
+		result := types.ParseResponseFormatSchema(options.ResponseFormat)
+		if result.IsSchema {
 			// It's a valid JSON object, use it as the schema
-			request.Format = schemaObj
+			request.Format = result.Schema
 		} else {
 			// It's a string like "json", use it directly
-			request.Format = options.ResponseFormat
+			request.Format = result.StringValue
 		}
 	}
 
