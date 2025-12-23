@@ -477,6 +477,77 @@ func TestStreamingMetrics(t *testing.T) {
 	assert.Equal(t, int64(150), snapshot.Streaming.TotalStreamedTokens)
 }
 
+func TestChunkTimingMetrics(t *testing.T) {
+	collector := NewDefaultMetricsCollector()
+	ctx := context.Background()
+
+	// Record stream start event
+	err := collector.RecordEvent(ctx, types.MetricEvent{
+		Type:             types.MetricEventStreamStart,
+		ProviderName:     "test-provider",
+		ProviderType:     types.ProviderTypeOpenAI,
+		ModelID:          "gpt-4",
+		Timestamp:        time.Now(),
+		IsStreaming:      true,
+		TimeToFirstToken: 50 * time.Millisecond,
+	})
+	require.NoError(t, err)
+
+	// Record chunk events with various intervals
+	chunkIntervals := []time.Duration{
+		10 * time.Millisecond,
+		20 * time.Millisecond,
+		15 * time.Millisecond,
+		30 * time.Millisecond,
+		25 * time.Millisecond,
+		50 * time.Millisecond,
+		10 * time.Millisecond,
+		100 * time.Millisecond,
+		5 * time.Millisecond,
+		40 * time.Millisecond,
+	}
+
+	for i, interval := range chunkIntervals {
+		err := collector.RecordEvent(ctx, types.MetricEvent{
+			Type:             types.MetricEventStreamChunk,
+			ProviderName:     "test-provider",
+			ProviderType:     types.ProviderTypeOpenAI,
+			ModelID:          "gpt-4",
+			Timestamp:        time.Now(),
+			IsStreaming:      true,
+			StreamSessionID:  "test-session",
+			StreamChunkIndex: i,
+			ChunkInterval:    interval,
+		})
+		require.NoError(t, err)
+	}
+
+	// Check chunk timing metrics
+	snapshot := collector.GetSnapshot()
+	require.NotNil(t, snapshot.Streaming)
+	require.NotNil(t, snapshot.Streaming.ChunkTiming)
+
+	// Should have recorded all intervals
+	assert.Equal(t, int64(len(chunkIntervals)), snapshot.Streaming.ChunkTiming.TotalMeasurements)
+
+	// Check average (approximately)
+	expectedAvg := time.Duration(0)
+	for _, interval := range chunkIntervals {
+		expectedAvg += interval
+	}
+	expectedAvg /= time.Duration(len(chunkIntervals))
+	assert.InDelta(t, expectedAvg.Milliseconds(), snapshot.Streaming.ChunkTiming.AverageInterval.Milliseconds(), 5)
+
+	// Check min and max
+	assert.Equal(t, int64(5), snapshot.Streaming.ChunkTiming.MinInterval.Milliseconds())
+	assert.Equal(t, int64(100), snapshot.Streaming.ChunkTiming.MaxInterval.Milliseconds())
+
+	// Check percentiles are calculated (should be non-zero for valid data)
+	assert.Greater(t, snapshot.Streaming.ChunkTiming.P50Interval.Milliseconds(), int64(0))
+	assert.Greater(t, snapshot.Streaming.ChunkTiming.P95Interval.Milliseconds(), int64(0))
+	assert.Greater(t, snapshot.Streaming.ChunkTiming.P99Interval.Milliseconds(), int64(0))
+}
+
 // testHook is a simple hook implementation for testing
 type testHook struct {
 	onEvent func(ctx context.Context, event types.MetricEvent)

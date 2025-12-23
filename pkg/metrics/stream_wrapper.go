@@ -49,6 +49,7 @@ type MetricsStreamWrapper struct {
 	lastChunkTime     time.Time
 	streamStarted     atomic.Bool
 	firstChunkEmitted atomic.Bool
+	prevChunkTime     time.Time // Track previous chunk time for interval calculation
 
 	// Metrics tracking
 	chunksReceived      atomic.Int64
@@ -169,6 +170,7 @@ func (w *MetricsStreamWrapper) Next() (types.ChatCompletionChunk, error) {
 		w.mu.Lock()
 		w.firstChunkTime = time.Now()
 		ttft := w.firstChunkTime.Sub(w.streamStartTime)
+		w.prevChunkTime = w.firstChunkTime
 		w.mu.Unlock()
 
 		// Emit stream start event with TTFT
@@ -177,8 +179,20 @@ func (w *MetricsStreamWrapper) Next() (types.ChatCompletionChunk, error) {
 
 	// Update chunk and token counters
 	w.chunksReceived.Add(1)
+	currentChunkTime := time.Now()
+
+	// Calculate chunk interval (time since previous chunk)
+	var chunkInterval time.Duration
 	w.mu.Lock()
-	w.lastChunkTime = time.Now()
+	if !w.prevChunkTime.IsZero() {
+		chunkInterval = currentChunkTime.Sub(w.prevChunkTime)
+	}
+	w.lastChunkTime = currentChunkTime
+	w.mu.Unlock()
+
+	// Update previous chunk time for next interval calculation
+	w.mu.Lock()
+	w.prevChunkTime = currentChunkTime
 	w.mu.Unlock()
 
 	// Count tokens in this chunk
@@ -190,7 +204,7 @@ func (w *MetricsStreamWrapper) Next() (types.ChatCompletionChunk, error) {
 
 	// Optionally emit chunk event
 	if w.emitChunkEvents {
-		w.emitChunkEvent(chunkTokens)
+		w.emitChunkEvent(chunkTokens, chunkInterval)
 	}
 
 	// Check for stream completion
@@ -282,7 +296,7 @@ func (w *MetricsStreamWrapper) emitStreamStartEvent(ttft time.Duration) {
 }
 
 // emitChunkEvent emits a MetricEventStreamChunk event for an individual chunk.
-func (w *MetricsStreamWrapper) emitChunkEvent(tokens int64) {
+func (w *MetricsStreamWrapper) emitChunkEvent(tokens int64, chunkInterval time.Duration) {
 	chunkIndex := int(w.chunksReceived.Load() - 1) // 0-indexed
 
 	event := types.MetricEvent{
@@ -295,6 +309,7 @@ func (w *MetricsStreamWrapper) emitChunkEvent(tokens int64) {
 		StreamSessionID:  w.sessionID,
 		StreamChunkIndex: chunkIndex,
 		OutputTokens:     tokens,
+		ChunkInterval:    chunkInterval,
 	}
 
 	_ = w.collector.RecordEvent(w.ctx, event)

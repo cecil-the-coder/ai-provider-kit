@@ -17,6 +17,7 @@ type streamMetrics struct {
 	failedStreamRequests     atomic.Int64
 
 	ttftHistogram *Histogram // Time to first token
+	chunkTimingHistogram *Histogram // Time between chunks
 
 	totalStreamedTokens atomic.Int64
 	totalChunks         atomic.Int64
@@ -36,7 +37,8 @@ type streamMetrics struct {
 // newStreamMetrics creates a new streamMetrics instance
 func newStreamMetrics() *streamMetrics {
 	return &streamMetrics{
-		ttftHistogram: NewHistogram(1000),
+		ttftHistogram:       NewHistogram(1000),
+		chunkTimingHistogram: NewHistogram(1000),
 	}
 }
 
@@ -98,6 +100,17 @@ func (sm *streamMetrics) RecordStreamAbort() {
 	sm.lastUpdated = time.Now()
 }
 
+// RecordChunkTiming records the time interval between chunks
+func (sm *streamMetrics) RecordChunkTiming(interval time.Duration) {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+
+	if interval > 0 {
+		sm.chunkTimingHistogram.Add(interval)
+	}
+	sm.lastUpdated = time.Now()
+}
+
 // GetSnapshot returns a snapshot of the stream metrics
 func (sm *streamMetrics) GetSnapshot() *types.StreamMetrics {
 	sm.mu.Lock()
@@ -140,6 +153,7 @@ func (sm *streamMetrics) GetSnapshot() *types.StreamMetrics {
 	}
 
 	ttftMetrics := sm.ttftHistogram.GetLatencyMetrics()
+	chunkTimingMetrics := sm.chunkTimingHistogram.GetLatencyMetrics()
 
 	return &types.StreamMetrics{
 		TotalStreamRequests:      totalStream,
@@ -170,6 +184,18 @@ func (sm *streamMetrics) GetSnapshot() *types.StreamMetrics {
 		TotalChunks:            totalChunks,
 		AverageChunksPerStream: avgChunksPerStream,
 		AverageChunkSize:       avgChunkSize,
-		LastUpdated:            sm.lastUpdated,
+		ChunkTiming: types.ChunkTimingMetrics{
+			TotalMeasurements: chunkTimingMetrics.TotalRequests,
+			AverageInterval:   chunkTimingMetrics.AverageLatency,
+			MinInterval:       chunkTimingMetrics.MinLatency,
+			MaxInterval:       chunkTimingMetrics.MaxLatency,
+			P50Interval:       chunkTimingMetrics.P50Latency,
+			P75Interval:       chunkTimingMetrics.P75Latency,
+			P90Interval:       chunkTimingMetrics.P90Latency,
+			P95Interval:       chunkTimingMetrics.P95Latency,
+			P99Interval:       chunkTimingMetrics.P99Latency,
+			LastUpdated:       chunkTimingMetrics.LastUpdated,
+		},
+		LastUpdated: sm.lastUpdated,
 	}
 }

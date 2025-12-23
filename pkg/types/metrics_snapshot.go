@@ -166,6 +166,9 @@ type StreamMetrics struct {
 	AverageChunksPerStream float64 `json:"average_chunks_per_stream"` // Calculated: total_chunks / successful_streams
 	AverageChunkSize       float64 `json:"average_chunk_size"`        // Calculated: total_streamed_tokens / total_chunks
 
+	// Chunk timing metrics (time between chunks)
+	ChunkTiming ChunkTimingMetrics `json:"chunk_timing,omitempty"`
+
 	// Last updated
 	LastUpdated time.Time `json:"last_updated"`
 }
@@ -304,6 +307,28 @@ type ConnectionMetricsSnapshot struct {
 	MaxTimeToFirstByte      time.Duration `json:"max_time_to_first_byte"`
 	MinTotalConnectionTime  time.Duration `json:"min_total_connection_time"`
 	MaxTotalConnectionTime  time.Duration `json:"max_total_connection_time"`
+
+	// Last updated
+	LastUpdated time.Time `json:"last_updated"`
+}
+
+// ChunkTimingMetrics represents the timing statistics for intervals between chunks in a stream.
+// This helps identify inconsistent streaming performance and outliers.
+type ChunkTimingMetrics struct {
+	// Summary statistics
+	TotalMeasurements int64         `json:"total_measurements"`
+	AverageInterval   time.Duration `json:"average_interval"`
+
+	// Min/Max
+	MinInterval time.Duration `json:"min_interval"`
+	MaxInterval time.Duration `json:"max_interval"`
+
+	// Percentiles for chunk interval distribution
+	P50Interval time.Duration `json:"p50_interval"` // Median
+	P75Interval time.Duration `json:"p75_interval"`
+	P90Interval time.Duration `json:"p90_interval"`
+	P95Interval time.Duration `json:"p95_interval"`
+	P99Interval time.Duration `json:"p99_interval"`
 
 	// Last updated
 	LastUpdated time.Time `json:"last_updated"`

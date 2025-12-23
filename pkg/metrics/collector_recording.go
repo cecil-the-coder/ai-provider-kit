@@ -140,6 +140,11 @@ func (c *DefaultMetricsCollector) updateAggregateMetrics(event types.MetricEvent
 		c.streamMetrics.RecordStreamEnd(event)
 	case types.MetricEventStreamAbort:
 		c.streamMetrics.RecordStreamAbort()
+	case types.MetricEventStreamChunk:
+		// Record chunk timing if available
+		if event.ChunkInterval > 0 {
+			c.streamMetrics.RecordChunkTiming(event.ChunkInterval)
+		}
 	}
 
 	// Update token metrics
