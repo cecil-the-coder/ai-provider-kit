@@ -15,8 +15,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common/auth"
-	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common/streaming"
+	"github.com/cecil-the-coder/ai-provider-kit/internal/common/auth"
+	"github.com/cecil-the-coder/ai-provider-kit/internal/common/streaming"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 )
 

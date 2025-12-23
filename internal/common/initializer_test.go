@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common/models"
+	"github.com/cecil-the-coder/ai-provider-kit/internal/common/models"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 )
 

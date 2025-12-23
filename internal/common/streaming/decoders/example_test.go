@@ -6,7 +6,7 @@ import (
 	"log"
 	"strings"
 
-	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common/streaming/decoders"
+	"github.com/cecil-the-coder/ai-provider-kit/internal/common/streaming/decoders"
 )
 
 // ExampleSSEDecoder demonstrates basic SSE decoding

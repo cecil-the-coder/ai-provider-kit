@@ -10,9 +10,9 @@ import (
 	"strings"
 
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/base"
-	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common"
-	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common/auth"
-	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common/models"
+	"github.com/cecil-the-coder/ai-provider-kit/internal/common"
+	"github.com/cecil-the-coder/ai-provider-kit/internal/common/auth"
+	"github.com/cecil-the-coder/ai-provider-kit/internal/common/models"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 )
 

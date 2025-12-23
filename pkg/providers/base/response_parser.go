@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common"
+	"github.com/cecil-the-coder/ai-provider-kit/internal/common"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/ratelimit"
 )
 

@@ -9,7 +9,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	mw "github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common/middleware"
+	mw "github.com/cecil-the-coder/ai-provider-kit/internal/common/middleware"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

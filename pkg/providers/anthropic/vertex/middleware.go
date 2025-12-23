@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common/middleware"
+	"github.com/cecil-the-coder/ai-provider-kit/internal/common/middleware"
 )
 
 // VertexMiddleware implements request and response transformation for Vertex AI

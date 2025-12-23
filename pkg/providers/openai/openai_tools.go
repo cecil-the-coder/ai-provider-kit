@@ -3,83 +3,72 @@ package openai
 import (
 	"fmt"
 
+	commontools "github.com/cecil-the-coder/ai-provider-kit/internal/common/tools"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 )
 
-// convertToOpenAITools converts universal tools to OpenAI format
+// convertToOpenAITools converts universal tools to OpenAI format using shared utility
 func convertToOpenAITools(tools []types.Tool) []OpenAITool {
-	openaiTools := make([]OpenAITool, len(tools))
-	for i, tool := range tools {
+	// Use shared utility for conversion
+	sharedTools := commontools.ConvertToOpenAIFormat(tools)
+
+	// Convert to OpenAI-specific types (same structure, different type names)
+	openaiTools := make([]OpenAITool, len(sharedTools))
+	for i, st := range sharedTools {
 		openaiTools[i] = OpenAITool{
-			Type: "function",
+			Type: st.Type,
 			Function: OpenAIFunctionDef{
-				Name:        tool.Name,
-				Description: tool.Description,
-				Parameters:  tool.InputSchema,
+				Name:        st.Function.Name,
+				Description: st.Function.Description,
+				Parameters:  st.Function.Parameters,
 			},
 		}
 	}
 	return openaiTools
 }
 
-// convertToOpenAIToolCalls converts universal tool calls to OpenAI format
+// convertToOpenAIToolCalls converts universal tool calls to OpenAI format using shared utility
 func convertToOpenAIToolCalls(toolCalls []types.ToolCall) []OpenAIToolCall {
-	openaiToolCalls := make([]OpenAIToolCall, len(toolCalls))
-	for i, tc := range toolCalls {
+	// Use shared utility for conversion
+	sharedCalls := commontools.ConvertToOpenAIToolCalls(toolCalls)
+
+	// Convert to OpenAI-specific types (same structure, different type names)
+	openaiToolCalls := make([]OpenAIToolCall, len(sharedCalls))
+	for i, sc := range sharedCalls {
 		openaiToolCalls[i] = OpenAIToolCall{
-			ID:   tc.ID,
-			Type: tc.Type,
+			ID:   sc.ID,
+			Type: sc.Type,
 			Function: OpenAIToolCallFunction{
-				Name:      tc.Function.Name,
-				Arguments: tc.Function.Arguments,
+				Name:      sc.Function.Name,
+				Arguments: sc.Function.Arguments,
 			},
 		}
 	}
 	return openaiToolCalls
 }
 
-// convertOpenAIToolCallsToUniversal converts OpenAI tool calls to universal format
+// convertOpenAIToolCallsToUniversal converts OpenAI tool calls to universal format using shared utility
 func convertOpenAIToolCallsToUniversal(toolCalls []OpenAIToolCall) []types.ToolCall {
-	universal := make([]types.ToolCall, len(toolCalls))
+	// Convert to shared format first
+	sharedCalls := make([]commontools.OpenAIToolCall, len(toolCalls))
 	for i, tc := range toolCalls {
-		universal[i] = types.ToolCall{
+		sharedCalls[i] = commontools.OpenAIToolCall{
 			ID:   tc.ID,
 			Type: tc.Type,
-			Function: types.ToolCallFunction{
+			Function: commontools.OpenAIToolCallFunction{
 				Name:      tc.Function.Name,
 				Arguments: tc.Function.Arguments,
 			},
 		}
 	}
-	return universal
+
+	// Use shared utility for conversion
+	return commontools.ConvertFromOpenAIToolCalls(sharedCalls)
 }
 
-// convertToOpenAIToolChoice converts universal ToolChoice to OpenAI format
+// convertToOpenAIToolChoice converts universal ToolChoice to OpenAI format using shared utility
 func convertToOpenAIToolChoice(toolChoice *types.ToolChoice) interface{} {
-	if toolChoice == nil {
-		return nil
-	}
-
-	switch toolChoice.Mode {
-	case types.ToolChoiceAuto:
-		return "auto"
-	case types.ToolChoiceRequired:
-		// OpenAI uses "required" for newer models (gpt-4-turbo and later)
-		// For older models, "any" was used, but "required" is now the standard
-		return "required"
-	case types.ToolChoiceNone:
-		return "none"
-	case types.ToolChoiceSpecific:
-		// OpenAI specific tool format: {"type": "function", "function": {"name": "tool_name"}}
-		return map[string]interface{}{
-			"type": "function",
-			"function": map[string]interface{}{
-				"name": toolChoice.FunctionName,
-			},
-		}
-	default:
-		return "auto" // Default to auto if mode is unknown
-	}
+	return commontools.ConvertToolChoiceToOpenAI(toolChoice)
 }
 
 // convertContentPartsToOpenAI converts ContentParts to OpenAI format

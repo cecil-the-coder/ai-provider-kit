@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common/retry"
+	"github.com/cecil-the-coder/ai-provider-kit/internal/common/retry"
 )
 
 // Example_basic demonstrates basic retry usage

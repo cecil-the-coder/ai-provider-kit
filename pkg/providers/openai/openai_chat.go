@@ -10,9 +10,9 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common"
-	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common/streaming"
-	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common/telemetry"
+	"github.com/cecil-the-coder/ai-provider-kit/internal/common"
+	"github.com/cecil-the-coder/ai-provider-kit/internal/common/streaming"
+	"github.com/cecil-the-coder/ai-provider-kit/internal/common/telemetry"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 )
 

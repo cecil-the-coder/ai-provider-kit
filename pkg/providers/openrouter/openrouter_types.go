@@ -1,7 +1,10 @@
 // Package openrouter provides an OpenRouter AI provider implementation.
 package openrouter
 
-import "github.com/cecil-the-coder/ai-provider-kit/pkg/types"
+import (
+	commontools "github.com/cecil-the-coder/ai-provider-kit/internal/common/tools"
+	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
+)
 
 // OpenRouterRequest represents the request payload for OpenRouter API
 type OpenRouterRequest struct {
@@ -184,50 +187,61 @@ func convertMessagesToOpenRouter(messages []types.ChatMessage) []OpenRouterMessa
 	return openrouterMessages
 }
 
-// convertToOpenRouterTools converts universal tools to OpenRouter format (OpenAI-compatible)
+// convertToOpenRouterTools converts universal tools to OpenRouter format (OpenAI-compatible) using shared utility
 func convertToOpenRouterTools(tools []types.Tool) []OpenRouterTool {
-	openrouterTools := make([]OpenRouterTool, len(tools))
-	for i, tool := range tools {
+	// Use shared utility for conversion
+	sharedTools := commontools.ConvertToOpenAIFormat(tools)
+
+	// Convert to OpenRouter-specific types (same structure, different type names)
+	openrouterTools := make([]OpenRouterTool, len(sharedTools))
+	for i, st := range sharedTools {
 		openrouterTools[i] = OpenRouterTool{
-			Type: "function",
+			Type: st.Type,
 			Function: OpenRouterFunctionDef{
-				Name:        tool.Name,
-				Description: tool.Description,
-				Parameters:  tool.InputSchema,
+				Name:        st.Function.Name,
+				Description: st.Function.Description,
+				Parameters:  st.Function.Parameters,
 			},
 		}
 	}
 	return openrouterTools
 }
 
-// convertToOpenRouterToolCalls converts universal tool calls to OpenRouter format
+// convertToOpenRouterToolCalls converts universal tool calls to OpenRouter format using shared utility
 func convertToOpenRouterToolCalls(toolCalls []types.ToolCall) []OpenRouterToolCall {
-	openrouterToolCalls := make([]OpenRouterToolCall, len(toolCalls))
-	for i, tc := range toolCalls {
+	// Use shared utility for conversion
+	sharedCalls := commontools.ConvertToOpenAIToolCalls(toolCalls)
+
+	// Convert to OpenRouter-specific types (same structure, different type names)
+	openrouterToolCalls := make([]OpenRouterToolCall, len(sharedCalls))
+	for i, sc := range sharedCalls {
 		openrouterToolCalls[i] = OpenRouterToolCall{
-			ID:   tc.ID,
-			Type: tc.Type,
+			ID:   sc.ID,
+			Type: sc.Type,
 			Function: OpenRouterToolCallFunction{
-				Name:      tc.Function.Name,
-				Arguments: tc.Function.Arguments,
+				Name:      sc.Function.Name,
+				Arguments: sc.Function.Arguments,
 			},
 		}
 	}
 	return openrouterToolCalls
 }
 
-// convertOpenRouterToolCallsToUniversal converts OpenRouter tool calls to universal format
+// convertOpenRouterToolCallsToUniversal converts OpenRouter tool calls to universal format using shared utility
 func convertOpenRouterToolCallsToUniversal(toolCalls []OpenRouterToolCall) []types.ToolCall {
-	universal := make([]types.ToolCall, len(toolCalls))
+	// Convert to shared format first
+	sharedCalls := make([]commontools.OpenAIToolCall, len(toolCalls))
 	for i, tc := range toolCalls {
-		universal[i] = types.ToolCall{
+		sharedCalls[i] = commontools.OpenAIToolCall{
 			ID:   tc.ID,
 			Type: tc.Type,
-			Function: types.ToolCallFunction{
+			Function: commontools.OpenAIToolCallFunction{
 				Name:      tc.Function.Name,
 				Arguments: tc.Function.Arguments,
 			},
 		}
 	}
-	return universal
+
+	// Use shared utility for conversion
+	return commontools.ConvertFromOpenAIToolCalls(sharedCalls)
 }

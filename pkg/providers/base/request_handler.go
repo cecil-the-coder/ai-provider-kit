@@ -8,8 +8,8 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common/auth"
-	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common/telemetry"
+	"github.com/cecil-the-coder/ai-provider-kit/internal/common/auth"
+	"github.com/cecil-the-coder/ai-provider-kit/internal/common/telemetry"
 )
 
 // RequestHandler interface for executing HTTP requests with authentication

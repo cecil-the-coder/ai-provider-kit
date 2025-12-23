@@ -13,10 +13,11 @@ import (
 
 	"github.com/cecil-the-coder/ai-provider-kit/internal/clientpool"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/base"
-	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common"
-	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common/auth"
-	commonconfig "github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common/config"
-	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common/models"
+	common "github.com/cecil-the-coder/ai-provider-kit/internal/common"
+	"github.com/cecil-the-coder/ai-provider-kit/internal/common/auth"
+	commonconfig "github.com/cecil-the-coder/ai-provider-kit/internal/common/config"
+	"github.com/cecil-the-coder/ai-provider-kit/internal/common/models"
+	commontools "github.com/cecil-the-coder/ai-provider-kit/internal/common/tools"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/ratelimit"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 )
@@ -939,76 +940,66 @@ func (p *CerebrasProvider) performConnectivityTest(ctx context.Context) error {
 	return nil
 }
 
-// convertToCerebrasTools converts universal tools to Cerebras format (OpenAI-compatible)
+// convertToCerebrasTools converts universal tools to Cerebras format (OpenAI-compatible) using shared utility
 func convertToCerebrasTools(tools []types.Tool) []CerebrasTool {
-	cerebrasTools := make([]CerebrasTool, len(tools))
-	for i, tool := range tools {
+	// Use shared utility for conversion
+	sharedTools := commontools.ConvertToOpenAIFormat(tools)
+
+	// Convert to Cerebras-specific types (same structure, different type names)
+	cerebrasTools := make([]CerebrasTool, len(sharedTools))
+	for i, st := range sharedTools {
 		cerebrasTools[i] = CerebrasTool{
-			Type: "function",
+			Type: st.Type,
 			Function: CerebrasFunctionDef{
-				Name:        tool.Name,
-				Description: tool.Description,
-				Parameters:  tool.InputSchema,
+				Name:        st.Function.Name,
+				Description: st.Function.Description,
+				Parameters:  st.Function.Parameters,
 			},
 		}
 	}
 	return cerebrasTools
 }
 
-// convertToCerebrasToolCalls converts universal tool calls to Cerebras format
+// convertToCerebrasToolCalls converts universal tool calls to Cerebras format using shared utility
 func convertToCerebrasToolCalls(toolCalls []types.ToolCall) []CerebrasToolCall {
-	cerebrasToolCalls := make([]CerebrasToolCall, len(toolCalls))
-	for i, tc := range toolCalls {
+	// Use shared utility for conversion
+	sharedCalls := commontools.ConvertToOpenAIToolCalls(toolCalls)
+
+	// Convert to Cerebras-specific types (same structure, different type names)
+	cerebrasToolCalls := make([]CerebrasToolCall, len(sharedCalls))
+	for i, sc := range sharedCalls {
 		cerebrasToolCalls[i] = CerebrasToolCall{
-			ID:   tc.ID,
-			Type: tc.Type,
+			ID:   sc.ID,
+			Type: sc.Type,
 			Function: CerebrasToolCallFunction{
-				Name:      tc.Function.Name,
-				Arguments: tc.Function.Arguments,
+				Name:      sc.Function.Name,
+				Arguments: sc.Function.Arguments,
 			},
 		}
 	}
 	return cerebrasToolCalls
 }
 
-// convertCerebrasToolCallsToUniversal converts Cerebras tool calls to universal format
+// convertCerebrasToolCallsToUniversal converts Cerebras tool calls to universal format using shared utility
 func convertCerebrasToolCallsToUniversal(toolCalls []CerebrasToolCall) []types.ToolCall {
-	universal := make([]types.ToolCall, len(toolCalls))
+	// Convert to shared format first
+	sharedCalls := make([]commontools.OpenAIToolCall, len(toolCalls))
 	for i, tc := range toolCalls {
-		universal[i] = types.ToolCall{
+		sharedCalls[i] = commontools.OpenAIToolCall{
 			ID:   tc.ID,
 			Type: tc.Type,
-			Function: types.ToolCallFunction{
+			Function: commontools.OpenAIToolCallFunction{
 				Name:      tc.Function.Name,
 				Arguments: tc.Function.Arguments,
 			},
 		}
 	}
-	return universal
+
+	// Use shared utility for conversion
+	return commontools.ConvertFromOpenAIToolCalls(sharedCalls)
 }
 
-// convertToCerebrasToolChoice converts universal ToolChoice to Cerebras format (OpenAI-compatible)
+// convertToCerebrasToolChoice converts universal ToolChoice to Cerebras format (OpenAI-compatible) using shared utility
 func convertToCerebrasToolChoice(toolChoice *types.ToolChoice) interface{} {
-	if toolChoice == nil {
-		return nil
-	}
-
-	switch toolChoice.Mode {
-	case types.ToolChoiceAuto:
-		return "auto"
-	case types.ToolChoiceRequired:
-		return "required"
-	case types.ToolChoiceNone:
-		return "none"
-	case types.ToolChoiceSpecific:
-		// OpenAI specific tool format: {"type": "function", "function": {"name": "tool_name"}}
-		return map[string]interface{}{
-			"type": "function",
-			"function": map[string]interface{}{
-				"name": toolChoice.FunctionName,
-			},
-		}
-	default:
-		return "auto" // Default to auto if mode is unknown
-	}
+	return commontools.ConvertToolChoiceToOpenAI(toolChoice)
 }

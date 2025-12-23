@@ -6,9 +6,9 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common"
-	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common/auth"
-	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common/config"
+	"github.com/cecil-the-coder/ai-provider-kit/internal/common"
+	"github.com/cecil-the-coder/ai-provider-kit/internal/common/auth"
+	"github.com/cecil-the-coder/ai-provider-kit/internal/common/config"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 	"golang.org/x/time/rate"
 )

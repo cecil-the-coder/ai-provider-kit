@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common/middleware"
+	"github.com/cecil-the-coder/ai-provider-kit/internal/common/middleware"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 	"github.com/google/uuid"
 )

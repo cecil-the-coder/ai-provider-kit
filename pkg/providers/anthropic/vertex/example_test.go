@@ -10,7 +10,7 @@ import (
 	"net/http/httptest"
 
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/anthropic/vertex"
-	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common/middleware"
+	"github.com/cecil-the-coder/ai-provider-kit/internal/common/middleware"
 )
 
 // Example demonstrates basic usage of Vertex AI middleware with bearer token

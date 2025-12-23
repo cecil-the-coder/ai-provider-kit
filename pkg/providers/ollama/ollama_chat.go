@@ -9,8 +9,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common"
-	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common/telemetry"
+	common "github.com/cecil-the-coder/ai-provider-kit/internal/common"
+	commontools "github.com/cecil-the-coder/ai-provider-kit/internal/common/tools"
+	"github.com/cecil-the-coder/ai-provider-kit/internal/common/telemetry"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 )
 
@@ -229,43 +230,43 @@ func (p *OllamaProvider) extractImagesFromParts(parts []types.ContentPart) []str
 	return images
 }
 
-// convertToolCalls converts universal ToolCalls to Ollama format
+// convertToolCalls converts universal ToolCalls to Ollama format using shared utility
 func (p *OllamaProvider) convertToolCalls(toolCalls []types.ToolCall) []ollamaToolCall {
-	ollamaToolCalls := make([]ollamaToolCall, 0, len(toolCalls))
+	// Use shared utility for conversion
+	sharedCalls := commontools.ConvertToOllamaToolCalls(toolCalls)
 
-	for _, tc := range toolCalls {
-		ollamaToolCalls = append(ollamaToolCalls, ollamaToolCall{
-			ID:   tc.ID,
-			Type: "function",
+	// Convert to Ollama-specific types
+	ollamaToolCalls := make([]ollamaToolCall, len(sharedCalls))
+	for i, sc := range sharedCalls {
+		ollamaToolCalls[i] = ollamaToolCall{
+			ID:   sc.ID,
+			Type: sc.Type,
 			Function: ollamaFunctionCall{
-				Name:      tc.Function.Name,
-				Arguments: tc.Function.Arguments,
+				Name:      sc.Function.Name,
+				Arguments: sc.Function.Arguments,
 			},
-		})
+		}
 	}
-
 	return ollamaToolCalls
 }
 
-// convertTools converts universal Tools to Ollama format
+// convertTools converts universal Tools to Ollama format using shared utility
 func (p *OllamaProvider) convertTools(tools []types.Tool) []ollamaTool {
-	ollamaTools := make([]ollamaTool, 0, len(tools))
+	// Use shared utility for conversion (includes schema normalization)
+	sharedTools := commontools.ConvertToOllamaFormat(tools)
 
-	for _, tool := range tools {
-		// Normalize the input schema to ensure compatibility with Ollama
-		// This converts array-typed "type" fields (e.g., ["string", "null"]) to strings
-		normalizedSchema := NormalizeJSONSchema(tool.InputSchema)
-
-		ollamaTools = append(ollamaTools, ollamaTool{
-			Type: "function",
+	// Convert to Ollama-specific types
+	ollamaTools := make([]ollamaTool, len(sharedTools))
+	for i, st := range sharedTools {
+		ollamaTools[i] = ollamaTool{
+			Type: st.Type,
 			Function: ollamaFunctionDef{
-				Name:        tool.Name,
-				Description: tool.Description,
-				Parameters:  normalizedSchema,
+				Name:        st.Function.Name,
+				Description: st.Function.Description,
+				Parameters:  st.Function.Parameters,
 			},
-		})
+		}
 	}
-
 	return ollamaTools
 }
 
@@ -344,22 +345,23 @@ func (p *OllamaProvider) makeHTTPStreamRequest(ctx context.Context, url string, 
 	return resp, nil
 }
 
-// convertOllamaToolCallsToUniversal converts Ollama tool calls to universal format
+// convertOllamaToolCallsToUniversal converts Ollama tool calls to universal format using shared utility
 func (p *OllamaProvider) convertOllamaToolCallsToUniversal(ollamaToolCalls []ollamaToolCall) []types.ToolCall {
-	toolCalls := make([]types.ToolCall, 0, len(ollamaToolCalls))
-
-	for _, otc := range ollamaToolCalls {
-		toolCalls = append(toolCalls, types.ToolCall{
-			ID:   otc.ID,
-			Type: otc.Type,
-			Function: types.ToolCallFunction{
-				Name:      otc.Function.Name,
-				Arguments: otc.Function.Arguments,
+	// Convert to shared format first
+	sharedCalls := make([]commontools.OllamaToolCall, len(ollamaToolCalls))
+	for i, tc := range ollamaToolCalls {
+		sharedCalls[i] = commontools.OllamaToolCall{
+			ID:   tc.ID,
+			Type: tc.Type,
+			Function: commontools.OllamaToolCallFunction{
+				Name:      tc.Function.Name,
+				Arguments: tc.Function.Arguments,
 			},
-		})
+		}
 	}
 
-	return toolCalls
+	// Use shared utility for conversion
+	return commontools.ConvertFromOllamaToolCalls(sharedCalls)
 }
 
 // GenerateEmbeddings generates embeddings for the given text
