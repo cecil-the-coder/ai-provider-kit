@@ -10,8 +10,9 @@ import (
 )
 
 func TestFactoryGetHTTPClient(t *testing.T) {
-	t.Parallel()
 	// Clear the pool before testing
+	// Note: This test cannot run in parallel (t.Parallel) because it
+	// manipulates the global HTTP client pool which is shared state.
 	pkghttp.Clear()
 
 	factory := NewProviderFactory()
@@ -39,8 +40,9 @@ func TestFactoryGetHTTPClient(t *testing.T) {
 }
 
 func TestFactoryGetHTTPClientWithTimeout(t *testing.T) {
-	t.Parallel()
 	// Clear the pool before testing
+	// Note: This test cannot run in parallel (t.Parallel) because it
+	// manipulates the global HTTP client pool which is shared state.
 	pkghttp.Clear()
 
 	factory := NewProviderFactory()
@@ -62,8 +64,9 @@ func TestFactoryGetHTTPClientWithTimeout(t *testing.T) {
 }
 
 func TestFactoryGetHTTPClientWithConfig(t *testing.T) {
-	t.Parallel()
 	// Clear the pool before testing
+	// Note: This test cannot run in parallel (t.Parallel) because it
+	// manipulates the global HTTP client pool which is shared state.
 	pkghttp.Clear()
 
 	factory := NewProviderFactory()
@@ -117,8 +120,9 @@ func TestFactoryShutdownHTTPClients(t *testing.T) {
 }
 
 func TestFactoryGetHTTPClientStats(t *testing.T) {
-	t.Parallel()
 	// Clear the pool before testing
+	// Note: This test cannot run in parallel (t.Parallel) because it
+	// manipulates the global HTTP client pool which is shared state.
 	pkghttp.Clear()
 
 	factory := NewProviderFactory()
@@ -144,8 +148,9 @@ func TestFactoryGetHTTPClientStats(t *testing.T) {
 }
 
 func TestFactoryIntegrationWithProviders(t *testing.T) {
-	t.Parallel()
 	// Clear the pool before testing
+	// Note: This test cannot run in parallel (t.Parallel) because it
+	// manipulates the global HTTP client pool which is shared state.
 	pkghttp.Clear()
 
 	factory := NewProviderFactory()
@@ -172,8 +177,9 @@ func TestFactoryIntegrationWithProviders(t *testing.T) {
 }
 
 func TestFactoryHTTPClientURLNormalization(t *testing.T) {
-	t.Parallel()
 	// Clear the pool before testing
+	// Note: This test cannot run in parallel (t.Parallel) because it
+	// manipulates the global HTTP client pool which is shared state.
 	pkghttp.Clear()
 
 	factory := NewProviderFactory()
