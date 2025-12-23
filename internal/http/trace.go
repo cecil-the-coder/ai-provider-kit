@@ -112,6 +112,21 @@ func (t *connectionTrace) toConnectionMetrics() ConnectionMetrics {
 	return metrics
 }
 
+// updateMinMaxAvg updates min, max, and average values for a duration metric.
+// The running average is calculated as: (previousAvg * (n-1) + newValue) / n
+func updateMinMaxAvg(min, max, avg *time.Duration, totalMeasurements int64, newValue time.Duration) {
+	// Update minimum
+	if *min < 0 || newValue < *min {
+		*min = newValue
+	}
+	// Update maximum
+	if newValue > *max {
+		*max = newValue
+	}
+	// Update running average
+	*avg = (*avg*time.Duration(totalMeasurements-1) + newValue) / time.Duration(totalMeasurements)
+}
+
 // updateConnectionMetricsSummary updates the ClientMetrics with new connection metrics.
 // This aggregates per-request metrics into summary statistics.
 func (c *HTTPClient) updateConnectionMetricsSummary(metrics ConnectionMetrics) {
@@ -120,69 +135,64 @@ func (c *HTTPClient) updateConnectionMetricsSummary(metrics ConnectionMetrics) {
 
 	if c.metrics.ConnectionMetricsSummary == nil {
 		c.metrics.ConnectionMetricsSummary = &ConnectionMetricsSummary{
-			MinDNSLookupDuration:     -1, // Use -1 as sentinel for infinity
-			MinTCPConnectDuration:    -1,
-			MinTLSHandshakeDuration:  -1,
-			MinTimeToFirstByte:       -1,
-			MinTotalConnectionTime:   -1,
+			MinDNSLookupDuration:    -1, // Use -1 as sentinel for infinity
+			MinTCPConnectDuration:   -1,
+			MinTLSHandshakeDuration: -1,
+			MinTimeToFirstByte:      -1,
+			MinTotalConnectionTime:  -1,
 		}
 	}
 
 	summary := c.metrics.ConnectionMetricsSummary
 	summary.TotalMeasurements++
 
-	// Update DNS lookup metrics
 	if metrics.DNSLookupDuration > 0 {
-		if summary.MinDNSLookupDuration < 0 || metrics.DNSLookupDuration < summary.MinDNSLookupDuration {
-			summary.MinDNSLookupDuration = metrics.DNSLookupDuration
-		}
-		if metrics.DNSLookupDuration > summary.MaxDNSLookupDuration {
-			summary.MaxDNSLookupDuration = metrics.DNSLookupDuration
-		}
-		summary.AvgDNSLookupDuration = (summary.AvgDNSLookupDuration*time.Duration(summary.TotalMeasurements-1) + metrics.DNSLookupDuration) / time.Duration(summary.TotalMeasurements)
+		updateMinMaxAvg(
+			&summary.MinDNSLookupDuration,
+			&summary.MaxDNSLookupDuration,
+			&summary.AvgDNSLookupDuration,
+			summary.TotalMeasurements,
+			metrics.DNSLookupDuration,
+		)
 	}
 
-	// Update TCP connect metrics
 	if metrics.TCPConnectDuration > 0 {
-		if summary.MinTCPConnectDuration < 0 || metrics.TCPConnectDuration < summary.MinTCPConnectDuration {
-			summary.MinTCPConnectDuration = metrics.TCPConnectDuration
-		}
-		if metrics.TCPConnectDuration > summary.MaxTCPConnectDuration {
-			summary.MaxTCPConnectDuration = metrics.TCPConnectDuration
-		}
-		summary.AvgTCPConnectDuration = (summary.AvgTCPConnectDuration*time.Duration(summary.TotalMeasurements-1) + metrics.TCPConnectDuration) / time.Duration(summary.TotalMeasurements)
+		updateMinMaxAvg(
+			&summary.MinTCPConnectDuration,
+			&summary.MaxTCPConnectDuration,
+			&summary.AvgTCPConnectDuration,
+			summary.TotalMeasurements,
+			metrics.TCPConnectDuration,
+		)
 	}
 
-	// Update TLS handshake metrics
 	if metrics.TLSHandshakeDuration > 0 {
-		if summary.MinTLSHandshakeDuration < 0 || metrics.TLSHandshakeDuration < summary.MinTLSHandshakeDuration {
-			summary.MinTLSHandshakeDuration = metrics.TLSHandshakeDuration
-		}
-		if metrics.TLSHandshakeDuration > summary.MaxTLSHandshakeDuration {
-			summary.MaxTLSHandshakeDuration = metrics.TLSHandshakeDuration
-		}
-		summary.AvgTLSHandshakeDuration = (summary.AvgTLSHandshakeDuration*time.Duration(summary.TotalMeasurements-1) + metrics.TLSHandshakeDuration) / time.Duration(summary.TotalMeasurements)
+		updateMinMaxAvg(
+			&summary.MinTLSHandshakeDuration,
+			&summary.MaxTLSHandshakeDuration,
+			&summary.AvgTLSHandshakeDuration,
+			summary.TotalMeasurements,
+			metrics.TLSHandshakeDuration,
+		)
 	}
 
-	// Update TTFB metrics
 	if metrics.TimeToFirstByte > 0 {
-		if summary.MinTimeToFirstByte < 0 || metrics.TimeToFirstByte < summary.MinTimeToFirstByte {
-			summary.MinTimeToFirstByte = metrics.TimeToFirstByte
-		}
-		if metrics.TimeToFirstByte > summary.MaxTimeToFirstByte {
-			summary.MaxTimeToFirstByte = metrics.TimeToFirstByte
-		}
-		summary.AvgTimeToFirstByte = (summary.AvgTimeToFirstByte*time.Duration(summary.TotalMeasurements-1) + metrics.TimeToFirstByte) / time.Duration(summary.TotalMeasurements)
+		updateMinMaxAvg(
+			&summary.MinTimeToFirstByte,
+			&summary.MaxTimeToFirstByte,
+			&summary.AvgTimeToFirstByte,
+			summary.TotalMeasurements,
+			metrics.TimeToFirstByte,
+		)
 	}
 
-	// Update total connection time metrics
 	if metrics.TotalConnectionTime > 0 {
-		if summary.MinTotalConnectionTime < 0 || metrics.TotalConnectionTime < summary.MinTotalConnectionTime {
-			summary.MinTotalConnectionTime = metrics.TotalConnectionTime
-		}
-		if metrics.TotalConnectionTime > summary.MaxTotalConnectionTime {
-			summary.MaxTotalConnectionTime = metrics.TotalConnectionTime
-		}
-		summary.AvgTotalConnectionTime = (summary.AvgTotalConnectionTime*time.Duration(summary.TotalMeasurements-1) + metrics.TotalConnectionTime) / time.Duration(summary.TotalMeasurements)
+		updateMinMaxAvg(
+			&summary.MinTotalConnectionTime,
+			&summary.MaxTotalConnectionTime,
+			&summary.AvgTotalConnectionTime,
+			summary.TotalMeasurements,
+			metrics.TotalConnectionTime,
+		)
 	}
 }

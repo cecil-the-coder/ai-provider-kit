@@ -1325,8 +1325,8 @@ func TestHTTPClient_ConnectionTrace_WithRetry(t *testing.T) {
 
 	client := NewHTTPClient(HTTPClientConfig{
 		EnableConnectionTrace: true,
-		MaxRetries:           2,
-		BaseRetryDelay:       10 * time.Millisecond,
+		MaxRetries:            2,
+		BaseRetryDelay:        10 * time.Millisecond,
 	})
 
 	req, err := http.NewRequest("GET", server.URL, nil)

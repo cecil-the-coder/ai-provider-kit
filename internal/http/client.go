@@ -27,18 +27,18 @@ type HTTPClient struct {
 
 // HTTPClientConfig configures the HTTP client
 type HTTPClientConfig struct {
-	Timeout             time.Duration       `json:"timeout,omitempty"`
-	MaxRetries          int                 `json:"max_retries,omitempty"`
-	BaseRetryDelay      time.Duration       `json:"base_retry_delay,omitempty"`
-	MaxRetryDelay       time.Duration       `json:"max_retry_delay,omitempty"`
-	BackoffMultiplier   float64             `json:"backoff_multiplier,omitempty"`
-	RetryableErrors     []string            `json:"retryable_errors,omitempty"`
-	Headers             map[string]string   `json:"headers,omitempty"`
-	UserAgent           string              `json:"user_agent,omitempty"`
-	EnableMetrics       bool                `json:"enable_metrics,omitempty"`
-	EnableConnectionTrace bool              `json:"enable_connection_trace,omitempty"` // Opt-in connection-level tracing
-	RequestInterceptor  RequestInterceptor  `json:"-"`
-	ResponseInterceptor ResponseInterceptor `json:"-"`
+	Timeout               time.Duration       `json:"timeout,omitempty"`
+	MaxRetries            int                 `json:"max_retries,omitempty"`
+	BaseRetryDelay        time.Duration       `json:"base_retry_delay,omitempty"`
+	MaxRetryDelay         time.Duration       `json:"max_retry_delay,omitempty"`
+	BackoffMultiplier     float64             `json:"backoff_multiplier,omitempty"`
+	RetryableErrors       []string            `json:"retryable_errors,omitempty"`
+	Headers               map[string]string   `json:"headers,omitempty"`
+	UserAgent             string              `json:"user_agent,omitempty"`
+	EnableMetrics         bool                `json:"enable_metrics,omitempty"`
+	EnableConnectionTrace bool                `json:"enable_connection_trace,omitempty"` // Opt-in connection-level tracing
+	RequestInterceptor    RequestInterceptor  `json:"-"`
+	ResponseInterceptor   ResponseInterceptor `json:"-"`
 	// Transport configuration
 	MaxIdleConns          int           `json:"max_idle_conns,omitempty"`
 	MaxIdleConnsPerHost   int           `json:"max_idle_conns_per_host,omitempty"`
@@ -92,30 +92,30 @@ type ConnectionMetricsSummary struct {
 	// Average total connection time
 	AvgTotalConnectionTime time.Duration `json:"avg_total_connection_time"`
 	// Min/Max for each metric
-	MinDNSLookupDuration     time.Duration `json:"min_dns_lookup_duration"`
-	MaxDNSLookupDuration     time.Duration `json:"max_dns_lookup_duration"`
-	MinTCPConnectDuration    time.Duration `json:"min_tcp_connect_duration"`
-	MaxTCPConnectDuration    time.Duration `json:"max_tcp_connect_duration"`
-	MinTLSHandshakeDuration  time.Duration `json:"min_tls_handshake_duration"`
-	MaxTLSHandshakeDuration  time.Duration `json:"max_tls_handshake_duration"`
-	MinTimeToFirstByte       time.Duration `json:"min_time_to_first_byte"`
-	MaxTimeToFirstByte       time.Duration `json:"max_time_to_first_byte"`
-	MinTotalConnectionTime   time.Duration `json:"min_total_connection_time"`
-	MaxTotalConnectionTime   time.Duration `json:"max_total_connection_time"`
+	MinDNSLookupDuration    time.Duration `json:"min_dns_lookup_duration"`
+	MaxDNSLookupDuration    time.Duration `json:"max_dns_lookup_duration"`
+	MinTCPConnectDuration   time.Duration `json:"min_tcp_connect_duration"`
+	MaxTCPConnectDuration   time.Duration `json:"max_tcp_connect_duration"`
+	MinTLSHandshakeDuration time.Duration `json:"min_tls_handshake_duration"`
+	MaxTLSHandshakeDuration time.Duration `json:"max_tls_handshake_duration"`
+	MinTimeToFirstByte      time.Duration `json:"min_time_to_first_byte"`
+	MaxTimeToFirstByte      time.Duration `json:"max_time_to_first_byte"`
+	MinTotalConnectionTime  time.Duration `json:"min_total_connection_time"`
+	MaxTotalConnectionTime  time.Duration `json:"max_total_connection_time"`
 }
 
 // connectionTrace holds per-request timing data for httptrace callbacks
 type connectionTrace struct {
-	mu                  sync.Mutex
-	dnsStart            time.Time
-	dnsDone             time.Time
-	connectStart        time.Time
-	connectDone         time.Time
-	tlsHandshakeStart   time.Time
-	tlsHandshakeDone    time.Time
-	gotConn             time.Time
+	mu                   sync.Mutex
+	dnsStart             time.Time
+	dnsDone              time.Time
+	connectStart         time.Time
+	connectDone          time.Time
+	tlsHandshakeStart    time.Time
+	tlsHandshakeDone     time.Time
+	gotConn              time.Time
 	gotFirstResponseByte time.Time
-	requestStartTime    time.Time
+	requestStartTime     time.Time
 }
 
 // RequestInterceptor allows modifying requests before sending
