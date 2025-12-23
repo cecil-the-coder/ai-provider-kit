@@ -32,6 +32,8 @@ func GetClient(baseURL string) *HTTPClient {
 	globalPool.mu.RLock()
 	if client, ok := globalPool.clients[normalizedKey]; ok {
 		globalPool.mu.RUnlock()
+		// Mark this host as recently used for session warmup
+		getSessionWarmup().MarkUsed(baseURL)
 		return client
 	}
 	globalPool.mu.RUnlock()
@@ -41,6 +43,8 @@ func GetClient(baseURL string) *HTTPClient {
 
 	// Double-check in case another goroutine created it while we waited
 	if client, ok := globalPool.clients[normalizedKey]; ok {
+		// Mark this host as recently used for session warmup
+		getSessionWarmup().MarkUsed(baseURL)
 		return client
 	}
 
@@ -65,6 +69,8 @@ func GetClient(baseURL string) *HTTPClient {
 
 	client := NewHTTPClient(config)
 	globalPool.clients[normalizedKey] = client
+	// Mark this host as recently used for session warmup
+	getSessionWarmup().MarkUsed(baseURL)
 	return client
 }
 
@@ -149,6 +155,9 @@ func GetClientWithTimeout(baseURL string, timeout time.Duration) *HTTPClient {
 // This should be called when shutting down the application to ensure
 // all connections are properly closed.
 func Shutdown(ctx context.Context) error {
+	// Stop the global session warmup
+	StopGlobalSessionWarmup()
+
 	globalPool.mu.Lock()
 	defer globalPool.mu.Unlock()
 

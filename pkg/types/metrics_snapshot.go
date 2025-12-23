@@ -169,6 +169,11 @@ type StreamMetrics struct {
 	// Chunk timing metrics (time between chunks)
 	ChunkTiming ChunkTimingMetrics `json:"chunk_timing,omitempty"`
 
+	// Byte verification metrics
+	BytesRead    int64 `json:"bytes_read"`    // Total bytes read from stream
+	BytesWritten int64 `json:"bytes_written"` // Total bytes written to client
+	ByteMismatch bool  `json:"byte_mismatch"` // True if bytes read != bytes written (outside 1-byte tolerance)
+
 	// Last updated
 	LastUpdated time.Time `json:"last_updated"`
 }

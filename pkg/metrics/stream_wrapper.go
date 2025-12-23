@@ -6,6 +6,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cecil-the-coder/ai-provider-kit/internal/streaming"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 )
 
@@ -56,6 +57,10 @@ type MetricsStreamWrapper struct {
 	tokensReceived      atomic.Int64
 	interruptions       atomic.Int64
 	lastChunkTokenCount atomic.Int64
+
+	// Byte tracking
+	bytesRead    atomic.Int64
+	bytesWritten atomic.Int64
 
 	// Error tracking
 	streamAborted   atomic.Bool
@@ -121,8 +126,11 @@ func NewMetricsStreamWrapper(config MetricsStreamWrapperConfig) (*MetricsStreamW
 		sessionID = generateSessionID()
 	}
 
+	// Wrap stream with byte tracking
+	byteTracker := streaming.NewByteTrackingStream(config.Stream)
+
 	return &MetricsStreamWrapper{
-		stream:          config.Stream,
+		stream:          byteTracker,
 		collector:       config.Collector,
 		ctx:             config.Context,
 		providerName:    config.ProviderName,
@@ -202,6 +210,11 @@ func (w *MetricsStreamWrapper) Next() (types.ChatCompletionChunk, error) {
 		w.lastChunkTokenCount.Store(chunkTokens)
 	}
 
+	// Track bytes read from byte tracking stream
+	if bt, ok := w.stream.(*streaming.ByteTrackingStream); ok {
+		w.bytesRead.Store(bt.BytesRead())
+	}
+
 	// Optionally emit chunk event
 	if w.emitChunkEvents {
 		w.emitChunkEvent(chunkTokens, chunkInterval)
@@ -257,6 +270,15 @@ func (w *MetricsStreamWrapper) GetMetrics() StreamMetrics {
 		}
 	}
 
+	// Get byte tracking info
+	var bytesRead, bytesWritten int64
+	var byteMismatch bool
+	if bt, ok := w.stream.(*streaming.ByteTrackingStream); ok {
+		bytesRead = bt.BytesRead()
+		bytesWritten = bt.BytesWritten()
+		byteMismatch = bt.HasMismatch()
+	}
+
 	return StreamMetrics{
 		TimeToFirstToken:    ttft,
 		TokensPerSecond:     tokensPerSecond,
@@ -265,6 +287,9 @@ func (w *MetricsStreamWrapper) GetMetrics() StreamMetrics {
 		StreamInterruptions: w.interruptions.Load(),
 		TokensReceived:      w.tokensReceived.Load(),
 		Aborted:             w.streamAborted.Load(),
+		BytesRead:           bytesRead,
+		BytesWritten:        bytesWritten,
+		ByteMismatch:        byteMismatch,
 	}
 }
 
@@ -277,6 +302,18 @@ type StreamMetrics struct {
 	StreamInterruptions int64
 	TokensReceived      int64
 	Aborted             bool
+	BytesRead           int64
+	BytesWritten        int64
+	ByteMismatch        bool
+}
+
+// MarkBytesWritten marks the number of bytes written to the client.
+// This should be called by the client code when writing chunks to the output.
+func (w *MetricsStreamWrapper) MarkBytesWritten(n int64) {
+	w.bytesWritten.Store(n)
+	if bt, ok := w.stream.(*streaming.ByteTrackingStream); ok {
+		bt.MarkBytesWritten(n)
+	}
 }
 
 // emitStreamStartEvent emits a MetricEventStreamStart event.
