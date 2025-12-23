@@ -368,6 +368,38 @@ func (c *HTTPClient) ResetMetrics() {
 	atomic.StoreInt64(&c.totalLatency, 0)
 }
 
+// PreWarmConnections establishes connections to the given targets before actual requests
+func (c *HTTPClient) PreWarmConnections(ctx context.Context, targets []string, count int) error {
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	successCount := 0
+
+	for _, target := range targets {
+		for i := 0; i < count; i++ {
+			wg.Add(1)
+			go func(url string) {
+				defer wg.Done()
+				// Make a lightweight HEAD request to establish connection
+				req, err := http.NewRequestWithContext(ctx, "HEAD", url, nil)
+				if err != nil {
+					return
+				}
+
+				resp, err := c.client.Do(req)
+				if err == nil {
+					resp.Body.Close()
+					mu.Lock()
+					successCount++
+					mu.Unlock()
+				}
+			}(target)
+		}
+	}
+
+	wg.Wait()
+	return nil
+}
+
 // calculateDelay calculates retry delay with exponential backoff
 // Delegates to the shared CalculateBackoff function for backward compatibility
 func (r *RetryHandler) calculateDelay(attempt int) time.Duration {

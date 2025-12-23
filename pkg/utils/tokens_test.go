@@ -382,3 +382,76 @@ func abs(x int) int {
 	}
 	return x
 }
+
+func TestEstimateTokensFast(t *testing.T) {
+	tests := []struct {
+		name      string
+		text      string
+		maxTokens int
+		expected  int
+	}{
+		{
+			name:      "empty string returns zero tokens",
+			text:      "",
+			maxTokens: 1000,
+			expected:  0,
+		},
+		{
+			name:      "very short text uses character-based estimate",
+			text:      "Hello, world!",
+			maxTokens: 1000,
+			expected:  3, // 13 chars / 4 = 3
+		},
+		{
+			name:      "small text under threshold",
+			text:      "This is a moderately sized piece of text that is still under the 10000 character threshold for fast estimation.",
+			maxTokens: 1000,
+			expected:  27, // 111 bytes / 4 = 27
+		},
+		{
+			name:      "text just under 10000 chars",
+			text:      string(make([]byte, 9999)),
+			maxTokens: 5000,
+			expected:  2499, // 9999 / 4 = 2499
+		},
+		{
+			name:      "text at exactly 10000 chars returns maxTokens",
+			text:      string(make([]byte, 10000)),
+			maxTokens: 5000,
+			expected:  5000, // Returns maxTokens
+		},
+		{
+			name:      "large text over threshold returns maxTokens",
+			text:      string(make([]byte, 15000)),
+			maxTokens: 10000,
+			expected:  10000, // Returns maxTokens
+		},
+		{
+			name:      "small text with custom maxTokens",
+			text:      "Small text",
+			maxTokens: 100,
+			expected:  2, // 10 chars / 4 = 2
+		},
+		{
+			name:      "unicode characters under threshold",
+			text:      "Hello 世界! This is some text with unicode characters. 你好世界",
+			maxTokens: 1000,
+			expected:  17, // 69 bytes / 4 = 17
+		},
+		{
+			name:      "multiline text under threshold",
+			text:      "Line 1\nLine 2\nLine 3\nLine 4\nLine 5",
+			maxTokens: 1000,
+			expected:  8, // 34 bytes / 4 = 8
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := EstimateTokensFast(tt.text, tt.maxTokens)
+			if result != tt.expected {
+				t.Errorf("EstimateTokensFast(%q, %d) = %d; want %d", tt.text, tt.maxTokens, result, tt.expected)
+			}
+		})
+	}
+}

@@ -45,3 +45,14 @@ const (
 func ByteThresholdForTokens(tokens int) int {
 	return int(float64(tokens) * BytesPerToken)
 }
+
+// EstimateTokensFast provides a fast character-based token estimate.
+// For small payloads, full BPE encoding is unnecessary.
+// This function is optimized for quick estimates on small text sizes.
+func EstimateTokensFast(text string, maxTokens int) int {
+	// For very small requests, character-based is sufficient
+	if len(text) < 10000 { // ~2500 tokens
+		return len(text) / 4 // ~4 chars per token
+	}
+	return maxTokens
+}
