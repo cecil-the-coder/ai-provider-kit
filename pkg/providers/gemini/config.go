@@ -116,6 +116,16 @@ func NewGeminiProvider(config types.ProviderConfig) *GeminiProvider {
 	}
 	backendRouter := NewBackendRouter(clientConfig)
 
+	// Initialize CodeAssistClient if using BackendCodeAssist
+	var codeAssistClient *CodeAssistClient
+	if backendRouter.GetBackend() == BackendCodeAssist {
+		// Get OAuth token from auth helper for Code Assist API
+		creds := authHelper.OAuthManager.GetCredentials()
+		if len(creds) > 0 {
+			codeAssistClient = NewCodeAssistClient(client, creds[0].AccessToken)
+		}
+	}
+
 	provider := &GeminiProvider{
 		BaseProvider:    base.NewBaseProvider("gemini", mergedConfig, client, log.Default()),
 		authHelper:      authHelper,
@@ -127,6 +137,7 @@ func NewGeminiProvider(config types.ProviderConfig) *GeminiProvider {
 		// Default to free tier - can be updated with UpdateRateLimitTier
 		clientSideLimiter: rate.NewLimiter(rate.Every(time.Minute/15), 15),
 		backendRouter:     backendRouter,
+		codeAssist:        codeAssistClient,
 	}
 
 	// Set project ID if available
@@ -225,6 +236,16 @@ func (p *GeminiProvider) Configure(config types.ProviderConfig) error {
 		ProjectID:          geminiConfig.ProjectID,
 	}
 	p.backendRouter = NewBackendRouter(clientConfig)
+
+	// Reinitialize CodeAssistClient if using BackendCodeAssist
+	if p.backendRouter.GetBackend() == BackendCodeAssist {
+		creds := p.authHelper.OAuthManager.GetCredentials()
+		if len(creds) > 0 {
+			p.codeAssist = NewCodeAssistClient(p.client, creds[0].AccessToken)
+		}
+	} else {
+		p.codeAssist = nil
+	}
 
 	return p.BaseProvider.Configure(mergedConfig)
 }

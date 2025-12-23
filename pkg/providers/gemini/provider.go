@@ -25,7 +25,8 @@ type GeminiProvider struct {
 	rateLimitHelper   *common.RateLimitHelper
 	rateLimitMutex    sync.RWMutex
 	clientSideLimiter *rate.Limiter
-	backendRouter     *BackendRouter // Backend router for Gemini API vs Vertex AI
+	backendRouter     *BackendRouter    // Backend router for Gemini API vs Vertex AI
+	codeAssist        *CodeAssistClient // Code Assist API client (only for BackendCodeAssist)
 }
 
 // Name returns the display name of the provider
