@@ -45,6 +45,7 @@ type HTTPClientConfig struct {
 	IdleConnTimeout       time.Duration `json:"idle_conn_timeout,omitempty"`
 	TLSHandshakeTimeout   time.Duration `json:"tls_handshake_timeout,omitempty"`
 	ExpectContinueTimeout time.Duration `json:"expect_continue_timeout,omitempty"`
+	ResponseHeaderTimeout time.Duration `json:"response_header_timeout,omitempty"`
 }
 
 // ClientMetrics tracks HTTP client performance
@@ -113,6 +114,9 @@ func NewHTTPClient(config HTTPClientConfig) *HTTPClient {
 	if config.ExpectContinueTimeout == 0 {
 		config.ExpectContinueTimeout = 1 * time.Second
 	}
+	if config.ResponseHeaderTimeout == 0 {
+		config.ResponseHeaderTimeout = 15 * time.Second
+	}
 
 	// Default retryable HTTP status codes
 	if len(config.RetryableErrors) == 0 {
@@ -158,9 +162,9 @@ func createTransport(config HTTPClientConfig) *http.Transport {
 		ForceAttemptHTTP2: true,
 		// Additional sensible defaults from http.DefaultTransport
 		Proxy:                 http.ProxyFromEnvironment,
-		ResponseHeaderTimeout: 0, // No timeout by default
+		ResponseHeaderTimeout: config.ResponseHeaderTimeout,
 		DisableKeepAlives:     false,
-		DisableCompression:    false,
+		DisableCompression:    true,
 	}
 }
 
