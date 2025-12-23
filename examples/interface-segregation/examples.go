@@ -1,13 +1,47 @@
-package types
+// Package examples provides code examples demonstrating how to use the
+// AI Provider Kit's segregated provider interfaces following the Interface
+// Segregation Principle (ISP).
+//
+// NOTE: This file contains educational examples. The FlexibleMockProvider
+// is a mock implementation for demonstration purposes only and should NOT
+// be used in production.
+package examples
 
 import (
 	"context"
 	"fmt"
 	"time"
+
+	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 )
 
 // This file demonstrates how to use the segregated provider interfaces
 // for different use cases, following the Interface Segregation Principle.
+
+// Re-export commonly used types for convenience
+type (
+	// Provider interfaces from pkg/types
+	ModelProvider       = types.ModelProvider
+	HealthCheckProvider = types.HealthCheckProvider
+	ChatProvider        = types.ChatProvider
+	ToolCallingProvider = types.ToolCallingProvider
+	CoreProvider        = types.CoreProvider
+	Provider            = types.Provider
+
+	// Common types from pkg/types
+	ProviderType     = types.ProviderType
+	ProviderConfig   = types.ProviderConfig
+	AuthConfig       = types.AuthConfig
+	Model            = types.Model
+	GenerateOptions  = types.GenerateOptions
+	ChatCompletionStream = types.ChatCompletionStream
+	ChatCompletionChunk  = types.ChatCompletionChunk
+	ToolFormat       = types.ToolFormat
+	ProviderMetrics  = types.ProviderMetrics
+	ProviderInfo     = types.ProviderInfo
+	HealthStatus     = types.HealthStatus
+	Pricing          = types.Pricing
+)
 
 // ModelDiscoveryService only needs to discover models, so it depends only on ModelProvider
 type ModelDiscoveryService struct {
@@ -159,7 +193,7 @@ type FlexibleProviderFactory struct{}
 
 // CreateModelProvider creates a provider that implements only the ModelProvider interface.
 // This allows clients to depend only on model discovery functionality.
-func (f *FlexibleProviderFactory) CreateModelProvider(providerType ProviderType, config ProviderConfig) (ModelProvider, error) {
+func (f *FlexibleProviderFactory) CreateModelProvider(providerType types.ProviderType, config types.ProviderConfig) (types.ModelProvider, error) {
 	// Validate provider type
 	if !f.isProviderTypeSupported(providerType) {
 		return nil, fmt.Errorf("unsupported provider type: %s", providerType)
@@ -175,7 +209,7 @@ func (f *FlexibleProviderFactory) CreateModelProvider(providerType ProviderType,
 
 // CreateChatProvider creates a provider that implements only the ChatProvider interface.
 // This allows clients to depend only on chat completion functionality.
-func (f *FlexibleProviderFactory) CreateChatProvider(providerType ProviderType, config ProviderConfig) (ChatProvider, error) {
+func (f *FlexibleProviderFactory) CreateChatProvider(providerType types.ProviderType, config types.ProviderConfig) (types.ChatProvider, error) {
 	// Validate provider type
 	if !f.isProviderTypeSupported(providerType) {
 		return nil, fmt.Errorf("unsupported provider type: %s", providerType)
@@ -191,7 +225,7 @@ func (f *FlexibleProviderFactory) CreateChatProvider(providerType ProviderType, 
 
 // CreateHealthCheckProvider creates a provider that implements only the HealthCheckProvider interface.
 // This allows clients to depend only on health checking functionality.
-func (f *FlexibleProviderFactory) CreateHealthCheckProvider(providerType ProviderType, config ProviderConfig) (HealthCheckProvider, error) {
+func (f *FlexibleProviderFactory) CreateHealthCheckProvider(providerType types.ProviderType, config types.ProviderConfig) (types.HealthCheckProvider, error) {
 	// Validate provider type
 	if !f.isProviderTypeSupported(providerType) {
 		return nil, fmt.Errorf("unsupported provider type: %s", providerType)
@@ -206,14 +240,14 @@ func (f *FlexibleProviderFactory) CreateHealthCheckProvider(providerType Provide
 }
 
 // isProviderTypeSupported checks if the provider type is supported by this example factory
-func (f *FlexibleProviderFactory) isProviderTypeSupported(providerType ProviderType) bool {
-	supportedTypes := []ProviderType{
-		ProviderTypeOpenAI,
-		ProviderTypeAnthropic,
-		ProviderTypeGemini,
-		ProviderTypeQwen,
-		ProviderTypeCerebras,
-		ProviderTypeOpenRouter,
+func (f *FlexibleProviderFactory) isProviderTypeSupported(providerType types.ProviderType) bool {
+	supportedTypes := []types.ProviderType{
+		types.ProviderTypeOpenAI,
+		types.ProviderTypeAnthropic,
+		types.ProviderTypeGemini,
+		types.ProviderTypeQwen,
+		types.ProviderTypeCerebras,
+		types.ProviderTypeOpenRouter,
 	}
 
 	for _, supported := range supportedTypes {
@@ -231,7 +265,7 @@ func (f *FlexibleProviderFactory) isProviderTypeSupported(providerType ProviderT
 // Do NOT use this in production code.
 type FlexibleMockProvider struct {
 	name         string
-	providerType ProviderType
+	providerType types.ProviderType
 	description  string
 }
 
@@ -243,7 +277,7 @@ func (p *FlexibleMockProvider) Name() string {
 	return p.name
 }
 
-func (p *FlexibleMockProvider) Type() ProviderType {
+func (p *FlexibleMockProvider) Type() types.ProviderType {
 	return p.providerType
 }
 
@@ -255,9 +289,9 @@ func (p *FlexibleMockProvider) Description() string {
 }
 
 // GetModels returns mock models for the provider
-func (p *FlexibleMockProvider) GetModels(ctx context.Context) ([]Model, error) {
+func (p *FlexibleMockProvider) GetModels(ctx context.Context) ([]types.Model, error) {
 	providerStr := string(p.providerType)
-	return []Model{
+	return []types.Model{
 		{
 			ID:                   providerStr + "-mock-model-1",
 			Name:                 providerStr + " Mock Model 1",
@@ -268,7 +302,7 @@ func (p *FlexibleMockProvider) GetModels(ctx context.Context) ([]Model, error) {
 			SupportsToolCalling:  true,
 			SupportsResponsesAPI: false,
 			Capabilities:         []string{"chat", "completion"},
-			Pricing: Pricing{
+			Pricing: types.Pricing{
 				InputTokenPrice:  0.001,
 				OutputTokenPrice: 0.002,
 				Unit:             "token",
@@ -284,7 +318,7 @@ func (p *FlexibleMockProvider) GetModels(ctx context.Context) ([]Model, error) {
 			SupportsToolCalling:  true,
 			SupportsResponsesAPI: false,
 			Capabilities:         []string{"chat", "completion", "analysis"},
-			Pricing: Pricing{
+			Pricing: types.Pricing{
 				InputTokenPrice:  0.002,
 				OutputTokenPrice: 0.004,
 				Unit:             "token",
@@ -298,7 +332,7 @@ func (p *FlexibleMockProvider) GetDefaultModel() string {
 }
 
 // Authenticate authenticates the mock provider (always succeeds)
-func (p *FlexibleMockProvider) Authenticate(ctx context.Context, authConfig AuthConfig) error {
+func (p *FlexibleMockProvider) Authenticate(ctx context.Context, authConfig types.AuthConfig) error {
 	// Mock implementation - always succeeds
 	return nil
 }
@@ -314,15 +348,15 @@ func (p *FlexibleMockProvider) Logout(ctx context.Context) error {
 }
 
 // Configure configures the mock provider with the given config
-func (p *FlexibleMockProvider) Configure(config ProviderConfig) error {
+func (p *FlexibleMockProvider) Configure(config types.ProviderConfig) error {
 	// Mock implementation - store the config
 	p.name = config.Name
 	p.description = config.Description
 	return nil
 }
 
-func (p *FlexibleMockProvider) GetConfig() ProviderConfig {
-	return ProviderConfig{
+func (p *FlexibleMockProvider) GetConfig() types.ProviderConfig {
+	return types.ProviderConfig{
 		Type:        p.providerType,
 		Name:        p.name,
 		Description: p.description,
@@ -330,7 +364,7 @@ func (p *FlexibleMockProvider) GetConfig() ProviderConfig {
 }
 
 // GenerateChatCompletion generates a mock chat completion stream
-func (p *FlexibleMockProvider) GenerateChatCompletion(ctx context.Context, options GenerateOptions) (ChatCompletionStream, error) {
+func (p *FlexibleMockProvider) GenerateChatCompletion(ctx context.Context, options types.GenerateOptions) (types.ChatCompletionStream, error) {
 	// Return a mock stream
 	return &FlexibleMockStream{
 		providerType: p.providerType,
@@ -343,8 +377,8 @@ func (p *FlexibleMockProvider) SupportsToolCalling() bool {
 	return true
 }
 
-func (p *FlexibleMockProvider) GetToolFormat() ToolFormat {
-	return ToolFormatOpenAI
+func (p *FlexibleMockProvider) GetToolFormat() types.ToolFormat {
+	return types.ToolFormatOpenAI
 }
 
 func (p *FlexibleMockProvider) InvokeServerTool(ctx context.Context, toolName string, params interface{}) (interface{}, error) {
@@ -372,8 +406,8 @@ func (p *FlexibleMockProvider) HealthCheck(ctx context.Context) error {
 	return nil
 }
 
-func (p *FlexibleMockProvider) GetMetrics() ProviderMetrics {
-	return ProviderMetrics{
+func (p *FlexibleMockProvider) GetMetrics() types.ProviderMetrics {
+	return types.ProviderMetrics{
 		RequestCount:    0,
 		SuccessCount:    0,
 		ErrorCount:      0,
@@ -384,7 +418,7 @@ func (p *FlexibleMockProvider) GetMetrics() ProviderMetrics {
 		LastErrorTime:   time.Time{},
 		LastError:       "",
 		TokensUsed:      0,
-		HealthStatus: HealthStatus{
+		HealthStatus: types.HealthStatus{
 			Healthy:      true,
 			LastChecked:  time.Now(),
 			Message:      "Mock provider is healthy",
@@ -396,32 +430,32 @@ func (p *FlexibleMockProvider) GetMetrics() ProviderMetrics {
 
 // FlexibleMockStream implements ChatCompletionStream for mock responses
 type FlexibleMockStream struct {
-	providerType ProviderType
+	providerType types.ProviderType
 	completed    bool
 }
 
-func (m *FlexibleMockStream) Next() (ChatCompletionChunk, error) {
+func (m *FlexibleMockStream) Next() (types.ChatCompletionChunk, error) {
 	if m.completed {
-		return ChatCompletionChunk{}, nil // End of stream
+		return types.ChatCompletionChunk{}, nil // End of stream
 	}
 
 	m.completed = true
-	return ChatCompletionChunk{
+	return types.ChatCompletionChunk{
 		ID:      "mock-chunk-" + string(m.providerType),
 		Object:  "chat.completion.chunk",
 		Created: 0, // Mock timestamp
 		Model:   string(m.providerType) + "-mock-model",
-		Choices: []ChatChoice{
+		Choices: []types.ChatChoice{
 			{
 				Index: 0,
-				Delta: ChatMessage{
+				Delta: types.ChatMessage{
 					Role:    "assistant",
 					Content: fmt.Sprintf("This is a mock response from the %s provider.", m.providerType),
 				},
 				FinishReason: "stop",
 			},
 		},
-		Usage: Usage{
+		Usage: types.Usage{
 			PromptTokens:     10,
 			CompletionTokens: 15,
 			TotalTokens:      25,

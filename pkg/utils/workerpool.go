@@ -79,13 +79,13 @@ func ProcessSlice[T, R any](items []T, mapper func(T) R) []R {
 	var wg sync.WaitGroup
 
 	// Use a worker count based on CPU cores, but cap at the number of items
-	workerCount := min(runtime.NumCPU(), len(items))
+	workerCount := Min(runtime.NumCPU(), len(items))
 
 	// Process items in batches
 	batchSize := (len(items) + workerCount - 1) / workerCount
 
 	for i := 0; i < len(items); i += batchSize {
-		end := min(i+batchSize, len(items))
+		end := Min(i+batchSize, len(items))
 		wg.Add(1)
 		go func(start, end int) {
 			defer wg.Done()
@@ -133,12 +133,4 @@ func processSequential[T, R any](items []T, mapper func(T) R) []R {
 		results[i] = mapper(item)
 	}
 	return results
-}
-
-// min returns the minimum of two integers.
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }

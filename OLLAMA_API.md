@@ -332,7 +332,7 @@ func (p *OllamaProvider) requiresAuth() bool {
 ### Directory Layout
 ```
 pkg/providers/ollama/
-├── ollama.go              # Main provider implementation
+├── provider.go            # Main provider implementation (standardized naming)
 ├── ollama_test.go         # Unit tests
 ├── models.go              # Model listing and enrichment
 ├── models_test.go         # Model tests
@@ -345,7 +345,7 @@ pkg/providers/ollama/
 
 ### File Responsibilities
 
-#### ollama.go
+#### provider.go
 - Provider struct definition
 - Constructor: `NewOllamaProvider(config)`
 - Core interface implementations:
@@ -407,7 +407,7 @@ import (
 
 ### Phase 1: Basic Provider Setup
 1. ✅ Create `pkg/providers/ollama/` directory
-2. ✅ Implement `ollama.go` with basic provider structure
+2. ✅ Implement `provider.go` with basic provider structure
 3. ✅ Add constructor `NewOllamaProvider(config)`
 4. ✅ Implement core interface methods (Name, Type, Description)
 5. ✅ Setup authentication helper with cloud/local detection
@@ -783,7 +783,7 @@ func TestOllamaIntegration(t *testing.T) {
 - Base provider: `pkg/providers/base/provider.go`
 - Auth helper: `pkg/providers/common/auth/auth_helper.go`
 - Model cache: `pkg/providers/common/models/model_cache.go`
-- Example provider: `pkg/providers/cerebras/cerebras.go` (similar structure)
+- Example provider: `pkg/providers/cerebras/provider.go` (similar structure)
 - Factory: `pkg/factory/factory.go`
 
 ---

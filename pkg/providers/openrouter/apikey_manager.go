@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
+	"github.com/cecil-the-coder/ai-provider-kit/pkg/utils"
 )
 
 // APIKeyManager manages multiple API keys with load balancing and failover
@@ -157,7 +158,7 @@ func (m *APIKeyManager) ReportFailure(key string, err error) {
 	health.failureCount++
 
 	// Exponential backoff: 1s, 2s, 4s, 8s, max 60s
-	backoffSeconds := 1 << uint(min(health.failureCount-1, 6)) // #nosec G115 -- failureCount-1 is capped at 6, safe conversion
+	backoffSeconds := 1 << uint(utils.Min(health.failureCount-1, 6)) // #nosec G115 -- failureCount-1 is capped at 6, safe conversion
 	if backoffSeconds > 60 {
 		backoffSeconds = 60
 	}
@@ -177,7 +178,7 @@ func (m *APIKeyManager) ExecuteWithFailover(operation func(apiKey string) (strin
 	}
 
 	var lastErr error
-	attemptsLimit := min(len(m.keys), 3) // Try up to 3 keys or all keys, whichever is less
+	attemptsLimit := utils.Min(len(m.keys), 3) // Try up to 3 keys or all keys, whichever is less
 
 	for attempt := 0; attempt < attemptsLimit; attempt++ {
 		// Get next available key
@@ -261,12 +262,4 @@ func maskAPIKey(key string) string {
 		return "***"
 	}
 	return key[:8] + "..." + key[len(key)-4:]
-}
-
-// min returns the minimum of two integers
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }

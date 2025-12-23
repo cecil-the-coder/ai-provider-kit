@@ -314,7 +314,7 @@ go build
 
 - [FEATURE_ROADMAP.md](../../FEATURE_ROADMAP.md) - Full feature roadmap with streaming checkboxes marked as complete
 - [Provider Implementations](../../pkg/providers/) - Source code for each provider's streaming implementation
-- [OpenAI Reference](../../pkg/providers/openai/openai.go) - Original SSE implementation pattern
+- [OpenAI Reference](../../pkg/providers/openai/provider.go) - Original SSE implementation pattern
 
 ## Credits
 

@@ -221,7 +221,7 @@ If you're upgrading from a version without structured outputs support:
 
 See the test files for working examples:
 - `/workspace/pkg/providers/openai/structured_output_test.go`
-- `/workspace/pkg/providers/ollama/ollama.go` (reference implementation)
+- `/workspace/pkg/providers/ollama/provider.go` (reference implementation)
 
 ## Support
 

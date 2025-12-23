@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
+	"github.com/cecil-the-coder/ai-provider-kit/pkg/utils"
 )
 
 func TestNewAPIKeyManager(t *testing.T) {
@@ -645,21 +646,21 @@ func TestMaskAPIKey(t *testing.T) {
 
 func TestMinFunction(t *testing.T) {
 	t.Run("AIsSmaller", func(t *testing.T) {
-		result := min(5, 10)
+		result := utils.Min(5, 10)
 		if result != 5 {
 			t.Errorf("Expected 5, got %d", result)
 		}
 	})
 
 	t.Run("BIsSmaller", func(t *testing.T) {
-		result := min(10, 5)
+		result := utils.Min(10, 5)
 		if result != 5 {
 			t.Errorf("Expected 5, got %d", result)
 		}
 	})
 
 	t.Run("Equal", func(t *testing.T) {
-		result := min(5, 5)
+		result := utils.Min(5, 5)
 		if result != 5 {
 			t.Errorf("Expected 5, got %d", result)
 		}

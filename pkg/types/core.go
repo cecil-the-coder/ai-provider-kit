@@ -91,9 +91,55 @@ type StandardStreamChoice struct {
 	FinishReason string      `json:"finish_reason,omitempty"`
 }
 
-// CoreProviderExtension defines the interface for provider-specific extensions
-// This allows providers to add their own unique capabilities while maintaining
-// compatibility with the standardized core API
+// CoreProviderExtension defines the interface for provider-specific extensions.
+//
+// This interface allows providers to implement conversion between the standardized
+// request/response formats and their provider-specific formats. These methods are
+// used internally by the CoreProviderAdapter to bridge between the legacy Provider
+// interface and the new standardized CoreChatProvider interface.
+//
+// USAGE:
+//
+// These conversion methods are NOT intended to be called directly by users. They are
+// used internally by:
+// - CoreProviderAdapter: Converts between standard and provider formats
+// - Extension tests: Directly test the conversion logic
+//
+// IMPLEMENTATION GUIDE:
+//
+// 1. StandardToProvider: Converts a StandardRequest to the provider's native request format
+//   - Input: StandardRequest with universal fields
+//   - Output: Provider-specific request struct (e.g., OpenAIRequest, AnthropicRequest)
+//   - Handle: Messages, tools, temperature, max_tokens, provider-specific metadata
+//
+// 2. ProviderToStandard: Converts provider response to StandardResponse
+//   - Input: Provider-specific response struct
+//   - Output: StandardResponse with universal fields
+//   - Handle: Content, choices, usage, tool_calls, provider-specific metadata
+//
+// 3. ProviderToStandardChunk: Converts streaming chunk to StandardStreamChunk
+//   - Input: Provider-specific streaming chunk
+//   - Output: StandardStreamChunk for unified streaming
+//   - Handle: Delta content, finish_reason, usage tracking
+//
+// 4. ValidateOptions: Validates provider-specific options from request.Metadata
+//   - Input: Options map from request.Metadata
+//   - Output: Error if validation fails
+//   - Use: Validate provider-specific parameters (top_p, top_k, etc.)
+//
+// EXAMPLE:
+//
+//	type MyProviderExtension struct {
+//	    *types.BaseExtension
+//	}
+//
+//	func (e *MyProviderExtension) StandardToProvider(request types.StandardRequest) (interface{}, error) {
+//	    return MyProviderRequest{
+//	        Model:       request.Model,
+//	        Messages:    convertMessages(request.Messages),
+//	        Temperature: request.Temperature,
+//	    }, nil
+//	}
 type CoreProviderExtension interface {
 	// Extension information
 	Name() string
@@ -101,11 +147,12 @@ type CoreProviderExtension interface {
 	Description() string
 
 	// Convert between standard and provider-specific formats
+	// These methods are used internally by CoreProviderAdapter
 	StandardToProvider(request StandardRequest) (interface{}, error)
 	ProviderToStandard(response interface{}) (*StandardResponse, error)
 	ProviderToStandardChunk(chunk interface{}) (*StandardStreamChunk, error)
 
-	// Validate provider-specific options
+	// Validate provider-specific options from request.Metadata
 	ValidateOptions(options map[string]interface{}) error
 
 	// Get provider-specific capabilities

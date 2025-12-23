@@ -2,7 +2,7 @@
 
 ## Summary
 
-Successfully implemented Structured Outputs support for the Ollama provider in `/workspace/pkg/providers/ollama/ollama.go`.
+Successfully implemented Structured Outputs support for the Ollama provider in `/workspace/pkg/providers/ollama/provider.go`.
 
 ## Changes Made
 
@@ -166,11 +166,11 @@ Based on Ollama's official documentation:
 
 ## Files Modified
 
-1. `/workspace/pkg/providers/ollama/ollama.go`
+1. `/workspace/pkg/providers/ollama/provider.go`
    - Added `Format` field to `ollamaChatRequest` struct
    - Updated `buildOllamaChatRequest` to handle `ResponseFormat`
 
-2. `/workspace/pkg/providers/ollama/ollama_test.go`
+2. `/workspace/pkg/providers/ollama/ollama_test.go` (NOTE: this file still exists as-is)
    - Added 4 comprehensive test cases for structured outputs
 
 3. `/workspace/examples/ollama/structured_outputs_example.go` (NEW)

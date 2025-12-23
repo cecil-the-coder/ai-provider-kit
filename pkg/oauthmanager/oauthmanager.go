@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
+	"github.com/cecil-the-coder/ai-provider-kit/pkg/utils"
 )
 
 // OAuthKeyManager manages multiple OAuth credentials with load balancing and failover
@@ -156,7 +157,7 @@ func executeWithFailover[T any](
 	}
 
 	var lastErr error
-	attemptsLimit := min(len(credentials), 3) // Try up to 3 credentials or all, whichever is less
+	attemptsLimit := utils.Min(len(credentials), 3) // Try up to 3 credentials or all, whichever is less
 
 	for attempt := 0; attempt < attemptsLimit; attempt++ {
 		// Get next available credential
@@ -240,7 +241,7 @@ func executeWithFailoverNoUsage[T any](
 	}
 
 	var lastErr error
-	attemptsLimit := min(len(credentials), 3) // Try up to 3 credentials or all, whichever is less
+	attemptsLimit := utils.Min(len(credentials), 3) // Try up to 3 credentials or all, whichever is less
 
 	for attempt := 0; attempt < attemptsLimit; attempt++ {
 		// Get next available credential

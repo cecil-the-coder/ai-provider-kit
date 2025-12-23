@@ -12,7 +12,7 @@ import (
 // TestCoreProviderAdapter tests the CoreProviderAdapter
 func TestCoreProviderAdapter(t *testing.T) {
 	t.Run("NewCoreProviderAdapter", func(t *testing.T) {
-		provider := createMockProvider()
+		provider := newMockStreamProvider("test-provider", ProviderTypeOpenAI)
 		extension := &mockExtension{
 			BaseExtension: NewBaseExtension("test", "1.0.0", "Test", []string{"chat"}),
 		}
@@ -24,7 +24,7 @@ func TestCoreProviderAdapter(t *testing.T) {
 	})
 
 	t.Run("GetCoreExtension", func(t *testing.T) {
-		provider := createMockProvider()
+		provider := newMockStreamProvider("test-provider", ProviderTypeOpenAI)
 		extension := &mockExtension{
 			BaseExtension: NewBaseExtension("test", "1.0.0", "Test", []string{"chat"}),
 		}
@@ -35,7 +35,7 @@ func TestCoreProviderAdapter(t *testing.T) {
 	})
 
 	t.Run("GetStandardCapabilities", func(t *testing.T) {
-		provider := createMockProvider()
+		provider := newMockStreamProvider("test-provider", ProviderTypeOpenAI)
 		extension := &mockExtension{
 			BaseExtension: NewBaseExtension("test", "1.0.0", "Test", []string{"chat", "streaming"}),
 		}
@@ -46,7 +46,7 @@ func TestCoreProviderAdapter(t *testing.T) {
 	})
 
 	t.Run("ValidateStandardRequest", func(t *testing.T) {
-		provider := createMockProvider()
+		provider := newMockStreamProvider("test-provider", ProviderTypeOpenAI)
 		extension := &mockExtension{
 			BaseExtension: NewBaseExtension("test", "1.0.0", "Test", []string{"chat"}),
 		}
@@ -115,7 +115,7 @@ func TestCoreProviderAdapter(t *testing.T) {
 	})
 
 	t.Run("convertToLegacyOptions", func(t *testing.T) {
-		provider := createMockProvider()
+		provider := newMockStreamProvider("test-provider", ProviderTypeOpenAI)
 		extension := &mockExtension{
 			BaseExtension: NewBaseExtension("test", "1.0.0", "Test", []string{"chat"}),
 		}

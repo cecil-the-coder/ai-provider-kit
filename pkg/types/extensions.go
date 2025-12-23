@@ -114,7 +114,29 @@ func (e *BaseExtension) ValidateOptions(options map[string]interface{}) error {
 	return nil
 }
 
-// CoreAPI represents the standardized core API that all providers should implement
+// CoreAPI manages provider extensions for the standardized core API.
+//
+// The CoreAPI provides a centralized registry for provider extensions that handle
+// conversion between standard and provider-specific request/response formats.
+//
+// The CoreProviderExtension interface defines the methods that each provider extension
+// must implement. These conversion methods are used internally by the CoreProviderAdapter
+// to bridge between the legacy Provider interface and the new standardized CoreChatProvider
+// interface.
+//
+// Example usage pattern:
+//
+//  1. Register extensions during package initialization:
+//     func init() {
+//     types.RegisterDefaultExtension(types.ProviderTypeOpenAI, openai.NewOpenAIExtension())
+//     }
+//
+//  2. Use CoreProviderAdapter to adapt existing providers:
+//     adapter := types.NewCoreProviderAdapter(provider, extension)
+//     coreProvider := adapter // implements CoreChatProvider
+//
+// The CoreAPI itself does not provide conversion helper methods - conversions are
+// performed directly through the extension interface by the adapter.
 type CoreAPI struct {
 	registry ExtensionRegistry
 }
@@ -144,70 +166,6 @@ func (api *CoreAPI) HasExtension(providerType ProviderType) bool {
 // ListExtensions lists all registered extensions
 func (api *CoreAPI) ListExtensions() map[ProviderType]CoreProviderExtension {
 	return api.registry.List()
-}
-
-// ConvertToProvider converts a standard request to provider-specific format
-func (api *CoreAPI) ConvertToProvider(providerType ProviderType, request StandardRequest) (interface{}, error) {
-	extension, err := api.registry.Get(providerType)
-	if err != nil {
-		// Return the standard request as-is if no extension is registered
-		// This allows for basic functionality without extensions
-		return request, nil
-	}
-
-	return extension.StandardToProvider(request)
-}
-
-// ConvertFromProvider converts a provider-specific response to standard format
-func (api *CoreAPI) ConvertFromProvider(providerType ProviderType, response interface{}) (*StandardResponse, error) {
-	extension, err := api.registry.Get(providerType)
-	if err != nil {
-		// Try to convert directly if no extension is registered
-		if standardResp, ok := response.(*StandardResponse); ok {
-			return standardResp, nil
-		}
-		return nil, NewInvalidRequestError(providerType, fmt.Sprintf("no extension registered for provider type %s and response is not in standard format", providerType)).
-			WithOperation("convert_from_provider")
-	}
-
-	return extension.ProviderToStandard(response)
-}
-
-// ConvertChunkFromProvider converts a provider-specific chunk to standard format
-func (api *CoreAPI) ConvertChunkFromProvider(providerType ProviderType, chunk interface{}) (*StandardStreamChunk, error) {
-	extension, err := api.registry.Get(providerType)
-	if err != nil {
-		// Try to convert directly if no extension is registered
-		if standardChunk, ok := chunk.(*StandardStreamChunk); ok {
-			return standardChunk, nil
-		}
-		return nil, NewInvalidRequestError(providerType, fmt.Sprintf("no extension registered for provider type %s and chunk is not in standard format", providerType)).
-			WithOperation("convert_chunk_from_provider")
-	}
-
-	return extension.ProviderToStandardChunk(chunk)
-}
-
-// ValidateProviderOptions validates provider-specific options
-func (api *CoreAPI) ValidateProviderOptions(providerType ProviderType, options map[string]interface{}) error {
-	extension, err := api.registry.Get(providerType)
-	if err != nil {
-		// No validation needed if no extension is registered
-		return nil
-	}
-
-	return extension.ValidateOptions(options)
-}
-
-// GetProviderCapabilities gets the capabilities of a provider
-func (api *CoreAPI) GetProviderCapabilities(providerType ProviderType) []string {
-	extension, err := api.registry.Get(providerType)
-	if err != nil {
-		// Return basic capabilities if no extension is registered
-		return []string{"chat", "streaming"}
-	}
-
-	return extension.GetCapabilities()
 }
 
 // Global core API instance

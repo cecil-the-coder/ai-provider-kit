@@ -580,12 +580,19 @@ func (p *OllamaProvider) GetMetrics() types.ProviderMetrics {
 
 // TestConnectivity performs a lightweight connectivity test
 // Results are cached for 30 seconds by default to prevent hammering the API during rapid health checks
+// To bypass the cache and force a fresh check, use TestConnectivityWithOptions with bypassCache=true
 func (p *OllamaProvider) TestConnectivity(ctx context.Context) error {
+	return p.TestConnectivityWithOptions(ctx, false)
+}
+
+// TestConnectivityWithOptions performs a connectivity test with optional cache bypass
+// If bypassCache is true, the cache is bypassed and a fresh connectivity check is performed
+func (p *OllamaProvider) TestConnectivityWithOptions(ctx context.Context, bypassCache bool) error {
 	return p.connectivityCache.TestConnectivity(
 		ctx,
 		types.ProviderTypeOllama,
 		p.performConnectivityTest,
-		false,
+		bypassCache,
 	)
 }
 

@@ -158,11 +158,3 @@ func isRateLimitError(err error) bool {
 		strings.Contains(errMsg, "429") ||
 		strings.Contains(errMsg, "too many requests")
 }
-
-// min returns the minimum of two integers
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}

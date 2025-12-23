@@ -204,31 +204,40 @@ func TestCoreAPI(t *testing.T) {
 		t.Fatalf("Failed to register extension: %v", err)
 	}
 
-	// Test conversion
-	request := StandardRequest{
-		Messages: []ChatMessage{{Role: "user", Content: "Hello"}},
-		Model:    "gpt-4",
-	}
-
-	// Convert to provider format
-	providerReq, err := api.ConvertToProvider(ProviderTypeOpenAI, request)
+	// Test extension retrieval
+	retrieved, err := api.GetExtension(ProviderTypeOpenAI)
 	if err != nil {
-		t.Fatalf("Failed to convert to provider format: %v", err)
+		t.Fatalf("Failed to get extension: %v", err)
 	}
 
-	// Should return the request as-is for mock extension
-	if providerReq == nil {
-		t.Error("Expected provider request to be non-nil")
+	if retrieved.Name() != "test" {
+		t.Errorf("Expected extension name 'test', got '%s'", retrieved.Name())
 	}
 
-	// Test capabilities
-	capabilities := api.GetProviderCapabilities(ProviderTypeOpenAI)
+	// Test HasExtension
+	if !api.HasExtension(ProviderTypeOpenAI) {
+		t.Error("Expected HasExtension to return true for registered extension")
+	}
+
+	// Test non-existent extension
+	if api.HasExtension(ProviderTypeAnthropic) {
+		t.Error("Expected HasExtension to return false for non-existent extension")
+	}
+
+	// Test ListExtensions
+	extensions := api.ListExtensions()
+	if len(extensions) != 1 {
+		t.Errorf("Expected 1 extension in list, got %d", len(extensions))
+	}
+
+	// Test extension capabilities directly
+	capabilities := extension.GetCapabilities()
 	if len(capabilities) != 1 || capabilities[0] != "chat" {
 		t.Errorf("Expected capabilities ['chat'], got %v", capabilities)
 	}
 
-	// Test validation
-	err = api.ValidateProviderOptions(ProviderTypeOpenAI, map[string]interface{}{})
+	// Test extension validation directly
+	err = extension.ValidateOptions(map[string]interface{}{})
 	if err != nil {
 		t.Errorf("Unexpected validation error: %v", err)
 	}

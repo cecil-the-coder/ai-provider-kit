@@ -15,6 +15,7 @@ import (
 
 	pkghttp "github.com/cecil-the-coder/ai-provider-kit/internal/http"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
+	"github.com/cecil-the-coder/ai-provider-kit/pkg/utils"
 )
 
 // APIKeyManagerImpl implements APIKeyManager with load balancing and failover
@@ -437,7 +438,7 @@ func (m *APIKeyManagerImpl) ExecuteWithFailover(ctx context.Context, operation f
 	var lastErr error
 	maxAttempts := m.config.Failover.MaxAttempts
 	if maxAttempts <= 0 {
-		maxAttempts = min(len(m.keys), 3)
+		maxAttempts = utils.Min(len(m.keys), 3)
 	}
 
 	for attempt := 0; attempt < maxAttempts; attempt++ {
@@ -483,7 +484,7 @@ func (m *APIKeyManagerImpl) ExecuteWithFailoverMessage(ctx context.Context, oper
 	var lastErr error
 	maxAttempts := m.config.Failover.MaxAttempts
 	if maxAttempts <= 0 {
-		maxAttempts = min(len(m.keys), 3)
+		maxAttempts = utils.Min(len(m.keys), 3)
 	}
 
 	for attempt := 0; attempt < maxAttempts; attempt++ {
@@ -757,11 +758,4 @@ func maskAPIKey(key string) string {
 		return "***"
 	}
 	return key[:8] + "..." + key[len(key)-4:]
-}
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }

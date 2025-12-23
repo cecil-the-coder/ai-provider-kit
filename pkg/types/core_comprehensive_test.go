@@ -430,57 +430,15 @@ func TestCoreAPIFunctions(t *testing.T) {
 		assert.Contains(t, extensions, ProviderTypeOpenAI)
 	})
 
-	t.Run("ConvertToProviderNoExtension", func(t *testing.T) {
-		request := StandardRequest{
-			Messages: []ChatMessage{{Role: "user", Content: "Test"}},
-			Model:    "test-model",
-		}
-
-		result, err := api.ConvertToProvider(ProviderTypeGemini, request)
-		require.NoError(t, err)
-		assert.NotNil(t, result)
+	// Tests for extension methods (called directly, not through CoreAPI)
+	t.Run("ExtensionGetCapabilities", func(t *testing.T) {
+		caps := ext.GetCapabilities()
+		assert.Equal(t, []string{"chat"}, caps)
 	})
 
-	t.Run("ConvertFromProviderNoExtension", func(t *testing.T) {
-		response := &StandardResponse{
-			ID:    "test-id",
-			Model: "test-model",
-		}
-
-		result, err := api.ConvertFromProvider(ProviderTypeGemini, response)
-		require.NoError(t, err)
-		assert.Equal(t, response, result)
-	})
-
-	t.Run("ConvertFromProviderError", func(t *testing.T) {
-		_, err := api.ConvertFromProvider(ProviderTypeGemini, "invalid")
-		require.Error(t, err)
-	})
-
-	t.Run("ConvertChunkFromProviderNoExtension", func(t *testing.T) {
-		chunk := &StandardStreamChunk{
-			ID:    "chunk-id",
-			Model: "test-model",
-		}
-
-		result, err := api.ConvertChunkFromProvider(ProviderTypeGemini, chunk)
-		require.NoError(t, err)
-		assert.Equal(t, chunk, result)
-	})
-
-	t.Run("ConvertChunkFromProviderError", func(t *testing.T) {
-		_, err := api.ConvertChunkFromProvider(ProviderTypeGemini, "invalid")
-		require.Error(t, err)
-	})
-
-	t.Run("ValidateProviderOptionsNoExtension", func(t *testing.T) {
-		err := api.ValidateProviderOptions(ProviderTypeGemini, map[string]interface{}{})
+	t.Run("ExtensionValidateOptions", func(t *testing.T) {
+		err := ext.ValidateOptions(map[string]interface{}{"test": "value"})
 		assert.NoError(t, err)
-	})
-
-	t.Run("GetProviderCapabilitiesNoExtension", func(t *testing.T) {
-		caps := api.GetProviderCapabilities(ProviderTypeGemini)
-		assert.Equal(t, []string{"chat", "streaming"}, caps)
 	})
 }
 
