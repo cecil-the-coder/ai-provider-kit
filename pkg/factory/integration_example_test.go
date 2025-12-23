@@ -2,6 +2,7 @@ package factory
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 
@@ -259,21 +260,30 @@ func TestIntegrationExample_WaitForCondition(t *testing.T) {
 	require.NoError(t, err)
 
 	// Simulate a condition that becomes true after some work
-	conditionMet := false
+	var conditionMet bool
+	var mu sync.Mutex
 	go func() {
 		time.Sleep(50 * time.Millisecond)
+		mu.Lock()
 		conditionMet = true
+		mu.Unlock()
 	}()
 
 	// Wait for condition using helper
 	testutil.WaitForCondition(
 		t,
-		func() bool { return conditionMet },
+		func() bool {
+			mu.Lock()
+			defer mu.Unlock()
+			return conditionMet
+		},
 		200*time.Millisecond,
 		10*time.Millisecond,
 		"condition to become true",
 	)
 
+	mu.Lock()
+	defer mu.Unlock()
 	assert.True(t, conditionMet)
 }
 

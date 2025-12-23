@@ -137,11 +137,33 @@ func (h *ProviderErrorHelper) WrapAuthError(operation string, err error) *RichEr
 		return nil
 	}
 
-	// Wrap with sentinel error so it's identifiable as an auth error
-	baseErr := fmt.Errorf("%w: %v", ErrNotAuthenticated, err)
-	return NewRichError(baseErr).
+	// Create a wrapper that chains both the sentinel error and the original error
+	// This allows errors.Is to find both ErrNotAuthenticated and the original error
+	wrappedErr := &authErrorWrapper{
+		sentinel: ErrNotAuthenticated,
+		original: err,
+	}
+	return NewRichError(wrappedErr).
 		WithProvider(h.provider).
 		WithOperation(operation)
+}
+
+// authErrorWrapper wraps both the sentinel error and the original error
+type authErrorWrapper struct {
+	sentinel error
+	original error
+}
+
+func (w *authErrorWrapper) Error() string {
+	return fmt.Sprintf("%v: %v", w.sentinel, w.original)
+}
+
+func (w *authErrorWrapper) Unwrap() error {
+	return w.original
+}
+
+func (w *authErrorWrapper) Is(target error) bool {
+	return errors.Is(w.sentinel, target) || errors.Is(w.original, target)
 }
 
 // NewRateLimitError creates a new rate limit error.

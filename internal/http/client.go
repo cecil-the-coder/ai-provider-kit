@@ -387,7 +387,7 @@ func (c *HTTPClient) PreWarmConnections(ctx context.Context, targets []string, c
 
 				resp, err := c.client.Do(req)
 				if err == nil {
-					resp.Body.Close()
+					_ = resp.Body.Close()
 					mu.Lock()
 					successCount++
 					mu.Unlock()
