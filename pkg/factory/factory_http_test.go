@@ -10,6 +10,7 @@ import (
 )
 
 func TestFactoryGetHTTPClient(t *testing.T) {
+	t.Parallel()
 	// Clear the pool before testing
 	pkghttp.Clear()
 
@@ -38,6 +39,7 @@ func TestFactoryGetHTTPClient(t *testing.T) {
 }
 
 func TestFactoryGetHTTPClientWithTimeout(t *testing.T) {
+	t.Parallel()
 	// Clear the pool before testing
 	pkghttp.Clear()
 
@@ -60,6 +62,7 @@ func TestFactoryGetHTTPClientWithTimeout(t *testing.T) {
 }
 
 func TestFactoryGetHTTPClientWithConfig(t *testing.T) {
+	t.Parallel()
 	// Clear the pool before testing
 	pkghttp.Clear()
 
@@ -114,6 +117,7 @@ func TestFactoryShutdownHTTPClients(t *testing.T) {
 }
 
 func TestFactoryGetHTTPClientStats(t *testing.T) {
+	t.Parallel()
 	// Clear the pool before testing
 	pkghttp.Clear()
 
@@ -140,6 +144,7 @@ func TestFactoryGetHTTPClientStats(t *testing.T) {
 }
 
 func TestFactoryIntegrationWithProviders(t *testing.T) {
+	t.Parallel()
 	// Clear the pool before testing
 	pkghttp.Clear()
 
@@ -167,6 +172,7 @@ func TestFactoryIntegrationWithProviders(t *testing.T) {
 }
 
 func TestFactoryHTTPClientURLNormalization(t *testing.T) {
+	t.Parallel()
 	// Clear the pool before testing
 	pkghttp.Clear()
 

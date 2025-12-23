@@ -11,6 +11,7 @@ import (
 )
 
 func TestNewAnthropicProvider(t *testing.T) {
+	t.Parallel()
 	config := types.ProviderConfig{
 		Type:         types.ProviderTypeAnthropic,
 		Name:         "anthropic",
@@ -39,6 +40,7 @@ func TestNewAnthropicProvider(t *testing.T) {
 }
 
 func TestAnthropicProviderWithDisplayName(t *testing.T) {
+	t.Parallel()
 	config := types.ProviderConfig{
 		Type:   types.ProviderTypeAnthropic,
 		Name:   "anthropic",
@@ -56,6 +58,7 @@ func TestAnthropicProviderWithDisplayName(t *testing.T) {
 }
 
 func TestAnthropicProviderMultipleKeys(t *testing.T) {
+	t.Parallel()
 	config := types.ProviderConfig{
 		Type:   types.ProviderTypeAnthropic,
 		Name:   "anthropic",
@@ -77,6 +80,7 @@ func TestAnthropicProviderMultipleKeys(t *testing.T) {
 }
 
 func TestAnthropicProviderGetModels(t *testing.T) {
+	t.Parallel()
 	config := types.ProviderConfig{
 		Type:   types.ProviderTypeAnthropic,
 		APIKey: "test-key",
@@ -114,6 +118,7 @@ func TestAnthropicProviderGetModels(t *testing.T) {
 }
 
 func TestAnthropicProviderGetDefaultModel(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		config   types.ProviderConfig
@@ -149,6 +154,7 @@ func TestAnthropicProviderGetDefaultModel(t *testing.T) {
 }
 
 func TestMultiKeyManager(t *testing.T) {
+	t.Parallel()
 	keys := []string{"key1", "key2", "key3"}
 	manager, err := auth.NewAPIKeyManager("test", keys, nil)
 
@@ -176,6 +182,7 @@ func TestMultiKeyManager(t *testing.T) {
 }
 
 func TestSimplePromptHandling(t *testing.T) {
+	t.Parallel()
 	options := types.GenerateOptions{
 		Prompt:     "Create a function that adds two numbers",
 		Context:    "This is for a math library",

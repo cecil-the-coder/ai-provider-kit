@@ -15,6 +15,7 @@ const defaultTestTimeout = 30 * time.Second
 
 // TestScenario1_CompleteProviderWorkflow tests the entire provider lifecycle
 func TestScenario1_CompleteProviderWorkflow(t *testing.T) {
+	t.Parallel()
 	// Create factory with mock providers instead of real implementations
 	factory := NewProviderFactory()
 	registerMockProvidersForIntegrationTests(factory)
@@ -100,6 +101,7 @@ func TestScenario1_CompleteProviderWorkflow(t *testing.T) {
 
 // TestScenario1_WithHelpers demonstrates using the integration helpers
 func TestScenario1_WithHelpers(t *testing.T) {
+	t.Parallel()
 	factory := NewProviderFactory()
 	registerMockProvidersForIntegrationTests(factory)
 
@@ -128,6 +130,7 @@ func TestScenario1_WithHelpers(t *testing.T) {
 
 // TestScenario1_HappyPath tests the happy path scenario using integration helpers
 func TestScenario1_HappyPath(t *testing.T) {
+	t.Parallel()
 	factory := NewProviderFactory()
 	registerMockProvidersForIntegrationTests(factory)
 
@@ -142,6 +145,7 @@ func TestScenario1_HappyPath(t *testing.T) {
 
 // TestScenario1_ErrorScenarios tests error scenarios using integration helpers
 func TestScenario1_ErrorScenarios(t *testing.T) {
+	t.Parallel()
 	factory := NewProviderFactory()
 	registerMockProvidersForIntegrationTests(factory)
 
@@ -155,6 +159,7 @@ func TestScenario1_ErrorScenarios(t *testing.T) {
 
 // TestScenario1_StreamingScenario tests streaming using integration helpers
 func TestScenario1_StreamingScenario(t *testing.T) {
+	t.Parallel()
 	factory := NewProviderFactory()
 	registerMockProvidersForIntegrationTests(factory)
 
@@ -168,6 +173,7 @@ func TestScenario1_StreamingScenario(t *testing.T) {
 
 // TestScenario1_ConcurrentScenario tests concurrent access using integration helpers
 func TestScenario1_ConcurrentScenario(t *testing.T) {
+	t.Parallel()
 	factory := NewProviderFactory()
 	registerMockProvidersForIntegrationTests(factory)
 

@@ -11,6 +11,7 @@ import (
 
 // TestScenario2_ConfigurationManagement tests configuration handling across types
 func TestScenario2_ConfigurationManagement(t *testing.T) {
+	t.Parallel()
 	factory := NewProviderFactory()
 	registerMockProvidersForIntegrationTests(factory)
 

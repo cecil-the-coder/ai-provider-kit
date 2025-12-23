@@ -16,6 +16,7 @@ import (
 
 // TestScenario5_PerformanceAndReliability tests performance and reliability
 func TestScenario5_PerformanceAndReliability(t *testing.T) {
+	t.Parallel()
 	factory := NewProviderFactory()
 	registerMockProvidersForIntegrationTests(factory)
 

@@ -12,6 +12,7 @@ import (
 
 // TestValidateProviderConfig_ValidConfig tests validation of valid provider configurations
 func TestValidateProviderConfig_ValidConfig(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		name   string
 		config types.ProviderConfig
@@ -92,6 +93,7 @@ func TestValidateProviderConfig_ValidConfig(t *testing.T) {
 
 // TestValidateProviderConfig_InvalidConfig tests validation of invalid provider configurations
 func TestValidateProviderConfig_InvalidConfig(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		name        string
 		config      types.ProviderConfig
@@ -152,6 +154,7 @@ func TestValidateProviderConfig_InvalidConfig(t *testing.T) {
 
 // TestCreateProviderFromConfig_ValidConfig tests provider creation from valid configuration maps
 func TestCreateProviderFromConfig_ValidConfig(t *testing.T) {
+	t.Parallel()
 	factory := NewProviderFactory()
 
 	// Register a test provider
@@ -247,6 +250,7 @@ func TestCreateProviderFromConfig_ValidConfig(t *testing.T) {
 
 // TestCreateProviderFromConfig_InvalidConfig tests provider creation from invalid configuration maps
 func TestCreateProviderFromConfig_InvalidConfig(t *testing.T) {
+	t.Parallel()
 	factory := NewProviderFactory()
 
 	testCases := []struct {
@@ -316,6 +320,7 @@ func TestCreateProviderFromConfig_InvalidConfig(t *testing.T) {
 
 // TestCreateProviderFromConfig_EdgeCases tests edge cases in configuration parsing
 func TestCreateProviderFromConfig_EdgeCases(t *testing.T) {
+	t.Parallel()
 	factory := NewProviderFactory()
 
 	// Register a test provider
@@ -398,6 +403,7 @@ func TestCreateProviderFromConfig_EdgeCases(t *testing.T) {
 
 // TestHelperFunctions tests the helper functions for config parsing
 func TestHelperFunctions(t *testing.T) {
+	t.Parallel()
 	t.Run("getString", func(t *testing.T) {
 		testCases := []struct {
 			name      string
@@ -572,6 +578,7 @@ func TestHelperFunctions(t *testing.T) {
 
 // TestCreateProviderFromConfig_RealWorldExamples tests real-world configuration examples
 func TestCreateProviderFromConfig_RealWorldExamples(t *testing.T) {
+	t.Parallel()
 	factory := NewProviderFactory()
 
 	// Register common providers

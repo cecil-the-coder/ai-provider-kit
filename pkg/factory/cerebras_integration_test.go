@@ -10,6 +10,7 @@ import (
 )
 
 func TestCerebrasProvider_FactoryIntegration(t *testing.T) {
+	t.Parallel()
 	// Create a new factory
 	f := NewProviderFactory()
 
@@ -94,6 +95,7 @@ func TestCerebrasProvider_FactoryIntegration(t *testing.T) {
 }
 
 func TestCerebrasProvider_MultipleAPIKeys_FactoryIntegration(t *testing.T) {
+	t.Parallel()
 	// Create a new factory
 	f := NewProviderFactory()
 
@@ -125,6 +127,7 @@ func TestCerebrasProvider_MultipleAPIKeys_FactoryIntegration(t *testing.T) {
 }
 
 func TestCerebrasProvider_HappyPathScenario(t *testing.T) {
+	t.Parallel()
 	// Create a new factory
 	f := NewProviderFactory()
 
@@ -145,6 +148,7 @@ func TestCerebrasProvider_HappyPathScenario(t *testing.T) {
 }
 
 func TestCerebrasProvider_StreamingScenario(t *testing.T) {
+	t.Parallel()
 	// Create a new factory
 	f := NewProviderFactory()
 

@@ -13,6 +13,7 @@ import (
 
 // TestScenario3_MultiProviderOperations tests concurrent multi-provider scenarios
 func TestScenario3_MultiProviderOperations(t *testing.T) {
+	t.Parallel()
 	factory := NewProviderFactory()
 	registerMockProvidersForIntegrationTests(factory)
 

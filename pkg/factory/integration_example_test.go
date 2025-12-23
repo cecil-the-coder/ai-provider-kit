@@ -13,6 +13,7 @@ import (
 
 // TestIntegrationExample demonstrates a complete real-world usage example
 func TestIntegrationExample(t *testing.T) {
+	t.Parallel()
 	// This test serves as documentation and validation of a complete usage pattern
 
 	// Step 1: Create and initialize factory
@@ -119,6 +120,7 @@ func TestIntegrationExample(t *testing.T) {
 
 // TestIntegrationExample_WithOAuth demonstrates OAuth configuration using helpers
 func TestIntegrationExample_WithOAuth(t *testing.T) {
+	t.Parallel()
 	factory := NewProviderFactory()
 	registerMockProvidersForIntegrationTests(factory)
 
@@ -138,6 +140,7 @@ func TestIntegrationExample_WithOAuth(t *testing.T) {
 
 // TestIntegrationExample_WithBuilders demonstrates using builder patterns
 func TestIntegrationExample_WithBuilders(t *testing.T) {
+	t.Parallel()
 	factory := NewProviderFactory()
 	registerMockProvidersForIntegrationTests(factory)
 
@@ -181,6 +184,7 @@ func TestIntegrationExample_WithBuilders(t *testing.T) {
 
 // TestIntegrationExample_ProviderSetup demonstrates using ProviderTestSetup
 func TestIntegrationExample_ProviderSetup(t *testing.T) {
+	t.Parallel()
 	factory := NewProviderFactory()
 	registerMockProvidersForIntegrationTests(factory)
 
@@ -213,6 +217,7 @@ func TestIntegrationExample_ProviderSetup(t *testing.T) {
 
 // TestIntegrationExample_CredentialProviders demonstrates using credential providers
 func TestIntegrationExample_CredentialProviders(t *testing.T) {
+	t.Parallel()
 	// Static credential provider
 	staticProvider := testutil.NewStaticCredentialProvider(
 		"static-api-key",
@@ -246,6 +251,7 @@ func TestIntegrationExample_CredentialProviders(t *testing.T) {
 
 // TestIntegrationExample_WaitForCondition demonstrates using WaitForCondition
 func TestIntegrationExample_WaitForCondition(t *testing.T) {
+	t.Parallel()
 	factory := NewProviderFactory()
 	registerMockProvidersForIntegrationTests(factory)
 
@@ -274,6 +280,7 @@ func TestIntegrationExample_WaitForCondition(t *testing.T) {
 
 // TestIntegrationExample_MetricsComparison demonstrates metrics comparison
 func TestIntegrationExample_MetricsComparison(t *testing.T) {
+	t.Parallel()
 	factory := NewProviderFactory()
 	registerMockProvidersForIntegrationTests(factory)
 

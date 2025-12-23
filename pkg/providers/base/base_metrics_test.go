@@ -13,6 +13,7 @@ import (
 
 // TestBaseProvider_SetMetricsCollector tests that SetMetricsCollector sets the collector correctly
 func TestBaseProvider_SetMetricsCollector(t *testing.T) {
+	t.Parallel()
 	config := types.ProviderConfig{
 		Type: types.ProviderTypeOpenAI,
 	}
@@ -36,6 +37,7 @@ func TestBaseProvider_SetMetricsCollector(t *testing.T) {
 
 // TestBaseProvider_RecordRequest tests that RecordRequest emits events to the collector
 func TestBaseProvider_RecordRequest(t *testing.T) {
+	t.Parallel()
 	config := types.ProviderConfig{
 		Type: types.ProviderTypeOpenAI,
 	}
@@ -88,6 +90,7 @@ func TestBaseProvider_RecordRequest(t *testing.T) {
 
 // TestBaseProvider_RecordSuccessWithModel tests that RecordSuccessWithModel emits events to the collector
 func TestBaseProvider_RecordSuccessWithModel(t *testing.T) {
+	t.Parallel()
 	config := types.ProviderConfig{
 		Type: types.ProviderTypeAnthropic,
 	}
@@ -149,6 +152,7 @@ func TestBaseProvider_RecordSuccessWithModel(t *testing.T) {
 
 // TestBaseProvider_RecordErrorWithModel tests that RecordErrorWithModel emits events to the collector
 func TestBaseProvider_RecordErrorWithModel(t *testing.T) {
+	t.Parallel()
 	config := types.ProviderConfig{
 		Type: types.ProviderTypeGemini,
 	}
@@ -210,6 +214,7 @@ func TestBaseProvider_RecordErrorWithModel(t *testing.T) {
 
 // TestBaseProvider_RecordSuccess_BackwardsCompatibility tests the old RecordSuccess method still works
 func TestBaseProvider_RecordSuccess_BackwardsCompatibility(t *testing.T) {
+	t.Parallel()
 	config := types.ProviderConfig{
 		Type: types.ProviderTypeOpenAI,
 	}
@@ -250,6 +255,7 @@ func TestBaseProvider_RecordSuccess_BackwardsCompatibility(t *testing.T) {
 
 // TestBaseProvider_RecordError_BackwardsCompatibility tests the old RecordError method still works
 func TestBaseProvider_RecordError_BackwardsCompatibility(t *testing.T) {
+	t.Parallel()
 	config := types.ProviderConfig{
 		Type: types.ProviderTypeOpenAI,
 	}
@@ -292,6 +298,7 @@ func TestBaseProvider_RecordError_BackwardsCompatibility(t *testing.T) {
 
 // TestBaseProvider_NoCollectorSet tests that operations work when no collector is set
 func TestBaseProvider_NoCollectorSet(t *testing.T) {
+	t.Parallel()
 	config := types.ProviderConfig{
 		Type: types.ProviderTypeOpenAI,
 	}
@@ -320,6 +327,7 @@ func TestBaseProvider_NoCollectorSet(t *testing.T) {
 
 // TestBaseProvider_ProviderMetrics tests that provider-specific metrics are tracked
 func TestBaseProvider_ProviderMetrics(t *testing.T) {
+	t.Parallel()
 	config := types.ProviderConfig{
 		Type: types.ProviderTypeOpenAI,
 	}
@@ -368,6 +376,7 @@ func TestBaseProvider_ProviderMetrics(t *testing.T) {
 
 // TestBaseProvider_ModelMetrics tests that model-specific metrics are tracked
 func TestBaseProvider_ModelMetrics(t *testing.T) {
+	t.Parallel()
 	config := types.ProviderConfig{
 		Type: types.ProviderTypeOpenAI,
 	}
@@ -412,6 +421,7 @@ func TestBaseProvider_ModelMetrics(t *testing.T) {
 
 // TestBaseProvider_MultipleProviders tests that multiple providers can share the same collector
 func TestBaseProvider_MultipleProviders(t *testing.T) {
+	t.Parallel()
 	collector := metrics.NewDefaultMetricsCollector()
 	defer func() { _ = collector.Close() }()
 
@@ -463,6 +473,7 @@ func TestBaseProvider_MultipleProviders(t *testing.T) {
 
 // TestBaseProvider_ConcurrentMetricsWithCollector tests concurrent metric recording with collector
 func TestBaseProvider_ConcurrentMetricsWithCollector(t *testing.T) {
+	t.Parallel()
 	config := types.ProviderConfig{
 		Type: types.ProviderTypeOpenAI,
 	}

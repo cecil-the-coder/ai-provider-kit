@@ -15,6 +15,7 @@ import (
 
 // TestToolCalling_RequestConversion tests that tools are properly converted in requests
 func TestToolCalling_RequestConversion(t *testing.T) {
+	t.Parallel()
 	config := types.ProviderConfig{
 		Type:   types.ProviderTypeAnthropic,
 		APIKey: "sk-ant-test-key",
@@ -60,6 +61,7 @@ func TestToolCalling_RequestConversion(t *testing.T) {
 
 // TestToolCalling_ResponseParsing tests that tool calls are parsed from responses
 func TestToolCalling_ResponseParsing(t *testing.T) {
+	t.Parallel()
 	// Create a mock HTTP server that returns tool calls
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Return response with tool calls
@@ -132,6 +134,7 @@ func TestToolCalling_ResponseParsing(t *testing.T) {
 
 // TestToolCalling_ToolCallsInMessages tests that tool calls in messages are converted
 func TestToolCalling_ToolCallsInMessages(t *testing.T) {
+	t.Parallel()
 	config := types.ProviderConfig{
 		Type:   types.ProviderTypeAnthropic,
 		APIKey: "sk-ant-test-key",
@@ -181,6 +184,7 @@ func TestToolCalling_ToolCallsInMessages(t *testing.T) {
 
 // TestToolCalling_ToolResponses tests that tool responses are included
 func TestToolCalling_ToolResponses(t *testing.T) {
+	t.Parallel()
 	config := types.ProviderConfig{
 		Type:   types.ProviderTypeAnthropic,
 		APIKey: "sk-ant-test-key",
@@ -219,6 +223,7 @@ func TestToolCalling_ToolResponses(t *testing.T) {
 
 // TestToolCalling_ConversionHelpers tests the tool conversion helper functions
 func TestToolCalling_ConversionHelpers(t *testing.T) {
+	t.Parallel()
 	t.Run("ConvertToAnthropicTools", func(t *testing.T) {
 		tools := []types.Tool{
 			{
@@ -395,6 +400,7 @@ func TestToolCalling_ConversionHelpers(t *testing.T) {
 
 // TestToolCalling_ResponseToChunk tests converting Anthropic response to universal chunk
 func TestToolCalling_ResponseToChunk(t *testing.T) {
+	t.Parallel()
 	response := &AnthropicResponse{
 		ID:    "msg_123",
 		Type:  "message",
@@ -448,6 +454,7 @@ func TestToolCalling_ResponseToChunk(t *testing.T) {
 
 // TestToolCalling_StreamingToolCalls tests streaming tool calls
 func TestToolCalling_StreamingToolCalls(t *testing.T) {
+	t.Parallel()
 	// Create a mock HTTP server that streams tool calls
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")

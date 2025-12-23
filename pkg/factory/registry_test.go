@@ -14,6 +14,7 @@ import (
 
 // TestRegisterDefaultProviders tests the default provider registration functionality
 func TestRegisterDefaultProviders(t *testing.T) {
+	t.Parallel()
 	factory := NewProviderFactory()
 
 	// Verify factory is initially empty
@@ -49,6 +50,7 @@ func TestRegisterDefaultProviders(t *testing.T) {
 
 // TestRegisterDefaultProviders_ProviderCreation tests that default providers can be created
 func TestRegisterDefaultProviders_ProviderCreation(t *testing.T) {
+	t.Parallel()
 	factory := NewProviderFactory()
 	RegisterDefaultProviders(factory)
 
@@ -171,6 +173,7 @@ func TestRegisterDefaultProviders_ProviderCreation(t *testing.T) {
 
 // TestRegisterDefaultProviders_DuplicateRegistration tests handling of duplicate registrations
 func TestRegisterDefaultProviders_DuplicateRegistration(t *testing.T) {
+	t.Parallel()
 	factory := NewProviderFactory()
 
 	// Register default providers twice
@@ -185,6 +188,7 @@ func TestRegisterDefaultProviders_DuplicateRegistration(t *testing.T) {
 
 // TestRegisterDefaultProviders_ConcurrentAccess tests thread safety of default provider registration
 func TestRegisterDefaultProviders_ConcurrentAccess(t *testing.T) {
+	t.Parallel()
 	factory := NewProviderFactory()
 	var wg sync.WaitGroup
 	numGoroutines := 10
@@ -220,6 +224,7 @@ func TestRegisterDefaultProviders_ConcurrentAccess(t *testing.T) {
 
 // TestRegisterDefaultProviders_MixedWithCustomProviders tests mixing default and custom providers
 func TestRegisterDefaultProviders_MixedWithCustomProviders(t *testing.T) {
+	t.Parallel()
 	factory := NewProviderFactory()
 
 	// Register a custom provider first
@@ -259,6 +264,7 @@ func TestRegisterDefaultProviders_MixedWithCustomProviders(t *testing.T) {
 
 // TestInitializeDefaultProviders_vs_RegisterDefaultProviders tests both initialization methods
 func TestInitializeDefaultProviders_vs_RegisterDefaultProviders(t *testing.T) {
+	t.Parallel()
 	// Test InitializeDefaultProviders (stubs only)
 	factory1 := NewProviderFactory()
 	InitializeDefaultProviders(factory1)
@@ -332,6 +338,7 @@ func TestInitializeDefaultProviders_vs_RegisterDefaultProviders(t *testing.T) {
 
 // TestRegisterDefaultProviders_ProviderConsistency tests that registered providers have consistent behavior
 func TestRegisterDefaultProviders_ProviderConsistency(t *testing.T) {
+	t.Parallel()
 	factory := NewProviderFactory()
 	registerMockProvidersForConsistencyTests(factory)
 
@@ -399,6 +406,7 @@ func TestRegisterDefaultProviders_ProviderConsistency(t *testing.T) {
 
 // TestRegisterDefaultProviders_ProviderFactoryFunction tests that factory functions are correctly registered
 func TestRegisterDefaultProviders_ProviderFactoryFunction(t *testing.T) {
+	t.Parallel()
 	factory := NewProviderFactory()
 	RegisterDefaultProviders(factory)
 

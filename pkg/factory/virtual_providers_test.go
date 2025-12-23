@@ -9,6 +9,7 @@ import (
 )
 
 func TestVirtualProviderRegistration(t *testing.T) {
+	t.Parallel()
 	factory := NewProviderFactory()
 	RegisterDefaultProviders(factory)
 

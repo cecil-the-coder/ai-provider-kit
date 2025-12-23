@@ -16,6 +16,7 @@ import (
 
 // TestNewBaseProvider tests the creation of a new base provider
 func TestNewBaseProvider(t *testing.T) {
+	t.Parallel()
 	t.Run("ValidCreation", func(t *testing.T) {
 		config := types.ProviderConfig{
 			Type:   types.ProviderTypeOpenAI,
@@ -68,12 +69,14 @@ func TestNewBaseProvider(t *testing.T) {
 
 // TestBaseProvider_Name tests the Name method
 func TestBaseProvider_Name(t *testing.T) {
+	t.Parallel()
 	provider := NewBaseProvider("test-name", types.ProviderConfig{}, nil, nil)
 	assert.Equal(t, "test-name", provider.Name())
 }
 
 // TestBaseProvider_Type tests the Type method
 func TestBaseProvider_Type(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		provider *BaseProvider
@@ -118,12 +121,14 @@ func TestBaseProvider_Type(t *testing.T) {
 
 // TestBaseProvider_Description tests the Description method
 func TestBaseProvider_Description(t *testing.T) {
+	t.Parallel()
 	provider := NewBaseProvider("test", types.ProviderConfig{}, nil, nil)
 	assert.Equal(t, "Base provider implementation", provider.Description())
 }
 
 // TestBaseProvider_Configure tests the Configure method
 func TestBaseProvider_Configure(t *testing.T) {
+	t.Parallel()
 	t.Run("ValidConfiguration", func(t *testing.T) {
 		var logBuffer bytes.Buffer
 		logger := log.New(&logBuffer, "", log.LstdFlags)
@@ -177,6 +182,7 @@ func TestBaseProvider_Configure(t *testing.T) {
 
 // TestBaseProvider_UpdateConfig tests the UpdateConfig method
 func TestBaseProvider_UpdateConfig(t *testing.T) {
+	t.Parallel()
 	t.Run("UpdateWithLogger", func(t *testing.T) {
 		var logBuffer bytes.Buffer
 		logger := log.New(&logBuffer, "", log.LstdFlags)
@@ -214,6 +220,7 @@ func TestBaseProvider_UpdateConfig(t *testing.T) {
 
 // TestBaseProvider_GetConfig tests the GetConfig method
 func TestBaseProvider_GetConfig(t *testing.T) {
+	t.Parallel()
 	config := types.ProviderConfig{
 		Type:   types.ProviderTypeOpenAI,
 		Name:   "test-provider",
@@ -231,6 +238,7 @@ func TestBaseProvider_GetConfig(t *testing.T) {
 
 // TestBaseProvider_GetModels tests the GetModels method
 func TestBaseProvider_GetModels(t *testing.T) {
+	t.Parallel()
 	provider := NewBaseProvider("test", types.ProviderConfig{}, nil, nil)
 
 	models, err := provider.GetModels(context.Background())
@@ -241,6 +249,7 @@ func TestBaseProvider_GetModels(t *testing.T) {
 
 // TestBaseProvider_GetDefaultModel tests the GetDefaultModel method
 func TestBaseProvider_GetDefaultModel(t *testing.T) {
+	t.Parallel()
 	t.Run("WithDefaultModelInConfig", func(t *testing.T) {
 		config := types.ProviderConfig{
 			DefaultModel: "gpt-4",
@@ -259,6 +268,7 @@ func TestBaseProvider_GetDefaultModel(t *testing.T) {
 
 // TestBaseProvider_Authenticate tests the Authenticate method
 func TestBaseProvider_Authenticate(t *testing.T) {
+	t.Parallel()
 	t.Run("WithAPIKey", func(t *testing.T) {
 		provider := NewBaseProvider("test", types.ProviderConfig{}, nil, nil)
 
@@ -291,6 +301,7 @@ func TestBaseProvider_Authenticate(t *testing.T) {
 
 // TestBaseProvider_IsAuthenticated tests the IsAuthenticated method
 func TestBaseProvider_IsAuthenticated(t *testing.T) {
+	t.Parallel()
 	t.Run("Authenticated", func(t *testing.T) {
 		config := types.ProviderConfig{
 			APIKey: "test-key",
@@ -309,6 +320,7 @@ func TestBaseProvider_IsAuthenticated(t *testing.T) {
 
 // TestBaseProvider_Logout tests the Logout method
 func TestBaseProvider_Logout(t *testing.T) {
+	t.Parallel()
 	config := types.ProviderConfig{
 		APIKey: "test-key",
 	}
@@ -325,6 +337,7 @@ func TestBaseProvider_Logout(t *testing.T) {
 
 // TestBaseProvider_SupportsToolCalling tests the SupportsToolCalling method
 func TestBaseProvider_SupportsToolCalling(t *testing.T) {
+	t.Parallel()
 	t.Run("SupportsToolCalling", func(t *testing.T) {
 		config := types.ProviderConfig{
 			SupportsToolCalling: true,
@@ -343,6 +356,7 @@ func TestBaseProvider_SupportsToolCalling(t *testing.T) {
 
 // TestBaseProvider_SupportsStreaming tests the SupportsStreaming method
 func TestBaseProvider_SupportsStreaming(t *testing.T) {
+	t.Parallel()
 	t.Run("SupportsStreaming", func(t *testing.T) {
 		config := types.ProviderConfig{
 			SupportsStreaming: true,
@@ -361,6 +375,7 @@ func TestBaseProvider_SupportsStreaming(t *testing.T) {
 
 // TestBaseProvider_SupportsResponsesAPI tests the SupportsResponsesAPI method
 func TestBaseProvider_SupportsResponsesAPI(t *testing.T) {
+	t.Parallel()
 	t.Run("SupportsResponsesAPI", func(t *testing.T) {
 		config := types.ProviderConfig{
 			SupportsResponsesAPI: true,
@@ -379,6 +394,7 @@ func TestBaseProvider_SupportsResponsesAPI(t *testing.T) {
 
 // TestBaseProvider_InvokeServerTool tests the InvokeServerTool method
 func TestBaseProvider_InvokeServerTool(t *testing.T) {
+	t.Parallel()
 	provider := NewBaseProvider("test", types.ProviderConfig{}, nil, nil)
 
 	result, err := provider.InvokeServerTool(context.Background(), "test-tool", map[string]interface{}{
@@ -392,6 +408,7 @@ func TestBaseProvider_InvokeServerTool(t *testing.T) {
 
 // TestBaseProvider_GenerateChatCompletion tests the GenerateChatCompletion method
 func TestBaseProvider_GenerateChatCompletion(t *testing.T) {
+	t.Parallel()
 	provider := NewBaseProvider("test-provider", types.ProviderConfig{}, nil, nil)
 
 	options := types.GenerateOptions{
@@ -421,6 +438,7 @@ func TestBaseProvider_GenerateChatCompletion(t *testing.T) {
 
 // TestBaseProvider_GetToolFormat tests the GetToolFormat method
 func TestBaseProvider_GetToolFormat(t *testing.T) {
+	t.Parallel()
 	provider := NewBaseProvider("test", types.ProviderConfig{}, nil, nil)
 
 	assert.Equal(t, types.ToolFormatOpenAI, provider.GetToolFormat())
@@ -428,6 +446,7 @@ func TestBaseProvider_GetToolFormat(t *testing.T) {
 
 // TestBaseProvider_HealthCheck tests the HealthCheck method
 func TestBaseProvider_HealthCheck(t *testing.T) {
+	t.Parallel()
 	provider := NewBaseProvider("test", types.ProviderConfig{}, nil, nil)
 
 	err := provider.HealthCheck(context.Background())
@@ -437,6 +456,7 @@ func TestBaseProvider_HealthCheck(t *testing.T) {
 
 // TestBaseProvider_GetMetrics tests the GetMetrics method
 func TestBaseProvider_GetMetrics(t *testing.T) {
+	t.Parallel()
 	provider := NewBaseProvider("test", types.ProviderConfig{}, nil, nil)
 
 	metrics := provider.GetMetrics()
@@ -455,6 +475,7 @@ func TestBaseProvider_GetMetrics(t *testing.T) {
 
 // TestBaseProvider_IncrementRequestCount tests the IncrementRequestCount method
 func TestBaseProvider_IncrementRequestCount(t *testing.T) {
+	t.Parallel()
 	provider := NewBaseProvider("test", types.ProviderConfig{}, nil, nil)
 
 	// Initially, request count should be 0
@@ -479,6 +500,7 @@ func TestBaseProvider_IncrementRequestCount(t *testing.T) {
 
 // TestBaseProvider_RecordSuccess tests the RecordSuccess method
 func TestBaseProvider_RecordSuccess(t *testing.T) {
+	t.Parallel()
 	provider := NewBaseProvider("test", types.ProviderConfig{}, nil, nil)
 
 	// Record first success
@@ -507,6 +529,7 @@ func TestBaseProvider_RecordSuccess(t *testing.T) {
 
 // TestBaseProvider_RecordError tests the RecordError method
 func TestBaseProvider_RecordError(t *testing.T) {
+	t.Parallel()
 	provider := NewBaseProvider("test", types.ProviderConfig{}, nil, nil)
 
 	// Initially, error count should be 0
@@ -543,6 +566,7 @@ func TestBaseProvider_RecordError(t *testing.T) {
 
 // TestBaseProvider_UpdateHealthStatus tests the UpdateHealthStatus method
 func TestBaseProvider_UpdateHealthStatus(t *testing.T) {
+	t.Parallel()
 	provider := NewBaseProvider("test", types.ProviderConfig{}, nil, nil)
 
 	// Initially, health status should be zero values
@@ -570,6 +594,7 @@ func TestBaseProvider_UpdateHealthStatus(t *testing.T) {
 
 // TestBaseProvider_UpdateHealthStatusResponseTime tests the UpdateHealthStatusResponseTime method
 func TestBaseProvider_UpdateHealthStatusResponseTime(t *testing.T) {
+	t.Parallel()
 	provider := NewBaseProvider("test", types.ProviderConfig{}, nil, nil)
 
 	// Initially, response time should be 0
@@ -591,6 +616,7 @@ func TestBaseProvider_UpdateHealthStatusResponseTime(t *testing.T) {
 
 // TestBaseProvider_LogRequest tests the LogRequest method
 func TestBaseProvider_LogRequest(t *testing.T) {
+	t.Parallel()
 	t.Run("WithLogger_VerboseDisabled", func(t *testing.T) {
 		var logBuffer bytes.Buffer
 		logger := log.New(&logBuffer, "", log.LstdFlags)
@@ -650,6 +676,7 @@ func TestBaseProvider_LogRequest(t *testing.T) {
 
 // TestBaseProvider_LogResponse tests the LogResponse method
 func TestBaseProvider_LogResponse(t *testing.T) {
+	t.Parallel()
 	t.Run("WithLogger", func(t *testing.T) {
 		var logBuffer bytes.Buffer
 		logger := log.New(&logBuffer, "", log.LstdFlags)
@@ -682,6 +709,7 @@ func TestBaseProvider_LogResponse(t *testing.T) {
 
 // TestMockStream tests the MockStream implementation
 func TestMockStream(t *testing.T) {
+	t.Parallel()
 	t.Run("SingleChunk", func(t *testing.T) {
 		chunks := []types.ChatCompletionChunk{
 			{Content: "Hello", Done: false},
@@ -739,6 +767,7 @@ func TestMockStream(t *testing.T) {
 
 // TestBaseProviderStub tests the BaseProviderStub wrapper
 func TestBaseProviderStub(t *testing.T) {
+	t.Parallel()
 	config := types.ProviderConfig{
 		Type:   types.ProviderTypeOpenAI,
 		APIKey: "test-key",
@@ -797,6 +826,7 @@ func TestBaseProviderStub(t *testing.T) {
 
 // TestBaseProvider_ConcurrentAccess tests concurrent access to provider methods
 func TestBaseProvider_ConcurrentAccess(t *testing.T) {
+	t.Parallel()
 	provider := NewBaseProvider("test", types.ProviderConfig{
 		APIKey: "test-key",
 	}, nil, nil)
@@ -839,6 +869,7 @@ func TestBaseProvider_ConcurrentAccess(t *testing.T) {
 
 // TestBaseProvider_ConcurrentMetrics tests concurrent access to metrics methods
 func TestBaseProvider_ConcurrentMetrics(t *testing.T) {
+	t.Parallel()
 	provider := NewBaseProvider("test", types.ProviderConfig{}, nil, nil)
 
 	var wg sync.WaitGroup
@@ -871,6 +902,7 @@ func TestBaseProvider_ConcurrentMetrics(t *testing.T) {
 
 // TestBaseProvider_ErrorHandling tests error handling scenarios
 func TestBaseProvider_ErrorHandling(t *testing.T) {
+	t.Parallel()
 	provider := NewBaseProvider("test", types.ProviderConfig{}, nil, nil)
 
 	t.Run("AuthenticationError", func(t *testing.T) {
@@ -996,6 +1028,7 @@ func BenchmarkMockStream_Next(b *testing.B) {
 
 // TestIntegration_ProviderInterface ensures BaseProvider implements all required interface methods
 func TestIntegration_ProviderInterface(t *testing.T) {
+	t.Parallel()
 	// This test ensures that BaseProvider (through BaseProviderStub)
 	// correctly implements the Provider interface
 	var logBuffer bytes.Buffer

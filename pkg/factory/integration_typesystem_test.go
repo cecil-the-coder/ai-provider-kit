@@ -13,6 +13,7 @@ import (
 
 // TestScenario4_TypeSystemIntegration tests cross-package type compatibility
 func TestScenario4_TypeSystemIntegration(t *testing.T) {
+	t.Parallel()
 	factory := NewProviderFactory()
 	registerMockProvidersForIntegrationTests(factory)
 

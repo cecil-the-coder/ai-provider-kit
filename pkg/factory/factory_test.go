@@ -14,6 +14,7 @@ import (
 
 // TestNewProviderFactory tests factory creation and initialization
 func TestNewProviderFactory(t *testing.T) {
+	t.Parallel()
 	// Create a new factory
 	factory := NewProviderFactory()
 
@@ -25,6 +26,7 @@ func TestNewProviderFactory(t *testing.T) {
 
 // TestDefaultProviderFactory_RegisterProvider tests provider registration functionality
 func TestDefaultProviderFactory_RegisterProvider(t *testing.T) {
+	t.Parallel()
 	factory := NewProviderFactory()
 
 	// Test registering a provider
@@ -43,6 +45,7 @@ func TestDefaultProviderFactory_RegisterProvider(t *testing.T) {
 
 // TestDefaultProviderFactory_RegisterProvider_ConcurrentAccess tests thread safety of provider registration
 func TestDefaultProviderFactory_RegisterProvider_ConcurrentAccess(t *testing.T) {
+	t.Parallel()
 	factory := NewProviderFactory()
 	var wg sync.WaitGroup
 	numGoroutines := 100
@@ -69,6 +72,7 @@ func TestDefaultProviderFactory_RegisterProvider_ConcurrentAccess(t *testing.T) 
 
 // TestDefaultProviderFactory_CreateProvider tests provider creation functionality
 func TestDefaultProviderFactory_CreateProvider(t *testing.T) {
+	t.Parallel()
 	factory := NewProviderFactory()
 
 	// Register a test provider
@@ -97,6 +101,7 @@ func TestDefaultProviderFactory_CreateProvider(t *testing.T) {
 
 // TestDefaultProviderFactory_CreateProvider_UnknownProvider tests error handling for unknown providers
 func TestDefaultProviderFactory_CreateProvider_UnknownProvider(t *testing.T) {
+	t.Parallel()
 	factory := NewProviderFactory()
 
 	// Try to create a provider that wasn't registered
@@ -117,6 +122,7 @@ func TestDefaultProviderFactory_CreateProvider_UnknownProvider(t *testing.T) {
 
 // TestDefaultProviderFactory_CreateProvider_ConcurrentAccess tests thread safety of provider creation
 func TestDefaultProviderFactory_CreateProvider_ConcurrentAccess(t *testing.T) {
+	t.Parallel()
 	factory := NewProviderFactory()
 
 	// Register a test provider
@@ -168,6 +174,7 @@ func TestDefaultProviderFactory_CreateProvider_ConcurrentAccess(t *testing.T) {
 
 // TestDefaultProviderFactory_GetSupportedProviders tests provider list retrieval
 func TestDefaultProviderFactory_GetSupportedProviders(t *testing.T) {
+	t.Parallel()
 	factory := NewProviderFactory()
 
 	// Initially no providers should be supported
@@ -199,6 +206,7 @@ func TestDefaultProviderFactory_GetSupportedProviders(t *testing.T) {
 
 // TestDefaultProviderFactory_GetSupportedProviders_ConcurrentAccess tests thread safety of provider listing
 func TestDefaultProviderFactory_GetSupportedProviders_ConcurrentAccess(t *testing.T) {
+	t.Parallel()
 	factory := NewProviderFactory()
 
 	// Register initial providers
@@ -236,6 +244,7 @@ func TestDefaultProviderFactory_GetSupportedProviders_ConcurrentAccess(t *testin
 
 // TestInitializeDefaultProviders tests stub provider initialization
 func TestInitializeDefaultProviders(t *testing.T) {
+	t.Parallel()
 	factory := NewProviderFactory()
 
 	// Initialize default stub providers (only for providers without real implementations)
@@ -291,6 +300,7 @@ func TestInitializeDefaultProviders(t *testing.T) {
 
 // TestSimpleProviderStub tests the SimpleProviderStub implementation
 func TestSimpleProviderStub(t *testing.T) {
+	t.Parallel()
 	config := types.ProviderConfig{
 		Type:         types.ProviderTypeOpenAI,
 		Name:         "test-provider",
@@ -374,6 +384,7 @@ func TestSimpleProviderStub(t *testing.T) {
 
 // TestFactoryMockStream tests the FactoryMockStream implementation
 func TestFactoryMockStream(t *testing.T) {
+	t.Parallel()
 	stream := &FactoryMockStream{}
 
 	// Test streaming

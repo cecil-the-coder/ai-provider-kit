@@ -9,6 +9,7 @@ import (
 )
 
 func TestQwenProvider_FactoryIntegration(t *testing.T) {
+	t.Parallel()
 	// Create a new factory
 	f := NewProviderFactory()
 
@@ -93,6 +94,7 @@ func TestQwenProvider_FactoryIntegration(t *testing.T) {
 }
 
 func TestQwenProvider_OAuthFlow(t *testing.T) {
+	t.Parallel()
 	// Create a new factory
 	f := NewProviderFactory()
 
@@ -130,6 +132,7 @@ func TestQwenProvider_OAuthFlow(t *testing.T) {
 }
 
 func TestQwenProvider_HappyPathScenario(t *testing.T) {
+	t.Parallel()
 	// Create a new factory
 	f := NewProviderFactory()
 
