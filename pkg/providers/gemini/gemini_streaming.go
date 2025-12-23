@@ -372,6 +372,11 @@ func (p *GeminiProvider) makeStreamingAPICallWithAPIKey(ctx context.Context, opt
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("User-Agent", telemetry.GetUserAgent())
 
+	// Add X-Goog-Api-Key header if auth_method is "header"
+	if p.backendRouter.ShouldUseHeaderAuth() && apiKey != "" {
+		req.Header.Set("X-Goog-Api-Key", apiKey)
+	}
+
 	resp, err := p.client.Do(req)
 	if err != nil {
 		return nil, types.NewNetworkError(types.ProviderTypeGemini, "request failed").

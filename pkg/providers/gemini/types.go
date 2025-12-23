@@ -9,7 +9,7 @@ import (
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 )
 
-// BackendType represents the type of backend being used (Gemini API or Vertex AI)
+// BackendType represents the type of backend being used (Gemini API, Vertex AI, or Code Assist)
 type BackendType string
 
 const (
@@ -17,6 +17,18 @@ const (
 	BackendGeminiAPI BackendType = "gemini-api"
 	// BackendVertexAI uses the Vertex AI API (PROJECT-LOCATION.aiplatform.googleapis.com)
 	BackendVertexAI BackendType = "vertex-ai"
+	// BackendCodeAssist uses the Code Assist API (cloudcode-pa.googleapis.com) with OAuth
+	BackendCodeAssist BackendType = "code-assist"
+)
+
+// AuthMethod defines how API keys are sent to the Gemini API
+type AuthMethod string
+
+const (
+	// AuthMethodURLParam uses the URL query parameter ?key= (default, backward compatible)
+	AuthMethodURLParam AuthMethod = "url_param"
+	// AuthMethodHeader uses the X-Goog-Api-Key header
+	AuthMethodHeader AuthMethod = "header"
 )
 
 // ClientConfig represents configuration for the Gemini client with backend selection
@@ -38,6 +50,10 @@ type ClientConfig struct {
 
 	// Base URL override (optional)
 	BaseURL string `json:"base_url,omitempty"`
+
+	// AuthMethod defines how API keys are sent (url_param or header)
+	// Defaults to url_param for backward compatibility
+	AuthMethod AuthMethod `json:"auth_method,omitempty"`
 }
 
 // Validate checks if the ClientConfig is valid for the selected backend
@@ -75,6 +91,8 @@ func (c *ClientConfig) GetBaseURL() string {
 		return "https://generativelanguage.googleapis.com/v1beta"
 	case BackendVertexAI:
 		return fmt.Sprintf("https://%s-aiplatform.googleapis.com", c.Location)
+	case BackendCodeAssist:
+		return "https://cloudcode-pa.googleapis.com/v1internal"
 	default:
 		return ""
 	}
@@ -97,6 +115,12 @@ func (c *ClientConfig) GetEndpoint(model string, streaming bool) string {
 		}
 		return fmt.Sprintf("%s/v1/projects/%s/locations/%s/publishers/google/models/%s:generateContent",
 			baseURL, c.Project, c.Location, model)
+	case BackendCodeAssist:
+		// Code Assist API uses same endpoint format as Gemini API
+		if streaming {
+			return fmt.Sprintf("%s/models/%s:streamGenerateContent", baseURL, model)
+		}
+		return fmt.Sprintf("%s/models/%s:generateContent", baseURL, model)
 	default:
 		return ""
 	}

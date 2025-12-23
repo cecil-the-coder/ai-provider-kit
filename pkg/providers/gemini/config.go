@@ -53,6 +53,10 @@ type GeminiConfig struct {
 
 	// Service account for Vertex AI
 	ServiceAccountJSON string `json:"service_account_json,omitempty"`
+
+	// AuthMethod defines how API keys are sent (url_param or header)
+	// Defaults to url_param for backward compatibility
+	AuthMethod AuthMethod `json:"auth_method,omitempty"`
 }
 
 // NewGeminiProvider creates a new Gemini provider
@@ -107,6 +111,7 @@ func NewGeminiProvider(config types.ProviderConfig) *GeminiProvider {
 		APIKey:             geminiConfig.APIKey,
 		ServiceAccountJSON: geminiConfig.ServiceAccountJSON,
 		BaseURL:            geminiConfig.BaseURL,
+		AuthMethod:         geminiConfig.AuthMethod,
 	}
 	backendRouter := NewBackendRouter(clientConfig)
 
@@ -215,6 +220,7 @@ func (p *GeminiProvider) Configure(config types.ProviderConfig) error {
 		APIKey:             geminiConfig.APIKey,
 		ServiceAccountJSON: geminiConfig.ServiceAccountJSON,
 		BaseURL:            geminiConfig.BaseURL,
+		AuthMethod:         geminiConfig.AuthMethod,
 	}
 	p.backendRouter = NewBackendRouter(clientConfig)
 

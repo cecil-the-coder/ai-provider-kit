@@ -268,6 +268,11 @@ func (p *GeminiProvider) executeStandardAPIRequest(ctx context.Context, model st
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("User-Agent", telemetry.GetUserAgent())
 
+	// Add X-Goog-Api-Key header if auth_method is "header"
+	if p.backendRouter.ShouldUseHeaderAuth() && apiKey != "" {
+		req.Header.Set("X-Goog-Api-Key", apiKey)
+	}
+
 	p.LogRequest("POST", url, map[string]string{
 		"Content-Type": "application/json",
 	}, requestBody)

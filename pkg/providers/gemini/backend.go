@@ -68,6 +68,9 @@ func (bd *BackendDetector) GetBaseURL(backend BackendType) string {
 	case BackendGeminiAPI:
 		return standardGeminiBaseURL
 
+	case BackendCodeAssist:
+		return cloudcodeBaseURL
+
 	default:
 		return standardGeminiBaseURL
 	}
@@ -91,6 +94,10 @@ func (bd *BackendDetector) GetModelPath(model string, backend BackendType) strin
 		// Gemini API format: models/{model}
 		return fmt.Sprintf("models/%s", model)
 
+	case BackendCodeAssist:
+		// Code Assist API uses same format as Gemini API
+		return fmt.Sprintf("models/%s", model)
+
 	default:
 		return fmt.Sprintf("models/%s", model)
 	}
@@ -109,6 +116,7 @@ func NewSchemaConverter(backend BackendType) *SchemaConverter {
 // ConvertRequest converts a GenerateContentRequest to the appropriate backend format
 // For Gemini API: No conversion needed, use as-is
 // For Vertex AI: Wrap in Vertex AI format with instances/parameters
+// For Code Assist: Uses same format as Gemini API
 func (sc *SchemaConverter) ConvertRequest(req GenerateContentRequest) (interface{}, error) {
 	switch sc.backend {
 	case BackendGeminiAPI:
@@ -121,6 +129,10 @@ func (sc *SchemaConverter) ConvertRequest(req GenerateContentRequest) (interface
 		// but with different endpoint paths
 		return req, nil
 
+	case BackendCodeAssist:
+		// Code Assist API uses the same format as Gemini API
+		return req, nil
+
 	default:
 		return req, nil
 	}
@@ -129,6 +141,7 @@ func (sc *SchemaConverter) ConvertRequest(req GenerateContentRequest) (interface
 // ConvertResponse converts a response from the backend to GenerateContentResponse
 // For Gemini API: No conversion needed
 // For Vertex AI: Extract from Vertex AI wrapper if present
+// For Code Assist: Uses same format as Gemini API
 func (sc *SchemaConverter) ConvertResponse(responseBody []byte) (*GenerateContentResponse, error) {
 	var response GenerateContentResponse
 
@@ -163,6 +176,15 @@ func (sc *SchemaConverter) ConvertResponse(responseBody []byte) (*GenerateConten
 		}
 		return &response, nil
 
+	case BackendCodeAssist:
+		// Code Assist API uses the same response format as Gemini API
+		if err := json.Unmarshal(responseBody, &response); err != nil {
+			return nil, types.NewServerError(types.ProviderTypeGemini, 0, "failed to parse Code Assist API response").
+				WithOperation("convert_response").
+				WithOriginalErr(err)
+		}
+		return &response, nil
+
 	default:
 		if err := json.Unmarshal(responseBody, &response); err != nil {
 			return nil, types.NewServerError(types.ProviderTypeGemini, 0, "failed to parse response").
@@ -190,6 +212,15 @@ func (sc *SchemaConverter) ConvertStreamResponse(responseBody []byte) (*GeminiSt
 		// Vertex AI streaming uses the same format
 		if err := json.Unmarshal(responseBody, &response); err != nil {
 			return nil, types.NewServerError(types.ProviderTypeGemini, 0, "failed to parse Vertex AI stream chunk").
+				WithOperation("convert_response").
+				WithOriginalErr(err)
+		}
+		return &response, nil
+
+	case BackendCodeAssist:
+		// Code Assist streaming uses the same format as Gemini API
+		if err := json.Unmarshal(responseBody, &response); err != nil {
+			return nil, types.NewServerError(types.ProviderTypeGemini, 0, "failed to parse Code Assist API stream chunk").
 				WithOperation("convert_response").
 				WithOriginalErr(err)
 		}
@@ -247,6 +278,7 @@ func (br *BackendRouter) GetConverter() *SchemaConverter {
 
 // BuildRequestURL constructs the full request URL for a given operation
 // operation can be "generateContent" or "streamGenerateContent"
+// When auth_method is "header", the apiKey parameter is not added to the URL
 func (br *BackendRouter) BuildRequestURL(model string, operation string, apiKey string) string {
 	baseURL := br.GetBaseURL()
 	modelPath := br.GetModelPath(model)
@@ -257,13 +289,26 @@ func (br *BackendRouter) BuildRequestURL(model string, operation string, apiKey 
 		return fmt.Sprintf("%s/%s:%s", baseURL, modelPath, operation)
 
 	case BackendGeminiAPI:
-		// Gemini API format: {baseURL}/models/{model}:{operation}?key={apiKey}
+		// Check if using header-based authentication
+		// If auth_method is "header", skip adding ?key= parameter (key will be in X-Goog-Api-Key header)
+		if br.detector.config.AuthMethod == AuthMethodHeader {
+			return fmt.Sprintf("%s/%s:%s", baseURL, modelPath, operation)
+		}
+		// Gemini API format: {baseURL}/models/{model}:{operation}?key={apiKey} (default)
 		if apiKey != "" {
 			return fmt.Sprintf("%s/%s:%s?key=%s", baseURL, modelPath, operation, apiKey)
 		}
 		return fmt.Sprintf("%s/%s:%s", baseURL, modelPath, operation)
 
+	case BackendCodeAssist:
+		// Code Assist API uses OAuth, so no API key in URL
+		return fmt.Sprintf("%s/%s:%s", baseURL, modelPath, operation)
+
 	default:
+		// Check if using header-based authentication
+		if br.detector.config.AuthMethod == AuthMethodHeader {
+			return fmt.Sprintf("%s/%s:%s", baseURL, modelPath, operation)
+		}
 		if apiKey != "" {
 			return fmt.Sprintf("%s/%s:%s?key=%s", baseURL, modelPath, operation, apiKey)
 		}
@@ -279,4 +324,9 @@ func (br *BackendRouter) IsVertexAI() bool {
 // IsGeminiAPI returns true if using Gemini API backend
 func (br *BackendRouter) IsGeminiAPI() bool {
 	return br.backend == BackendGeminiAPI
+}
+
+// ShouldUseHeaderAuth returns true if API key should be sent via X-Goog-Api-Key header
+func (br *BackendRouter) ShouldUseHeaderAuth() bool {
+	return br.detector.config.AuthMethod == AuthMethodHeader
 }
