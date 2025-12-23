@@ -55,7 +55,7 @@ func NewTestServer(t *testing.T, opts ...ServerOption) *httptest.Server {
 	config := &TestServerConfig{
 		Handler: func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte("OK"))
+			_, _ = w.Write([]byte("OK"))
 		},
 	}
 
@@ -522,7 +522,7 @@ func (ri *RequestInspector) Handler() http.HandlerFunc {
 
 		body, _ := io.ReadAll(r.Body)
 		ri.LastBody = body
-		r.Body.Close()
+		_ = r.Body.Close()
 
 		// Run custom assertions
 		for _, assertFn := range ri.CustomAsserts {
@@ -533,7 +533,7 @@ func (ri *RequestInspector) Handler() http.HandlerFunc {
 		}
 
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("OK"))
+		_, _ = w.Write([]byte("OK"))
 	}
 }
 
@@ -578,7 +578,7 @@ func MakeJSONRequest(t *testing.T, method, url string, data interface{}) *http.R
 // DrainBody reads and closes the response body, useful for testing.
 func DrainBody(t *testing.T, resp *http.Response) []byte {
 	t.Helper()
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		t.Fatalf("failed to read response body: %v", err)

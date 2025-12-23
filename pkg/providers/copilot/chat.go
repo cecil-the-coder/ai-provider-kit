@@ -196,7 +196,7 @@ func (p *CopilotProvider) makeAPICall(ctx context.Context, requestData *ChatComp
 	if err != nil {
 		return nil, fmt.Errorf("request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
@@ -255,7 +255,7 @@ func (p *CopilotProvider) makeStreamingAPICall(ctx context.Context, requestData 
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		return nil, p.handleAPIError(resp.StatusCode, body)
 	}
 
@@ -503,7 +503,7 @@ func (s *CopilotStream) Next() (types.ChatCompletionChunk, error) {
 
 		data := strings.TrimPrefix(line, "data: ")
 		if data == "[DONE]" {
-			s.Close()
+			_ = s.Close()
 			return types.ChatCompletionChunk{Done: true}, nil
 		}
 
@@ -554,11 +554,11 @@ func (s *CopilotStream) Next() (types.ChatCompletionChunk, error) {
 	}
 
 	if err := s.scanner.Err(); err != nil {
-		s.Close()
+		_ = s.Close()
 		return types.ChatCompletionChunk{}, err
 	}
 
-	s.Close()
+	_ = s.Close()
 	return types.ChatCompletionChunk{Done: true}, nil
 }
 

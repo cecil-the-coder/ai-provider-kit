@@ -281,7 +281,7 @@ func (p *CopilotProvider) requestDeviceCode(ctx context.Context) (*GitHubDeviceC
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
@@ -347,7 +347,7 @@ func (p *CopilotProvider) checkAccessToken(ctx context.Context, deviceCode strin
 	if err != nil {
 		return "", err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, _ := io.ReadAll(resp.Body)
 
@@ -396,7 +396,7 @@ func (p *CopilotProvider) exchangeToken(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
@@ -450,7 +450,7 @@ func (p *CopilotProvider) fetchModelsFromAPI(ctx context.Context) ([]types.Model
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
@@ -547,7 +547,7 @@ func (p *CopilotProvider) performConnectivityTest(ctx context.Context) error {
 			WithOperation("test_connectivity").
 			WithOriginalErr(err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusUnauthorized {
 		return types.NewAuthError(types.ProviderTypeCopilot, "invalid Copilot token").

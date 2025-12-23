@@ -56,7 +56,7 @@ func TestProviderTestSetup_WithCleanup(t *testing.T) {
 	result := setup.WithCleanup(cleanup)
 
 	// Verify the cleanup function is set by calling it
-	result.CleanupFunc()
+	_ = result.CleanupFunc()
 	assert.True(t, cleanupCalled)
 }
 

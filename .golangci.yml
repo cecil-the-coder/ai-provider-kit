@@ -74,6 +74,16 @@ issues:
       linters: [gosec]
       text: "G402:"
 
+    # Disable gosec G104 (unhandled errors) for test files
+    - path: "_test\\.go"
+      linters: [gosec]
+      text: "G104:"
+
+    # Disable govet httpresponse check for test files (defer after require.NoError is safe)
+    - path: "_test\\.go"
+      linters: [govet]
+      text: "httpresponse:"
+
     # Disable gosec hardcoded URL checks for test files and types.go
     - path: "_test\\.go"
       linters: [gosec]
@@ -111,4 +121,3 @@ linters:
     - goimports
     - gofmt
     - stylecheck
-    - gci

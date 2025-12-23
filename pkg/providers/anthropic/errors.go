@@ -152,9 +152,9 @@ func (p *AnthropicProvider) createAPIError(resp *http.Response, body []byte) err
 
 		// Add request/response dump for debugging
 		if resp.Request != nil {
-			providerErr.DumpRequest(resp.Request)
+			_ = providerErr.DumpRequest(resp.Request)
 		}
-		providerErr.DumpResponse(resp)
+		_ = providerErr.DumpResponse(resp)
 
 		return providerErr
 	}

@@ -172,9 +172,9 @@ func (p *GeminiProvider) createAPIError(resp *http.Response, body []byte) error 
 
 		// Add request/response dump for debugging
 		if resp.Request != nil {
-			providerErr.DumpRequest(resp.Request)
+			_ = providerErr.DumpRequest(resp.Request)
 		}
-		providerErr.DumpResponse(resp)
+		_ = providerErr.DumpResponse(resp)
 
 		return providerErr
 	}
