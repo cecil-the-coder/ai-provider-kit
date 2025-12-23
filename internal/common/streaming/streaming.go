@@ -6,10 +6,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strings"
 	"sync"
 
+	"github.com/cecil-the-coder/ai-provider-kit/internal/streaming"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 )
 
@@ -108,6 +110,18 @@ func (sp *StreamProcessor) MarkDone() {
 	sp.mutex.Lock()
 	defer sp.mutex.Unlock()
 	sp.done = true
+}
+
+// GetStreamError creates a StreamError from a streaming error
+// This categorizes errors for proper SSE error event forwarding
+func (sp *StreamProcessor) GetStreamError(err error) streaming.StreamError {
+	streamErr := streaming.MakeStreamError(err)
+
+	// Log the full error server-side for debugging
+	log.Printf("[StreamProcessor] Stream error detected: type=%s, message=%s, original_error=%v",
+		streamErr.Type, streamErr.Message, err)
+
+	return streamErr
 }
 
 // SSELineProcessor provides standard SSE (Server-Sent Events) line processing
@@ -605,10 +619,43 @@ type ContextAwareStream struct {
 }
 
 // Next returns the next chunk, respecting context cancellation
+// Detects context cancellation and timeout errors for proper SSE error forwarding
 func (cas *ContextAwareStream) Next() (types.ChatCompletionChunk, error) {
 	select {
 	case <-cas.ctx.Done():
-		return types.ChatCompletionChunk{Done: true}, cas.ctx.Err()
+		// Log the context error for server-side debugging
+		log.Printf("[ContextAwareStream] Context canceled: %v", cas.ctx.Err())
+
+		// Categorize the context error
+		var streamErr streaming.StreamError
+		switch cas.ctx.Err() {
+		case context.DeadlineExceeded:
+			streamErr = streaming.StreamError{
+				Type:    streaming.ErrorTypeTimeout,
+				Message: "Stream timed out due to deadline exceeded",
+			}
+		case context.Canceled:
+			streamErr = streaming.StreamError{
+				Type:    streaming.ErrorTypeContextCanceled,
+				Message: "Stream was canceled by client",
+			}
+		default:
+			streamErr = streaming.MakeStreamError(cas.ctx.Err())
+		}
+
+		// Log the full error server-side
+		log.Printf("[ContextAwareStream] Stream error: type=%s, message=%s",
+			streamErr.Type, streamErr.Message)
+
+		// Return chunk with error information embedded for SSE forwarding
+		return types.ChatCompletionChunk{
+			Done:  true,
+			Error: streamErr.ToSSEEvent(),
+			Metadata: map[string]interface{}{
+				"error_type":    string(streamErr.Type),
+				"error_message": streamErr.Message,
+			},
+		}, cas.ctx.Err()
 	default:
 		return cas.baseStream.Next()
 	}
@@ -617,6 +664,19 @@ func (cas *ContextAwareStream) Next() (types.ChatCompletionChunk, error) {
 // Close closes the underlying stream
 func (cas *ContextAwareStream) Close() error {
 	return cas.baseStream.Close()
+}
+
+// GetStreamError returns a StreamError based on the context state
+func (cas *ContextAwareStream) GetStreamError() streaming.StreamError {
+	if cas.ctx.Err() == nil {
+		return streaming.StreamError{}
+	}
+
+	streamErr := streaming.MakeStreamError(cas.ctx.Err())
+	log.Printf("[ContextAwareStream] GetStreamError: type=%s, message=%s",
+		streamErr.Type, streamErr.Message)
+
+	return streamErr
 }
 
 // Utility functions for creating common stream types

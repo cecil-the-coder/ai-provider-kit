@@ -2,6 +2,7 @@ package metrics
 
 import (
 	"context"
+	"log"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -387,6 +388,7 @@ func (w *MetricsStreamWrapper) recordStreamEnd() {
 }
 
 // recordStreamAbort records an abnormal termination of the stream.
+// Uses MakeStreamError to categorize the error type for proper tracking.
 func (w *MetricsStreamWrapper) recordStreamAbort(err error) {
 	if !w.streamAborted.CompareAndSwap(false, true) {
 		return // Already aborted
@@ -397,10 +399,27 @@ func (w *MetricsStreamWrapper) recordStreamAbort(err error) {
 
 	metrics := w.GetMetrics()
 
-	errorType := categorizeStreamError(err)
-	errorMessage := ""
-	if err != nil {
-		errorMessage = err.Error()
+	// Categorize error using MakeStreamError for consistent error types
+	streamErr := streaming.MakeStreamError(err)
+	errorType := string(streamErr.Type)
+	errorMessage := streamErr.Message
+
+	// Log full error details server-side for debugging
+	log.Printf("[MetricsStreamWrapper] Stream abort: provider=%s, model=%s, session=%s, error_type=%s, error_message=%s, original_error=%v",
+		w.providerName, w.modelID, w.sessionID, errorType, errorMessage, err)
+
+	// Build metadata with error tracking info
+	metadata := map[string]interface{}{
+		"chunks_received":      metrics.ChunksReceived,
+		"stream_interruptions": metrics.StreamInterruptions,
+		"error_type":           errorType,
+		"bytes_read":           metrics.BytesRead,
+		"bytes_written":        metrics.BytesWritten,
+	}
+
+	// Add byte mismatch info if present
+	if metrics.ByteMismatch {
+		metadata["byte_mismatch"] = true
 	}
 
 	event := types.MetricEvent{
@@ -416,10 +435,7 @@ func (w *MetricsStreamWrapper) recordStreamAbort(err error) {
 		OutputTokens:    metrics.TokensReceived,
 		ErrorType:       errorType,
 		ErrorMessage:    errorMessage,
-		Metadata: map[string]interface{}{
-			"chunks_received":      metrics.ChunksReceived,
-			"stream_interruptions": metrics.StreamInterruptions,
-		},
+		Metadata:        metadata,
 	}
 
 	_ = w.collector.RecordEvent(w.ctx, event)
