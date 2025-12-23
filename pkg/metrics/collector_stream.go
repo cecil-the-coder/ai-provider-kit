@@ -16,7 +16,7 @@ type streamMetrics struct {
 	successfulStreamRequests atomic.Int64
 	failedStreamRequests     atomic.Int64
 
-	ttftHistogram *Histogram // Time to first token
+	ttftHistogram        *Histogram // Time to first token
 	chunkTimingHistogram *Histogram // Time between chunks
 
 	totalStreamedTokens atomic.Int64
@@ -37,7 +37,7 @@ type streamMetrics struct {
 // newStreamMetrics creates a new streamMetrics instance
 func newStreamMetrics() *streamMetrics {
 	return &streamMetrics{
-		ttftHistogram:       NewHistogram(1000),
+		ttftHistogram:        NewHistogram(1000),
 		chunkTimingHistogram: NewHistogram(1000),
 	}
 }

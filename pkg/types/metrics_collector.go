@@ -488,12 +488,12 @@ type MetricEvent struct {
 	StatusCode int `json:"status_code,omitempty"` // HTTP status code
 
 	// Streaming context (for streaming events)
-	IsStreaming       bool          `json:"is_streaming,omitempty"`         // Indicates this is a streaming request
-	StreamSessionID   string        `json:"stream_session_id,omitempty"`    // Correlate related stream events
-	StreamChunkIndex  int           `json:"stream_chunk_index,omitempty"`   // Which chunk (0-indexed)
-	TimeToFirstToken  time.Duration `json:"time_to_first_token,omitempty"`  // TTFT for stream_start events
-	ChunkInterval     time.Duration `json:"chunk_interval,omitempty"`       // Time since previous chunk (for chunk events)
-	TokensPerSecond   float64       `json:"tokens_per_second,omitempty"`    // Throughput for stream_end events
+	IsStreaming      bool          `json:"is_streaming,omitempty"`        // Indicates this is a streaming request
+	StreamSessionID  string        `json:"stream_session_id,omitempty"`   // Correlate related stream events
+	StreamChunkIndex int           `json:"stream_chunk_index,omitempty"`  // Which chunk (0-indexed)
+	TimeToFirstToken time.Duration `json:"time_to_first_token,omitempty"` // TTFT for stream_start events
+	ChunkInterval    time.Duration `json:"chunk_interval,omitempty"`      // Time since previous chunk (for chunk events)
+	TokensPerSecond  float64       `json:"tokens_per_second,omitempty"`   // Throughput for stream_end events
 
 	// Virtual provider context (for fallback/racing/loadbalance events)
 	FromProvider     string                   `json:"from_provider,omitempty"`     // Provider switched from
