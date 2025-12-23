@@ -3,6 +3,7 @@ package utils
 import (
 	"sync"
 
+	"github.com/cecil-the-coder/ai-provider-kit/internal/tokenizer"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 )
 
@@ -99,7 +100,16 @@ func EstimateTokensFast(text string, maxTokens int) int {
 // This is more accurate than EstimateTokensFromString but slower.
 // The encoding is automatically selected based on the model name.
 // Results are cached for performance.
+//
+// When the Rust tokenizer is available (via -tags=rusttokenizer), it provides
+// 3-15x faster tokenization compared to the pure Go implementation.
 func CountTokens(text, model string) (int, error) {
+	// Try the fast path with Rust tokenizer first
+	if tokenizer.IsRustAvailable() {
+		return tokenizer.CountTokens(text, model)
+	}
+
+	// Fall back to cached Go implementation
 	cache := GetTiktokenCache()
 	return cache.CountTokens(text, model)
 }
@@ -107,11 +117,24 @@ func CountTokens(text, model string) (int, error) {
 // CountTokensFromMessages returns accurate token count for ChatMessages using tiktoken.
 // Uses parallel encoding for multiple messages and caches results.
 // The encoding is automatically selected based on the model name.
+//
+// When the Rust tokenizer is available (via -tags=rusttokenizer), it uses
+// batch processing for even better performance.
 func CountTokensFromMessages(messages []types.ChatMessage, model string) (int, error) {
 	if len(messages) == 0 {
 		return 0, nil
 	}
 
+	// Try the fast path with Rust tokenizer first
+	if tokenizer.IsRustAvailable() {
+		texts := make([]string, len(messages))
+		for i, msg := range messages {
+			texts[i] = msg.GetTextContent()
+		}
+		return tokenizer.CountBatch(texts, model)
+	}
+
+	// Fall back to cached Go implementation
 	cache := GetTiktokenCache()
 	texts := make([]string, len(messages))
 	for i, msg := range messages {

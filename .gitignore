@@ -1,2 +1,5 @@
 workflow_logs/
 *.test
+
+# Rust tokenizer build artifacts
+internal/tokenizer/tokenizer-lib/target/

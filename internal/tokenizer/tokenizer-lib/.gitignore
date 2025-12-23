@@ -1,0 +1,13 @@
+# Rust build artifacts
+/target/
+**/*.rs.bk
+*.pdb
+
+# Cargo locks (optional - uncomment if you want to ignore Cargo.lock)
+# Cargo.lock
+
+# Build outputs
+*.a
+*.so
+*.dylib
+*.dll
