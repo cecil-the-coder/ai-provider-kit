@@ -17,6 +17,7 @@ import (
 	"time"
 
 	pkghttp "github.com/cecil-the-coder/ai-provider-kit/internal/http"
+	"github.com/cecil-the-coder/ai-provider-kit/internal/clientpool"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/base"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common/auth"
@@ -85,14 +86,6 @@ func NewGeminiProvider(config types.ProviderConfig) *GeminiProvider {
 	// Merge with defaults and extract configuration
 	mergedConfig := configHelper.MergeWithDefaults(config)
 
-	// Create HTTP client using internal/http package
-	httpClient := pkghttp.NewHTTPClient(pkghttp.HTTPClientConfig{
-		Timeout: configHelper.ExtractTimeout(mergedConfig),
-	})
-
-	// Extract the underlying http.Client for compatibility with existing code
-	client := httpClient.Client()
-
 	// Extract Gemini-specific config
 	var geminiConfig GeminiConfig
 	if err := configHelper.ExtractProviderSpecificConfig(mergedConfig, &geminiConfig); err != nil {
@@ -105,6 +98,19 @@ func NewGeminiProvider(config types.ProviderConfig) *GeminiProvider {
 		// In constructor, we log the error but continue with default config
 		log.Printf("Warning: failed to apply top-level overrides in NewGeminiProvider: %v", err)
 	}
+
+	// Determine base URL for client pooling
+	baseURL := geminiConfig.BaseURL
+	if baseURL == "" {
+		baseURL = standardGeminiBaseURL
+	}
+
+	// Get shared HTTP client from pool keyed by base URL
+	timeout := configHelper.ExtractTimeout(mergedConfig)
+	httpClient := clientpool.GetClientWithTimeout(baseURL, timeout)
+
+	// Extract the underlying http.Client for compatibility with existing code
+	client := httpClient.Client()
 
 	// Create auth helper
 	authHelper := auth.NewAuthHelper("gemini", mergedConfig, client)

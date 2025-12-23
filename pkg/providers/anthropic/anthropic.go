@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	pkghttp "github.com/cecil-the-coder/ai-provider-kit/internal/http"
+	"github.com/cecil-the-coder/ai-provider-kit/internal/clientpool"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/base"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common/auth"
@@ -68,14 +68,6 @@ func NewAnthropicProvider(config types.ProviderConfig) *AnthropicProvider {
 	// Merge with defaults and extract configuration
 	mergedConfig := configHelper.MergeWithDefaults(config)
 
-	// Create HTTP client using internal/http package
-	httpClient := pkghttp.NewHTTPClient(pkghttp.HTTPClientConfig{
-		Timeout: configHelper.ExtractTimeout(mergedConfig),
-	})
-
-	// Extract the underlying http.Client for compatibility with existing code
-	client := httpClient.Client()
-
 	// Extract Anthropic-specific config
 	var anthropicConfig AnthropicConfig
 	if err := configHelper.ExtractProviderSpecificConfig(mergedConfig, &anthropicConfig); err != nil {
@@ -94,21 +86,21 @@ func NewAnthropicProvider(config types.ProviderConfig) *AnthropicProvider {
 		anthropicConfig.OAuthClientID = configHelper.ExtractDefaultOAuthClientID()
 	}
 
-	// Create auth helper
-	authHelper := auth.NewAuthHelper("anthropic", mergedConfig, client)
-
-	// Setup API keys using shared helper
-	authHelper.SetupAPIKeys()
-
-	// Setup OAuth using shared helper with refresh function factory
-	refreshFactory := auth.NewRefreshFuncFactory("anthropic", client)
-	authHelper.SetupOAuth(refreshFactory.CreateAnthropicRefreshFunc())
-
 	// Determine base URL
 	baseURL := anthropicConfig.BaseURL
 	if baseURL == "" {
 		baseURL = "https://api.anthropic.com"
 	}
+
+	// Get shared HTTP client from pool keyed by base URL
+	timeout := configHelper.ExtractTimeout(mergedConfig)
+	httpClient := clientpool.GetClientWithTimeout(baseURL, timeout)
+
+	// Extract the underlying http.Client for compatibility with existing code
+	client := httpClient.Client()
+
+	// Create auth helper
+	authHelper := auth.NewAuthHelper("anthropic", mergedConfig, client)
 
 	// Create rate limit helper
 	rateLimitHelper := common.NewRateLimitHelper(ratelimit.NewAnthropicParser())

@@ -15,6 +15,7 @@ import (
 	"time"
 
 	pkghttp "github.com/cecil-the-coder/ai-provider-kit/internal/http"
+	"github.com/cecil-the-coder/ai-provider-kit/internal/clientpool"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/base"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common/auth"
@@ -51,10 +52,12 @@ func NewQwenProvider(config types.ProviderConfig) *QwenProvider {
 	// Merge with defaults and extract configuration
 	mergedConfig := configHelper.MergeWithDefaults(config)
 
-	// Create HTTP client using internal/http package
-	httpClient := pkghttp.NewHTTPClient(pkghttp.HTTPClientConfig{
-		Timeout: configHelper.ExtractTimeout(mergedConfig),
-	})
+	// Extract base URL for client pooling
+	baseURL := configHelper.ExtractBaseURL(mergedConfig)
+	timeout := configHelper.ExtractTimeout(mergedConfig)
+
+	// Get shared HTTP client from pool keyed by base URL
+	httpClient := clientpool.GetClientWithTimeout(baseURL, timeout)
 
 	// Create auth helper with the underlying http.Client
 	authHelper := auth.NewAuthHelper("qwen", mergedConfig, httpClient.Client())

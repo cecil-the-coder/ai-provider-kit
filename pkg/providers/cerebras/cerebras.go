@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/cecil-the-coder/ai-provider-kit/internal/clientpool"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/base"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common/auth"
@@ -45,9 +46,13 @@ func NewCerebrasProvider(config types.ProviderConfig) *CerebrasProvider {
 	// Merge with defaults and extract configuration
 	mergedConfig := configHelper.MergeWithDefaults(config)
 
-	client := &http.Client{
-		Timeout: configHelper.ExtractTimeout(mergedConfig),
-	}
+	// Extract base URL for client pooling
+	baseURL := configHelper.ExtractBaseURL(mergedConfig)
+	timeout := configHelper.ExtractTimeout(mergedConfig)
+
+	// Get shared HTTP client from pool keyed by base URL
+	httpClient := clientpool.GetClientWithTimeout(baseURL, timeout)
+	client := httpClient.Client()
 
 	// Create auth helper
 	authHelper := auth.NewAuthHelper("cerebras", mergedConfig, client)

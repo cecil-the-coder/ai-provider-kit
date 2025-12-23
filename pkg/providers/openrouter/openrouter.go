@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cecil-the-coder/ai-provider-kit/internal/clientpool"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/base"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/common/auth"
@@ -117,9 +118,9 @@ func NewOpenRouterProvider(config types.ProviderConfig) *OpenRouterProvider {
 		modelStrategy = "failover"
 	}
 
-	client := &http.Client{
-		Timeout: 60 * time.Second,
-	}
+	// Get shared HTTP client from pool keyed by base URL
+	httpClient := clientpool.GetClientWithTimeout(baseURL, 60*time.Second)
+	client := httpClient.Client()
 
 	// Create auth helper
 	authHelper := auth.NewAuthHelper("openrouter", config, client)
