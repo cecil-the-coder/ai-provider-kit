@@ -85,6 +85,10 @@ func (p *CopilotProvider) GetDefaultModel() string {
 	if config.DefaultModel != "" {
 		return config.DefaultModel
 	}
+	// Also check copilot-specific model config
+	if p.config.Model != "" {
+		return p.config.Model
+	}
 	return copilotDefaultModel
 }
 
@@ -219,8 +223,14 @@ func (p *CopilotProvider) RefreshAllOAuthTokens(ctx context.Context) error {
 	return p.refreshCopilotToken(ctx)
 }
 
-// GetBaseURL returns the appropriate base URL based on account type
+// GetBaseURL returns the appropriate base URL based on account type or custom base URL
 func (p *CopilotProvider) GetBaseURL() string {
+	// Prefer custom BaseURL if configured
+	if p.config.BaseURL != "" {
+		return p.config.BaseURL
+	}
+
+	// Otherwise, use account type defaults
 	switch p.config.AccountType {
 	case AccountTypeBusiness:
 		return CopilotBusinessBaseURL

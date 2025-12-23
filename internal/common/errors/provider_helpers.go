@@ -35,13 +35,27 @@ func NewProviderErrorHelperWithConfig(provider types.ProviderType, config *Snaps
 // WrapHTTPError wraps an HTTP error with rich context.
 // It automatically detects the error type based on status code.
 func (h *ProviderErrorHelper) WrapHTTPError(req *http.Request, resp *http.Response, err error) *RichError {
-	// Determine the base error
+	// Determine the base error and wrap with appropriate sentinel error
 	var baseErr error
 	if err != nil {
 		baseErr = err
 	} else if resp != nil {
-		// Create error from response
-		baseErr = fmt.Errorf("HTTP %d: %s", resp.StatusCode, http.StatusText(resp.StatusCode))
+		// Create error from response and wrap with sentinel error based on status code
+		statusMsg := fmt.Sprintf("HTTP %d: %s", resp.StatusCode, http.StatusText(resp.StatusCode))
+		switch resp.StatusCode {
+		case 400, 404, 409, 422, 499: // Various client errors
+			baseErr = fmt.Errorf("%s: %w", statusMsg, ErrInvalidRequest)
+		case 401:
+			baseErr = fmt.Errorf("%s: %w", statusMsg, ErrNotAuthenticated)
+		case 403:
+			baseErr = fmt.Errorf("%s: %w", statusMsg, ErrUnauthorized)
+		case 429:
+			baseErr = fmt.Errorf("%s: %w", statusMsg, ErrRateLimited)
+		case 500, 502, 503, 504:
+			baseErr = fmt.Errorf("%s: %w", statusMsg, ErrServerError)
+		default:
+			baseErr = fmt.Errorf("%s", statusMsg)
+		}
 	} else {
 		baseErr = fmt.Errorf("unknown HTTP error")
 	}
@@ -122,7 +136,9 @@ func (h *ProviderErrorHelper) WrapAuthError(operation string, err error) *RichEr
 		return nil
 	}
 
-	return NewRichError(err).
+	// Wrap with sentinel error so it's identifiable as an auth error
+	baseErr := fmt.Errorf("%w: %v", ErrNotAuthenticated, err)
+	return NewRichError(baseErr).
 		WithProvider(h.provider).
 		WithOperation(operation)
 }
@@ -180,7 +196,9 @@ func (h *ProviderErrorHelper) WrapNetworkError(operation string, err error) *Ric
 		return nil
 	}
 
-	return NewRichError(err).
+	// Wrap with sentinel error so it's identifiable as a network error
+	baseErr := fmt.Errorf("%w: %v", ErrNetworkError, err)
+	return NewRichError(baseErr).
 		WithProvider(h.provider).
 		WithOperation(operation)
 }

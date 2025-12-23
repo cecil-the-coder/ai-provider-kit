@@ -119,10 +119,23 @@ func (p *CopilotProvider) prepareRequest(options types.GenerateOptions, model st
 		})
 	} else {
 		for _, msg := range options.Messages {
-			messages = append(messages, ChatMessage{
-				Role:    msg.Role,
-				Content: convertContent(msg.Content),
-			})
+			// If Parts are set, convert them to ContentPart array
+			if len(msg.Parts) > 0 {
+				parts := make([]ContentPart, 0, len(msg.Parts))
+				for _, part := range msg.Parts {
+					converted := convertContentPart(part)
+					parts = append(parts, converted)
+				}
+				messages = append(messages, ChatMessage{
+					Role:    msg.Role,
+					Content: parts,
+				})
+			} else {
+				messages = append(messages, ChatMessage{
+					Role:    msg.Role,
+					Content: convertContent(msg.Content),
+				})
+			}
 		}
 	}
 
@@ -307,10 +320,26 @@ func convertContent(content interface{}) interface{} {
 				if text, ok := itemMap["text"].(string); ok {
 					part.Text = text
 				}
-				if imageURL, ok := itemMap["image_url"].(map[string]interface{}); ok {
-					if url, ok := imageURL["url"].(string); ok {
+				if imageURL, ok := itemMap["image_url"]; ok {
+					url := ""
+					detail := ""
+					switch img := imageURL.(type) {
+					case map[string]interface{}:
+						if u, ok := img["url"].(string); ok {
+							url = u
+						}
+						if d, ok := img["detail"].(string); ok {
+							detail = d
+						}
+					case map[string]string:
+						url = img["url"]
+						if d, ok := img["detail"]; ok {
+							detail = d
+						}
+					}
+					if url != "" {
 						part.ImageURL = &ImageURL{URL: url}
-						if detail, ok := imageURL["detail"].(string); ok {
+						if detail != "" {
 							part.ImageURL.Detail = detail
 						}
 					}
@@ -322,6 +351,26 @@ func convertContent(content interface{}) interface{} {
 	default:
 		return content
 	}
+}
+
+// convertContentPart converts a types.ContentPart to a Copilot ContentPart
+func convertContentPart(part types.ContentPart) ContentPart {
+	result := ContentPart{Type: part.Type}
+
+	if part.Text != "" {
+		result.Text = part.Text
+	}
+
+	// Handle image content
+	if part.Source != nil && part.Source.Type == "url" {
+		result.Type = "image_url"
+		result.ImageURL = &ImageURL{
+			URL:    part.Source.URL,
+			Detail: "auto",
+		}
+	}
+
+	return result
 }
 
 func convertTools(tools []types.Tool) []Tool {
@@ -501,7 +550,8 @@ func (s *CopilotStream) Next() (types.ChatCompletionChunk, error) {
 			}
 		}
 
-		if chunk.Usage.PromptTokens > 0 || chunk.Usage.CompletionTokens > 0 {
+		// Extract usage if available (may be nil in streaming chunks)
+		if chunk.Usage != nil && (chunk.Usage.PromptTokens > 0 || chunk.Usage.CompletionTokens > 0) {
 			internalChunk.Usage = types.Usage{
 				PromptTokens:     chunk.Usage.PromptTokens,
 				CompletionTokens: chunk.Usage.CompletionTokens,
