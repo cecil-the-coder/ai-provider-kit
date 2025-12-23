@@ -61,7 +61,8 @@ type GeminiConfig struct {
 // NewGeminiProvider creates a new Gemini provider
 func NewGeminiProvider(config types.ProviderConfig) *GeminiProvider {
 	// Use the shared provider initializer
-	result, err := common.InitializeProvider("Gemini", types.ProviderTypeGemini, config, common.ProviderInitializerOptions{})
+	// Note: Provider name must be lowercase to match authhelper switch cases
+	result, err := common.InitializeProvider("gemini", types.ProviderTypeGemini, config, common.ProviderInitializerOptions{})
 	if err != nil {
 		// In constructor, we log but continue with defaults
 		log.Printf("Warning: failed to initialize Gemini provider: %v", err)

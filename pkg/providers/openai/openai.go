@@ -41,7 +41,8 @@ type OpenAIProvider struct {
 // NewOpenAIProvider creates a new OpenAI provider
 func NewOpenAIProvider(config types.ProviderConfig) *OpenAIProvider {
 	// Use the shared provider initializer
-	result, err := common.InitializeProvider("OpenAI", types.ProviderTypeOpenAI, config, common.ProviderInitializerOptions{})
+	// Note: Provider name must be lowercase to match authhelper switch cases
+	result, err := common.InitializeProvider("openai", types.ProviderTypeOpenAI, config, common.ProviderInitializerOptions{})
 	if err != nil {
 		// In constructor, we log but continue with defaults
 		log.Printf("Warning: failed to initialize OpenAI provider: %v", err)

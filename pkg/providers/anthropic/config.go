@@ -41,7 +41,8 @@ type AnthropicConfig struct {
 // NewAnthropicProvider creates a new Anthropic provider
 func NewAnthropicProvider(config types.ProviderConfig) *AnthropicProvider {
 	// Use the shared provider initializer
-	result, err := common.InitializeProvider("Anthropic", types.ProviderTypeAnthropic, config, common.ProviderInitializerOptions{})
+	// Note: Provider name must be lowercase to match authhelper switch cases
+	result, err := common.InitializeProvider("anthropic", types.ProviderTypeAnthropic, config, common.ProviderInitializerOptions{})
 	if err != nil {
 		// In constructor, we log but continue with defaults
 		log.Printf("Warning: failed to initialize Anthropic provider: %v", err)
