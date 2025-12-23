@@ -1,17 +1,12 @@
 package openai
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
-	"fmt"
-	"io"
 	"log"
 	"net/http"
 	"strings"
 
 	"github.com/cecil-the-coder/ai-provider-kit/internal/common/streaming"
-	"github.com/cecil-the-coder/ai-provider-kit/internal/common/telemetry"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 )
 
@@ -31,49 +26,23 @@ func (p *OpenAIProvider) makeStreamingAPICall(ctx context.Context, requestData O
 	return stream, nil
 }
 
-// makeStreamingAPICallInternal is the internal implementation without GLM retry wrapper
+// makeStreamingAPICallInternal is the internal implementation without GLM retry wrapper using shared executor
 func (p *OpenAIProvider) makeStreamingAPICallInternal(ctx context.Context, requestData OpenAIRequest, apiKey string) (types.ChatCompletionStream, error) {
 	requestData.Stream = true
-	jsonBody, err := json.Marshal(requestData)
-	if err != nil {
-		return nil, types.NewInvalidRequestError(types.ProviderTypeOpenAI, "failed to marshal request").
-			WithOperation("makeStreamingAPICall").
-			WithOriginalErr(err)
-	}
-
 	url := p.baseURL + "/chat/completions"
-	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonBody))
-	if err != nil {
-		return nil, types.NewNetworkError(types.ProviderTypeOpenAI, "failed to create request").
-			WithOperation("makeStreamingAPICall").
-			WithOriginalErr(err)
-	}
 
-	req.Header.Set("Content-Type", "application/json")
-	p.authHelper.SetAuthHeaders(req, apiKey, "api_key")
-	p.authHelper.SetProviderSpecificHeaders(req)
-	req.Header.Set("User-Agent", telemetry.GetUserAgent())
+	// Use shared streaming executor
+	executor := streaming.NewRequestBuilder(types.ProviderTypeOpenAI, p.client).
+		WithStreamCreator(streaming.CreateOpenAIStream).
+		WithRateLimitHelper(p.rateLimitHelper).
+		WithRequestPreparer(func(req *http.Request) error {
+			// Set provider-specific headers for OpenAI
+			p.authHelper.SetProviderSpecificHeaders(req)
+			return nil
+		}).
+		Build()
 
-	resp, err := p.client.Do(req)
-	if err != nil {
-		return nil, types.NewNetworkError(types.ProviderTypeOpenAI, "request failed").
-			WithOperation("makeStreamingAPICall").
-			WithOriginalErr(err)
-	}
-
-	// Parse and update rate limit info from response headers
-	p.rateLimitHelper.ParseAndUpdateRateLimits(resp.Header, requestData.Model)
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		func() { _ = resp.Body.Close() }()
-		return nil, types.NewServerError(types.ProviderTypeOpenAI, resp.StatusCode, fmt.Sprintf("OpenAI API error: %s", string(body))).
-			WithOperation("makeStreamingAPICall")
-	}
-
-	// Use the shared streaming utility
-	stream := streaming.CreateOpenAIStream(resp)
-	return streaming.StreamFromContext(ctx, stream), nil
+	return executor.ExecuteWithJSONBody(ctx, url, requestData, apiKey, "api_key")
 }
 
 // executeStreamWithAuth handles streaming requests with authentication

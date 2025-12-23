@@ -4,13 +4,11 @@ package anthropic
 import (
 	"context"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 
 	"github.com/cecil-the-coder/ai-provider-kit/internal/common/auth"
 	"github.com/cecil-the-coder/ai-provider-kit/internal/common/streaming"
-	"github.com/cecil-the-coder/ai-provider-kit/internal/common/telemetry"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 )
 
@@ -65,7 +63,7 @@ func (p *AnthropicProvider) executeStreamWithAuth(ctx context.Context, options t
 		WithOperation("executeStreamWithAuth")
 }
 
-// makeStreamingAPICallWithKey makes a streaming API call with API key
+// makeStreamingAPICallWithKey makes a streaming API call with API key using shared executor
 func (p *AnthropicProvider) makeStreamingAPICallWithKey(ctx context.Context, requestData AnthropicRequest, apiKey string) (types.ChatCompletionStream, error) {
 	config := p.GetConfig()
 	baseURL := config.BaseURL
@@ -74,53 +72,21 @@ func (p *AnthropicProvider) makeStreamingAPICallWithKey(ctx context.Context, req
 	}
 	url := baseURL + "/v1/messages"
 
-	// Create HTTP request
-	req, err := http.NewRequestWithContext(ctx, "POST", url, nil)
-	if err != nil {
-		return nil, types.NewNetworkError(types.ProviderTypeAnthropic, "failed to create request").
-			WithOperation("makeStreamingAPICallWithKey").
-			WithOriginalErr(err)
-	}
+	// Use shared streaming executor
+	executor := streaming.NewRequestBuilder(types.ProviderTypeAnthropic, p.client).
+		WithStreamCreator(streaming.CreateAnthropicStream).
+		WithRateLimitHelper(p.rateLimitHelper).
+		WithRequestPreparer(func(req *http.Request) error {
+			// Set provider-specific headers for Anthropic
+			p.authHelper.SetProviderSpecificHeaders(req)
+			return nil
+		}).
+		Build()
 
-	// Prepare JSON body using request handler
-	jsonBody, err := p.requestHandler.PrepareJSONBody(requestData)
-	if err != nil {
-		return nil, err
-	}
-	req.Body = io.NopCloser(jsonBody)
-
-	// Use auth helper to set headers
-	p.authHelper.SetAuthHeaders(req, apiKey, "api_key")
-	p.authHelper.SetProviderSpecificHeaders(req)
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("User-Agent", telemetry.GetUserAgent())
-
-	resp, err := p.client.Do(req)
-	if err != nil {
-		return nil, types.NewNetworkError(types.ProviderTypeAnthropic, "request failed").
-			WithOperation("makeStreamingAPICallWithKey").
-			WithOriginalErr(err)
-	}
-
-	// Parse rate limit headers from streaming response
-	p.rateLimitHelper.ParseAndUpdateRateLimits(resp.Header, requestData.Model)
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		func() {
-			//nolint:staticcheck // Empty branch is intentional - we ignore close errors
-			_ = resp.Body.Close()
-		}()
-		return nil, types.NewServerError(types.ProviderTypeAnthropic, resp.StatusCode, fmt.Sprintf("anthropic API error: %s", string(body))).
-			WithOperation("makeStreamingAPICallWithKey")
-	}
-
-	// Use the shared streaming utility
-	stream := streaming.CreateAnthropicStream(resp)
-	return streaming.StreamFromContext(ctx, stream), nil
+	return executor.ExecuteWithJSONBody(ctx, url, requestData, apiKey, "api_key")
 }
 
-// makeStreamingAPICallWithOAuth makes a streaming API call with OAuth
+// makeStreamingAPICallWithOAuth makes a streaming API call with OAuth using shared executor
 func (p *AnthropicProvider) makeStreamingAPICallWithOAuth(ctx context.Context, requestData AnthropicRequest, accessToken string) (types.ChatCompletionStream, error) {
 	// Add Claude Code system prompt as FIRST element
 	claudeCodePrompt := map[string]string{
@@ -142,48 +108,19 @@ func (p *AnthropicProvider) makeStreamingAPICallWithOAuth(ctx context.Context, r
 	}
 	url := baseURL + "/v1/messages"
 
-	// Create HTTP request
-	req, err := http.NewRequestWithContext(ctx, "POST", url, nil)
-	if err != nil {
-		return nil, types.NewNetworkError(types.ProviderTypeAnthropic, "failed to create request").
-			WithOperation("makeStreamingAPICallWithOAuth").
-			WithOriginalErr(err)
-	}
+	// Use shared streaming executor
+	executor := streaming.NewRequestBuilder(types.ProviderTypeAnthropic, p.client).
+		WithStreamCreator(streaming.CreateAnthropicStream).
+		WithRateLimitHelper(p.rateLimitHelper).
+		WithExtraHeaders(map[string]string{
+			"anthropic-beta": "oauth-2025-04-20,claude-code-20250219,interleaved-thinking-2025-05-14,fine-grained-tool-streaming-2025-05-14",
+		}).
+		WithRequestPreparer(func(req *http.Request) error {
+			// Set provider-specific headers for Anthropic OAuth
+			p.authHelper.SetProviderSpecificHeaders(req)
+			return nil
+		}).
+		Build()
 
-	// Prepare JSON body using request handler
-	jsonBody, err := p.requestHandler.PrepareJSONBody(requestData)
-	if err != nil {
-		return nil, err
-	}
-	req.Body = io.NopCloser(jsonBody)
-
-	// Use auth helper to set OAuth headers
-	p.authHelper.SetAuthHeaders(req, accessToken, "oauth")
-	p.authHelper.SetProviderSpecificHeaders(req)
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("User-Agent", telemetry.GetUserAgent())
-
-	resp, err := p.client.Do(req)
-	if err != nil {
-		return nil, types.NewNetworkError(types.ProviderTypeAnthropic, "request failed").
-			WithOperation("makeStreamingAPICallWithOAuth").
-			WithOriginalErr(err)
-	}
-
-	// Parse rate limit headers from streaming response
-	p.rateLimitHelper.ParseAndUpdateRateLimits(resp.Header, requestData.Model)
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		func() {
-			//nolint:staticcheck // Empty branch is intentional - we ignore close errors
-			_ = resp.Body.Close()
-		}()
-		return nil, types.NewServerError(types.ProviderTypeAnthropic, resp.StatusCode, fmt.Sprintf("anthropic API error: %s", string(body))).
-			WithOperation("makeStreamingAPICallWithOAuth")
-	}
-
-	// Use the shared streaming utility
-	stream := streaming.CreateAnthropicStream(resp)
-	return streaming.StreamFromContext(ctx, stream), nil
+	return executor.ExecuteWithJSONBody(ctx, url, requestData, accessToken, "oauth")
 }

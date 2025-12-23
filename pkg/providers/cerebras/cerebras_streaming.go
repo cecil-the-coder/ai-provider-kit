@@ -10,45 +10,28 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/cecil-the-coder/ai-provider-kit/internal/common/streaming"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 )
 
-// makeStreamingAPICall makes a streaming API call
+// makeStreamingAPICall makes a streaming API call using shared executor
 func (p *CerebrasProvider) makeStreamingAPICall(ctx context.Context, url string, request CerebrasRequest, apiKey string) (types.ChatCompletionStream, error) {
-	req, err := p.authHelper.CreateJSONRequest(ctx, "POST", url, request, apiKey, "api_key")
-	if err != nil {
-		return nil, types.NewInvalidRequestError(types.ProviderTypeCerebras, "failed to create request").
-			WithOperation("chat_completion_stream").
-			WithOriginalErr(err)
+	// Create stream creator for Cerebras' custom stream
+	streamCreator := func(resp *http.Response) types.ChatCompletionStream {
+		return &CerebrasRealStream{
+			response: resp,
+			reader:   bufio.NewReader(resp.Body),
+			done:     false,
+		}
 	}
 
-	resp, err := p.httpClient.Do(req)
-	if err != nil {
-		return nil, types.NewNetworkError(types.ProviderTypeCerebras, "request failed").
-			WithOperation("chat_completion_stream").
-			WithOriginalErr(err)
-	}
+	// Use shared streaming executor
+	executor := streaming.NewRequestBuilder(types.ProviderTypeCerebras, p.httpClient).
+		WithStreamCreator(streamCreator).
+		WithRateLimitHelper(p.rateLimitHelper).
+		Build()
 
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		func() {
-			//nolint:staticcheck // Empty branch is intentional - we ignore close errors
-			_ = resp.Body.Close()
-		}()
-		errCode := types.ClassifyHTTPError(resp.StatusCode)
-		return nil, types.NewProviderError(types.ProviderTypeCerebras, errCode, string(body)).
-			WithOperation("chat_completion_stream").
-			WithStatusCode(resp.StatusCode)
-	}
-
-	// Parse rate limit headers for streaming responses
-	p.rateLimitHelper.ParseAndUpdateRateLimits(resp.Header, request.Model)
-
-	return &CerebrasRealStream{
-		response: resp,
-		reader:   bufio.NewReader(resp.Body),
-		done:     false,
-	}, nil
+	return executor.ExecuteWithJSONBody(ctx, url, request, apiKey, "api_key")
 }
 
 // CerebrasRealStream implements ChatCompletionStream for real streaming responses

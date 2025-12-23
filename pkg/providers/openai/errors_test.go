@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -246,7 +247,11 @@ func TestMakeStreamingAPICall_ErrorHandling(t *testing.T) {
 		stream, err := provider.makeStreamingAPICall(context.Background(), request, "sk-test-key")
 		assert.Error(t, err)
 		assert.Nil(t, stream)
-		assert.Contains(t, err.Error(), "OpenAI API error")
+		// Check for either old or new error format to support both implementations
+		errMsg := err.Error()
+		if !strings.Contains(errMsg, "OpenAI API error") && !strings.Contains(errMsg, "[openai]") {
+			t.Errorf("Expected error message to contain 'OpenAI API error' or '[openai]', got: %s", errMsg)
+		}
 	})
 }
 

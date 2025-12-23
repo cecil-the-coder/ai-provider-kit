@@ -4,7 +4,6 @@ package qwen
 
 import (
 	"bufio"
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -13,7 +12,6 @@ import (
 	"net/http"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/cecil-the-coder/ai-provider-kit/internal/common/auth"
 	"github.com/cecil-the-coder/ai-provider-kit/internal/common/streaming"
@@ -177,59 +175,24 @@ func (p *QwenProvider) executeStreamWithAuth(ctx context.Context, options types.
 		WithOperation("executeStreamWithAuth")
 }
 
-// makeStreamingAPICall makes a streaming API call to Qwen
+// makeStreamingAPICall makes a streaming API call to Qwen using shared executor
 func (p *QwenProvider) makeStreamingAPICall(ctx context.Context, url string, request QwenRequest, authToken string) (types.ChatCompletionStream, error) {
-	jsonBody, err := json.Marshal(request)
-	if err != nil {
-		return nil, types.NewInvalidRequestError(types.ProviderTypeQwen, "failed to marshal request").
-			WithOperation("chat_completion_stream").
-			WithOriginalErr(err)
+	// Create stream creator for Qwen's custom stream
+	streamCreator := func(resp *http.Response) types.ChatCompletionStream {
+		return &QwenRealStream{
+			response: resp,
+			reader:   bufio.NewReader(resp.Body),
+			done:     false,
+		}
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonBody))
-	if err != nil {
-		return nil, types.NewInvalidRequestError(types.ProviderTypeQwen, "failed to create request").
-			WithOperation("chat_completion_stream").
-			WithOriginalErr(err)
-	}
+	// Use shared streaming executor
+	executor := streaming.NewRequestBuilder(types.ProviderTypeQwen, p.client).
+		WithStreamCreator(streamCreator).
+		WithRateLimitHelper(p.rateLimitHelper).
+		Build()
 
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", authToken))
-
-	// Log the request
-	p.LogRequest("POST", url, map[string]string{
-		"Content-Type":  "application/json",
-		"Authorization": "Bearer ***",
-	}, request)
-
-	startTime := time.Now()
-	resp, err := p.client.Do(req)
-	if err != nil {
-		return nil, types.NewNetworkError(types.ProviderTypeQwen, "request failed").
-			WithOperation("chat_completion_stream").
-			WithOriginalErr(err)
-	}
-
-	duration := time.Since(startTime)
-	p.LogResponse(resp, duration)
-
-	// Parse rate limit headers from streaming response (flexible multi-format parser)
-	p.rateLimitHelper.ParseAndUpdateRateLimits(resp.Header, request.Model)
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		func() { _ = resp.Body.Close() }() //nolint:staticcheck // Empty branch is intentional - we ignore close errors
-		errCode := types.ClassifyHTTPError(resp.StatusCode)
-		return nil, types.NewProviderError(types.ProviderTypeQwen, errCode, string(body)).
-			WithOperation("chat_completion_stream").
-			WithStatusCode(resp.StatusCode)
-	}
-
-	return &QwenRealStream{
-		response: resp,
-		reader:   bufio.NewReader(resp.Body),
-		done:     false,
-	}, nil
+	return executor.ExecuteWithJSONBody(ctx, url, request, authToken, "bearer")
 }
 
 // convertToQwenTools converts universal tools to Qwen format
