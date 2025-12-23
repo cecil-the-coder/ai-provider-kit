@@ -376,27 +376,47 @@ func TestSchemaConverter_ConvertRequest(t *testing.T) {
 	tests := []struct {
 		name    string
 		backend BackendType
+		config  *ClientConfig
 	}{
-		{"Gemini API", BackendGeminiAPI},
-		{"Vertex AI", BackendVertexAI},
+		{"Gemini API", BackendGeminiAPI, nil},
+		{"Vertex AI", BackendVertexAI, nil},
+		{"Code Assist API", BackendCodeAssist, &ClientConfig{ProjectID: "test-project"}},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			converter := NewSchemaConverter(tt.backend)
+			var converter *SchemaConverter
+			if tt.config != nil {
+				converter = NewSchemaConverterWithConfig(tt.backend, tt.config)
+			} else {
+				converter = NewSchemaConverter(tt.backend)
+			}
 			converted, err := converter.ConvertRequest(req)
 			if err != nil {
 				t.Errorf("Expected no error but got: %v", err)
 			}
 
-			// Verify the conversion
-			convertedReq, ok := converted.(GenerateContentRequest)
-			if !ok {
-				t.Errorf("Expected GenerateContentRequest but got different type")
-			}
-
-			if len(convertedReq.Contents) != len(req.Contents) {
-				t.Errorf("Expected %d contents, got %d", len(req.Contents), len(convertedReq.Contents))
+			if tt.backend == BackendCodeAssist {
+				// Code Assist API returns wrapped request
+				convertedReq, ok := converted.(CodeAssistRequest)
+				if !ok {
+					t.Errorf("Expected CodeAssistRequest but got different type")
+				}
+				if convertedReq.Project != "test-project" {
+					t.Errorf("Expected project ID 'test-project', got '%s'", convertedReq.Project)
+				}
+				if convertedReq.Model != "gemini-2.5-flash" {
+					t.Errorf("Expected model 'gemini-2.5-flash', got '%s'", convertedReq.Model)
+				}
+			} else {
+				// Gemini API and Vertex AI return direct request
+				convertedReq, ok := converted.(GenerateContentRequest)
+				if !ok {
+					t.Errorf("Expected GenerateContentRequest but got different type")
+				}
+				if len(convertedReq.Contents) != len(req.Contents) {
+					t.Errorf("Expected %d contents, got %d", len(req.Contents), len(convertedReq.Contents))
+				}
 			}
 		})
 	}
@@ -570,5 +590,122 @@ func TestBackendRouter_IsGeminiAPI(t *testing.T) {
 				t.Errorf("Expected IsGeminiAPI %v, got %v", tt.expected, got)
 			}
 		})
+	}
+}
+
+// TestSchemaConverter_GetProjectID tests the getProjectID method priority ordering
+func TestSchemaConverter_GetProjectID(t *testing.T) {
+	tests := []struct {
+		name         string
+		config       *ClientConfig
+		envProjectID string
+		expected     string
+	}{
+		{
+			name:         "From config - priority 1",
+			config:       &ClientConfig{ProjectID: "config-project-id"},
+			envProjectID: "env-project-id",
+			expected:     "config-project-id",
+		},
+		{
+			name:         "From environment - priority 2",
+			config:       &ClientConfig{ProjectID: ""},
+			envProjectID: "env-project-id",
+			expected:     "env-project-id",
+		},
+		{
+			name:         "Empty - no source",
+			config:       &ClientConfig{ProjectID: ""},
+			envProjectID: "",
+			expected:     "",
+		},
+		{
+			name:         "From config - env not set",
+			config:       &ClientConfig{ProjectID: "config-project-id"},
+			envProjectID: "",
+			expected:     "config-project-id",
+		},
+		{
+			name:         "Empty - env set but no config",
+			config:       &ClientConfig{ProjectID: ""},
+			envProjectID: "env-project-id",
+			expected:     "env-project-id",
+		},
+		{
+			name:         "Nil config - from env",
+			config:       nil,
+			envProjectID: "env-project-id",
+			expected:     "env-project-id",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Set environment variable
+			if tt.envProjectID != "" {
+				os.Setenv("GOOGLE_CLOUD_PROJECT", tt.envProjectID)
+				defer os.Unsetenv("GOOGLE_CLOUD_PROJECT")
+			} else {
+				os.Unsetenv("GOOGLE_CLOUD_PROJECT")
+			}
+
+			converter := NewSchemaConverterWithConfig(BackendCodeAssist, tt.config)
+			actual := converter.getProjectID()
+			if actual != tt.expected {
+				t.Errorf("Expected project ID '%s', got '%s'", tt.expected, actual)
+			}
+		})
+	}
+}
+
+// TestCodeAssistRequest_Wrapping tests Code Assist API request wrapping
+func TestCodeAssistRequest_Wrapping(t *testing.T) {
+	req := GenerateContentRequest{
+		Contents: []Content{
+			{
+				Role: "user",
+				Parts: []Part{
+					{Text: "Test prompt"},
+				},
+			},
+		},
+		GenerationConfig: &GenerationConfig{
+			Temperature: 0.7,
+		},
+	}
+
+	config := &ClientConfig{ProjectID: "my-project"}
+	converter := NewSchemaConverterWithConfig(BackendCodeAssist, config)
+
+	converted, err := converter.ConvertRequest(req)
+	if err != nil {
+		t.Fatalf("Expected no error but got: %v", err)
+	}
+
+	wrappedReq, ok := converted.(CodeAssistRequest)
+	if !ok {
+		t.Fatalf("Expected CodeAssistRequest but got different type: %T", converted)
+	}
+
+	if wrappedReq.Project != "my-project" {
+		t.Errorf("Expected project ID 'my-project', got '%s'", wrappedReq.Project)
+	}
+
+	if wrappedReq.Model != "gemini-2.5-flash" {
+		t.Errorf("Expected model 'gemini-2.5-flash', got '%s'", wrappedReq.Model)
+	}
+
+	// Verify the request is properly marshaled
+	if wrappedReq.Request == nil {
+		t.Error("Expected Request to be set, got nil")
+	}
+
+	// Verify contents are preserved in the wrapped request
+	contents, ok := wrappedReq.Request["contents"].([]interface{})
+	if !ok {
+		t.Error("Expected contents to be preserved in wrapped request")
+	}
+	if len(contents) != 1 {
+		t.Errorf("Expected 1 content in wrapped request, got %d", len(contents))
 	}
 }

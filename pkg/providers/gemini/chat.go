@@ -15,6 +15,7 @@ import (
 	"github.com/cecil-the-coder/ai-provider-kit/internal/common/auth"
 	"github.com/cecil-the-coder/ai-provider-kit/internal/common/telemetry"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
+	"github.com/google/uuid"
 )
 
 // GenerateChatCompletion generates a chat completion with OAuth/API key support
@@ -237,18 +238,69 @@ func (p *GeminiProvider) prepareStandardRequest(options types.GenerateOptions) G
 	return requestBody
 }
 
+// wrapForCodeAssist wraps a GenerateContentRequest in the Code Assist API format
+func (p *GeminiProvider) wrapForCodeAssist(chatRequest GenerateContentRequest, model string, projectID string) CodeAssistRequest {
+	// Generate UUID for user_prompt_id
+	userPromptID := uuid.New().String()
+
+	// Convert the request to a map for the wrapped format
+	requestMap := make(map[string]interface{})
+
+	// Add contents
+	if len(chatRequest.Contents) > 0 {
+		requestMap["contents"] = chatRequest.Contents
+	}
+
+	// Add generation config if present
+	if chatRequest.GenerationConfig != nil {
+		requestMap["generationConfig"] = chatRequest.GenerationConfig
+	}
+
+	// Add tools if present
+	if len(chatRequest.Tools) > 0 {
+		requestMap["tools"] = chatRequest.Tools
+	}
+
+	// Add safety settings if present
+	if len(chatRequest.SafetySettings) > 0 {
+		requestMap["safetySettings"] = chatRequest.SafetySettings
+	}
+
+	return CodeAssistRequest{
+		Model:        model,
+		Project:      projectID,
+		UserPromptID: userPromptID,
+		Request:      requestMap,
+	}
+}
+
 // executeStandardAPIRequest executes a standard Gemini API request
 func (p *GeminiProvider) executeStandardAPIRequest(ctx context.Context, model string, apiKey string, requestBody GenerateContentRequest) ([]byte, error) {
-	// Use backend router to convert request if needed
-	convertedRequest, err := p.backendRouter.GetConverter().ConvertRequest(requestBody)
-	if err != nil {
-		return nil, types.NewInvalidRequestError(types.ProviderTypeGemini, "failed to convert request").
-			WithOperation("chat_completion").
-			WithOriginalErr(err)
+	// Check if using Code Assist backend - wrap request if needed
+	var requestToMarshal interface{}
+	if p.backendRouter.GetBackend() == BackendCodeAssist {
+		// Get project ID for Code Assist API
+		projectID := p.getProjectID()
+		if projectID == "" {
+			return nil, types.NewInvalidRequestError(types.ProviderTypeGemini, "project ID is required for Code Assist API").
+				WithOperation("chat_completion")
+		}
+		// Wrap the request in Code Assist format
+		wrappedRequest := p.wrapForCodeAssist(requestBody, model, projectID)
+		requestToMarshal = wrappedRequest
+	} else {
+		// Use backend router to convert request if needed
+		convertedRequest, err := p.backendRouter.GetConverter().ConvertRequest(requestBody)
+		if err != nil {
+			return nil, types.NewInvalidRequestError(types.ProviderTypeGemini, "failed to convert request").
+				WithOperation("chat_completion").
+				WithOriginalErr(err)
+		}
+		requestToMarshal = convertedRequest
 	}
 
 	// Serialize request
-	jsonBody, err := json.Marshal(convertedRequest)
+	jsonBody, err := json.Marshal(requestToMarshal)
 	if err != nil {
 		return nil, types.NewInvalidRequestError(types.ProviderTypeGemini, "failed to marshal request").
 			WithOperation("chat_completion").
@@ -324,16 +376,31 @@ func (p *GeminiProvider) makeStandardAPICallWithOAuth(ctx context.Context, model
 	// Prepare standard request
 	requestBody := p.prepareStandardRequest(options)
 
-	// Use backend router to convert request if needed
-	convertedRequest, err := p.backendRouter.GetConverter().ConvertRequest(requestBody)
-	if err != nil {
-		return nil, types.NewInvalidRequestError(types.ProviderTypeGemini, "failed to convert request").
-			WithOperation("chat_completion").
-			WithOriginalErr(err)
+	// Check if using Code Assist backend - wrap request if needed
+	var requestToMarshal interface{}
+	if p.backendRouter.GetBackend() == BackendCodeAssist {
+		// Get project ID for Code Assist API
+		projectID := p.getProjectID()
+		if projectID == "" {
+			return nil, types.NewInvalidRequestError(types.ProviderTypeGemini, "project ID is required for Code Assist API").
+				WithOperation("chat_completion")
+		}
+		// Wrap the request in Code Assist format
+		wrappedRequest := p.wrapForCodeAssist(requestBody, model, projectID)
+		requestToMarshal = wrappedRequest
+	} else {
+		// Use backend router to convert request if needed
+		convertedRequest, err := p.backendRouter.GetConverter().ConvertRequest(requestBody)
+		if err != nil {
+			return nil, types.NewInvalidRequestError(types.ProviderTypeGemini, "failed to convert request").
+				WithOperation("chat_completion").
+				WithOriginalErr(err)
+		}
+		requestToMarshal = convertedRequest
 	}
 
 	// Serialize request
-	jsonBody, err := json.Marshal(convertedRequest)
+	jsonBody, err := json.Marshal(requestToMarshal)
 	if err != nil {
 		return nil, types.NewInvalidRequestError(types.ProviderTypeGemini, "failed to marshal request").
 			WithOperation("chat_completion").

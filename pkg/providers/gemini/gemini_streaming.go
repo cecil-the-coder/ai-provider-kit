@@ -17,6 +17,7 @@ import (
 	"github.com/cecil-the-coder/ai-provider-kit/internal/common/auth"
 	"github.com/cecil-the-coder/ai-provider-kit/internal/common/telemetry"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
+	"github.com/google/uuid"
 	"golang.org/x/time/rate"
 )
 
@@ -176,6 +177,37 @@ func (p *GeminiProvider) executeStreamWithAuth(ctx context.Context, options type
 		WithOperation("executeStreamWithAuth")
 }
 
+// wrapStreamingRequestForCodeAssist wraps a request for Code Assist API streaming
+func (p *GeminiProvider) wrapStreamingRequestForCodeAssist(requestBody GenerateContentRequest, model string) (interface{}, error) {
+	// Get project ID for Code Assist API
+	projectID := p.getProjectID()
+	if projectID == "" {
+		return nil, types.NewInvalidRequestError(types.ProviderTypeGemini, "project ID is required for Code Assist API").
+			WithOperation("chat_completion_stream")
+	}
+	// Wrap the request in Code Assist format
+	userPromptID := uuid.New().String()
+	requestMap := make(map[string]interface{})
+	if len(requestBody.Contents) > 0 {
+		requestMap["contents"] = requestBody.Contents
+	}
+	if requestBody.GenerationConfig != nil {
+		requestMap["generationConfig"] = requestBody.GenerationConfig
+	}
+	if len(requestBody.Tools) > 0 {
+		requestMap["tools"] = requestBody.Tools
+	}
+	if len(requestBody.SafetySettings) > 0 {
+		requestMap["safetySettings"] = requestBody.SafetySettings
+	}
+	return CodeAssistRequest{
+		Model:        model,
+		Project:      projectID,
+		UserPromptID: userPromptID,
+		Request:      requestMap,
+	}, nil
+}
+
 // makeStreamingAPICallWithToken makes a streaming API call with OAuth token using the standard API
 func (p *GeminiProvider) makeStreamingAPICallWithToken(ctx context.Context, options types.GenerateOptions, model string, accessToken string) (types.ChatCompletionStream, error) {
 	return p.makeStreamingStandardAPICallWithOAuth(ctx, options, model, accessToken)
@@ -200,15 +232,26 @@ func (p *GeminiProvider) makeStreamingStandardAPICallWithOAuth(ctx context.Conte
 	// Prepare standard request (same as API key path)
 	requestBody := p.prepareStandardRequest(options)
 
-	// Use backend router to convert request if needed
-	convertedRequest, err := p.backendRouter.GetConverter().ConvertRequest(requestBody)
-	if err != nil {
-		return nil, types.NewInvalidRequestError(types.ProviderTypeGemini, "failed to convert request").
-			WithOperation("chat_completion_stream").
-			WithOriginalErr(err)
+	// Check if using Code Assist backend - wrap request if needed
+	var requestToMarshal interface{}
+	if p.backendRouter.GetBackend() == BackendCodeAssist {
+		wrappedRequest, err := p.wrapStreamingRequestForCodeAssist(requestBody, model)
+		if err != nil {
+			return nil, err
+		}
+		requestToMarshal = wrappedRequest
+	} else {
+		// Use backend router to convert request if needed
+		convertedRequest, err := p.backendRouter.GetConverter().ConvertRequest(requestBody)
+		if err != nil {
+			return nil, types.NewInvalidRequestError(types.ProviderTypeGemini, "failed to convert request").
+				WithOperation("chat_completion_stream").
+				WithOriginalErr(err)
+		}
+		requestToMarshal = convertedRequest
 	}
 
-	jsonBody, err := json.Marshal(convertedRequest)
+	jsonBody, err := json.Marshal(requestToMarshal)
 	if err != nil {
 		return nil, types.NewInvalidRequestError(types.ProviderTypeGemini, "failed to marshal request").
 			WithOperation("chat_completion_stream").
@@ -339,15 +382,26 @@ func (p *GeminiProvider) makeStreamingAPICallWithAPIKey(ctx context.Context, opt
 		requestBody.Tools = convertToGeminiTools(options.Tools)
 	}
 
-	// Use backend router to convert request if needed
-	convertedRequest, err := p.backendRouter.GetConverter().ConvertRequest(requestBody)
-	if err != nil {
-		return nil, types.NewInvalidRequestError(types.ProviderTypeGemini, "failed to convert request").
-			WithOperation("chat_completion_stream").
-			WithOriginalErr(err)
+	// Check if using Code Assist backend - wrap request if needed
+	var requestToMarshal interface{}
+	if p.backendRouter.GetBackend() == BackendCodeAssist {
+		wrappedRequest, err := p.wrapStreamingRequestForCodeAssist(requestBody, model)
+		if err != nil {
+			return nil, err
+		}
+		requestToMarshal = wrappedRequest
+	} else {
+		// Use backend router to convert request if needed
+		convertedRequest, err := p.backendRouter.GetConverter().ConvertRequest(requestBody)
+		if err != nil {
+			return nil, types.NewInvalidRequestError(types.ProviderTypeGemini, "failed to convert request").
+				WithOperation("chat_completion_stream").
+				WithOriginalErr(err)
+		}
+		requestToMarshal = convertedRequest
 	}
 
-	jsonBody, err := json.Marshal(convertedRequest)
+	jsonBody, err := json.Marshal(requestToMarshal)
 	if err != nil {
 		return nil, types.NewInvalidRequestError(types.ProviderTypeGemini, "failed to marshal request").
 			WithOperation("chat_completion_stream").

@@ -112,6 +112,7 @@ func NewGeminiProvider(config types.ProviderConfig) *GeminiProvider {
 		ServiceAccountJSON: geminiConfig.ServiceAccountJSON,
 		BaseURL:            geminiConfig.BaseURL,
 		AuthMethod:         geminiConfig.AuthMethod,
+		ProjectID:          geminiConfig.ProjectID,
 	}
 	backendRouter := NewBackendRouter(clientConfig)
 
@@ -221,6 +222,7 @@ func (p *GeminiProvider) Configure(config types.ProviderConfig) error {
 		ServiceAccountJSON: geminiConfig.ServiceAccountJSON,
 		BaseURL:            geminiConfig.BaseURL,
 		AuthMethod:         geminiConfig.AuthMethod,
+		ProjectID:          geminiConfig.ProjectID,
 	}
 	p.backendRouter = NewBackendRouter(clientConfig)
 

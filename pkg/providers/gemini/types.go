@@ -54,6 +54,10 @@ type ClientConfig struct {
 	// AuthMethod defines how API keys are sent (url_param or header)
 	// Defaults to url_param for backward compatibility
 	AuthMethod AuthMethod `json:"auth_method,omitempty"`
+
+	// ProjectID is the Google Cloud project ID for Code Assist API
+	// Only used when backend is BackendCodeAssist
+	ProjectID string `json:"project_id,omitempty"`
 }
 
 // Validate checks if the ClientConfig is valid for the selected backend
@@ -416,6 +420,21 @@ type CloudCodeRequestWrapper struct {
 // CloudCodeResponseWrapper wraps responses from CloudCode API
 type CloudCodeResponseWrapper struct {
 	Response GenerateContentResponse `json:"response"`
+}
+
+// CodeAssistRequest is the wrapped format for Code Assist API
+type CodeAssistRequest struct {
+	Model        string                 `json:"model"`
+	Project      string                 `json:"project"`
+	UserPromptID string                 `json:"user_prompt_id"`
+	Request      map[string]interface{} `json:"request"`
+}
+
+// CodeAssistRequestMetadata wraps the request metadata for Code Assist API
+type CodeAssistRequestMetadata struct {
+	Model        string `json:"model"`
+	Project      string `json:"project"`
+	UserPromptID string `json:"user_prompt_id"`
 }
 
 // Onboarding types for CloudCode API

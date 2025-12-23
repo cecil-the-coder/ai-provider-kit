@@ -106,17 +106,23 @@ func (bd *BackendDetector) GetModelPath(model string, backend BackendType) strin
 // SchemaConverter handles conversion between Gemini API and Vertex AI request/response schemas
 type SchemaConverter struct {
 	backend BackendType
+	config  *ClientConfig
 }
 
 // NewSchemaConverter creates a new schema converter for the given backend
 func NewSchemaConverter(backend BackendType) *SchemaConverter {
-	return &SchemaConverter{backend: backend}
+	return &SchemaConverter{backend: backend, config: nil}
+}
+
+// NewSchemaConverterWithConfig creates a new schema converter for the given backend with config
+func NewSchemaConverterWithConfig(backend BackendType, config *ClientConfig) *SchemaConverter {
+	return &SchemaConverter{backend: backend, config: config}
 }
 
 // ConvertRequest converts a GenerateContentRequest to the appropriate backend format
 // For Gemini API: No conversion needed, use as-is
 // For Vertex AI: Wrap in Vertex AI format with instances/parameters
-// For Code Assist: Uses same format as Gemini API
+// For Code Assist: Wrap in CloudCodeRequestWrapper with project ID
 func (sc *SchemaConverter) ConvertRequest(req GenerateContentRequest) (interface{}, error) {
 	switch sc.backend {
 	case BackendGeminiAPI:
@@ -130,12 +136,39 @@ func (sc *SchemaConverter) ConvertRequest(req GenerateContentRequest) (interface
 		return req, nil
 
 	case BackendCodeAssist:
-		// Code Assist API uses the same format as Gemini API
-		return req, nil
+		// Code Assist API requires wrapped format with project ID
+		projectID := sc.getProjectID()
+		// Convert request to map for wrapping
+		reqMap, err := json.Marshal(req)
+		if err != nil {
+			return nil, err
+		}
+		var reqData map[string]interface{}
+		if err := json.Unmarshal(reqMap, &reqData); err != nil {
+			return nil, err
+		}
+		return CodeAssistRequest{
+			Model:   "gemini-2.5-flash",
+			Project: projectID,
+			Request: reqData,
+		}, nil
 
 	default:
 		return req, nil
 	}
+}
+
+// getProjectID returns the project ID from config or environment
+func (sc *SchemaConverter) getProjectID() string {
+	// Check config first
+	if sc.config != nil && sc.config.ProjectID != "" {
+		return sc.config.ProjectID
+	}
+	// Check environment variable
+	if projectID := os.Getenv("GOOGLE_CLOUD_PROJECT"); projectID != "" {
+		return projectID
+	}
+	return ""
 }
 
 // ConvertResponse converts a response from the backend to GenerateContentResponse
@@ -177,7 +210,15 @@ func (sc *SchemaConverter) ConvertResponse(responseBody []byte) (*GenerateConten
 		return &response, nil
 
 	case BackendCodeAssist:
-		// Code Assist API uses the same response format as Gemini API
+		// Code Assist API may return a wrapped response
+		// Try to parse as wrapped response first
+		var wrappedResponse struct {
+			Response *GenerateContentResponse `json:"response"`
+		}
+		if err := json.Unmarshal(responseBody, &wrappedResponse); err == nil && wrappedResponse.Response != nil {
+			return wrappedResponse.Response, nil
+		}
+		// Fall back to direct response format
 		if err := json.Unmarshal(responseBody, &response); err != nil {
 			return nil, types.NewServerError(types.ProviderTypeGemini, 0, "failed to parse Code Assist API response").
 				WithOperation("convert_response").
@@ -218,7 +259,15 @@ func (sc *SchemaConverter) ConvertStreamResponse(responseBody []byte) (*GeminiSt
 		return &response, nil
 
 	case BackendCodeAssist:
-		// Code Assist streaming uses the same format as Gemini API
+		// Code Assist API streaming may also be wrapped
+		// Try to parse as wrapped response first
+		var wrappedStream struct {
+			Response *GeminiStreamResponse `json:"response"`
+		}
+		if err := json.Unmarshal(responseBody, &wrappedStream); err == nil && wrappedStream.Response != nil {
+			return wrappedStream.Response, nil
+		}
+		// Fall back to direct response format
 		if err := json.Unmarshal(responseBody, &response); err != nil {
 			return nil, types.NewServerError(types.ProviderTypeGemini, 0, "failed to parse Code Assist API stream chunk").
 				WithOperation("convert_response").
@@ -247,7 +296,7 @@ type BackendRouter struct {
 func NewBackendRouter(config *ClientConfig) *BackendRouter {
 	detector := NewBackendDetector(config)
 	backend := detector.DetectBackend()
-	converter := NewSchemaConverter(backend)
+	converter := NewSchemaConverterWithConfig(backend, config)
 
 	return &BackendRouter{
 		detector:  detector,
