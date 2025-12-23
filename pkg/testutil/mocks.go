@@ -25,6 +25,7 @@ type MockProvider struct {
 	isHealthy     bool
 	healthErr     error
 	metrics       types.ProviderMetrics
+	metricsMu     sync.RWMutex
 }
 
 // NewMockProvider creates a new MockProvider with sensible defaults.
@@ -137,6 +138,8 @@ func (m *MockProvider) HealthCheck(ctx context.Context) error {
 
 // GetMetrics returns the metrics for the mock provider.
 func (m *MockProvider) GetMetrics() types.ProviderMetrics {
+	m.metricsMu.RLock()
+	defer m.metricsMu.RUnlock()
 	return m.metrics
 }
 
@@ -162,8 +165,10 @@ func (m *MockProvider) GetToolFormat() types.ToolFormat {
 
 // GenerateChatCompletion generates a mock chat completion stream.
 func (m *MockProvider) GenerateChatCompletion(ctx context.Context, options types.GenerateOptions) (types.ChatCompletionStream, error) {
+	m.metricsMu.Lock()
 	m.metrics.RequestCount++
 	m.metrics.SuccessCount++
+	m.metricsMu.Unlock()
 	return NewMockStream(), nil
 }
 

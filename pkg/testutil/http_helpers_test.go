@@ -231,7 +231,8 @@ func TestSSEHandlerWithComment(t *testing.T) {
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
-	resp, _ := http.Get(server.URL)
+	resp, err := http.Get(server.URL)
+	require.NoError(t, err)
 	defer resp.Body.Close()
 
 	body, _ := io.ReadAll(resp.Body)
@@ -251,7 +252,8 @@ func TestSSEHandlerWithRetry(t *testing.T) {
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
-	resp, _ := http.Get(server.URL)
+	resp, err := http.Get(server.URL)
+	require.NoError(t, err)
 	defer resp.Body.Close()
 
 	body, _ := io.ReadAll(resp.Body)
@@ -269,7 +271,8 @@ func TestSSEHandlerWithMultiLineData(t *testing.T) {
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
-	resp, _ := http.Get(server.URL)
+	resp, err := http.Get(server.URL)
+	require.NoError(t, err)
 	defer resp.Body.Close()
 
 	body, _ := io.ReadAll(resp.Body)
@@ -291,7 +294,8 @@ func TestSSEStreamHandler(t *testing.T) {
 	defer server.Close()
 
 	start := time.Now()
-	resp, _ := http.Get(server.URL)
+	resp, err := http.Get(server.URL)
+	require.NoError(t, err)
 	defer resp.Body.Close()
 
 	body, _ := io.ReadAll(resp.Body)
@@ -313,7 +317,8 @@ func TestNewLineDelimitedJSONHandler(t *testing.T) {
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
-	resp, _ := http.Get(server.URL)
+	resp, err := http.Get(server.URL)
+	require.NoError(t, err)
 	defer resp.Body.Close()
 
 	body, _ := io.ReadAll(resp.Body)
@@ -322,7 +327,7 @@ func TestNewLineDelimitedJSONHandler(t *testing.T) {
 	assert.Len(t, lines, 2)
 
 	var obj1 map[string]string
-	err := json.Unmarshal([]byte(lines[0]), &obj1)
+	err = json.Unmarshal([]byte(lines[0]), &obj1)
 	require.NoError(t, err)
 	assert.Equal(t, "processing", obj1["status"])
 
@@ -342,7 +347,8 @@ func TestResponseBuilder(t *testing.T) {
 		server := httptest.NewServer(handler)
 		defer server.Close()
 
-		resp, _ := http.Get(server.URL)
+		resp, err := http.Get(server.URL)
+		require.NoError(t, err)
 		defer resp.Body.Close()
 
 		assert.Equal(t, http.StatusCreated, resp.StatusCode)
@@ -360,7 +366,8 @@ func TestResponseBuilder(t *testing.T) {
 		server := httptest.NewServer(handler)
 		defer server.Close()
 
-		resp, _ := http.Get(server.URL)
+		resp, err := http.Get(server.URL)
+		require.NoError(t, err)
 		defer resp.Body.Close()
 
 		assert.Equal(t, "value", resp.Header.Get("X-Custom"))
@@ -376,13 +383,14 @@ func TestResponseBuilder(t *testing.T) {
 		server := httptest.NewServer(handler)
 		defer server.Close()
 
-		resp, _ := http.Get(server.URL)
+		resp, err := http.Get(server.URL)
+		require.NoError(t, err)
 		defer resp.Body.Close()
 
 		assert.Equal(t, "application/json", resp.Header.Get("Content-Type"))
 
 		var result map[string]string
-		err := json.NewDecoder(resp.Body).Decode(&result)
+		err = json.NewDecoder(resp.Body).Decode(&result)
 		require.NoError(t, err)
 		assert.Equal(t, "hello", result["message"])
 	})
@@ -397,7 +405,8 @@ func TestResponseBuilder(t *testing.T) {
 		defer server.Close()
 
 		start := time.Now()
-		resp, _ := http.Get(server.URL)
+		resp, err := http.Get(server.URL)
+		require.NoError(t, err)
 		resp.Body.Close()
 		elapsed := time.Since(start)
 
@@ -410,13 +419,15 @@ func TestSuccessResponse(t *testing.T) {
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
-	resp, _ := http.Get(server.URL)
+	resp, err := http.Get(server.URL)
+	require.NoError(t, err)
 	defer resp.Body.Close()
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 
 	var result map[string]string
-	json.NewDecoder(resp.Body).Decode(&result)
+	err = json.NewDecoder(resp.Body).Decode(&result)
+	require.NoError(t, err)
 	assert.Equal(t, "ok", result["status"])
 }
 
@@ -425,7 +436,8 @@ func TestCreatedResponse(t *testing.T) {
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
-	resp, _ := http.Get(server.URL)
+	resp, err := http.Get(server.URL)
+	require.NoError(t, err)
 	defer resp.Body.Close()
 
 	assert.Equal(t, http.StatusCreated, resp.StatusCode)
@@ -436,7 +448,8 @@ func TestNoContentResponse(t *testing.T) {
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
-	resp, _ := http.Get(server.URL)
+	resp, err := http.Get(server.URL)
+	require.NoError(t, err)
 	defer resp.Body.Close()
 
 	assert.Equal(t, http.StatusNoContent, resp.StatusCode)
@@ -447,13 +460,15 @@ func TestBadRequestResponse(t *testing.T) {
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
-	resp, _ := http.Get(server.URL)
+	resp, err := http.Get(server.URL)
+	require.NoError(t, err)
 	defer resp.Body.Close()
 
 	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 
 	var result map[string]string
-	json.NewDecoder(resp.Body).Decode(&result)
+	err = json.NewDecoder(resp.Body).Decode(&result)
+	require.NoError(t, err)
 	assert.Equal(t, "invalid input", result["error"])
 }
 
@@ -462,13 +477,15 @@ func TestUnauthorizedResponse(t *testing.T) {
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
-	resp, _ := http.Get(server.URL)
+	resp, err := http.Get(server.URL)
+	require.NoError(t, err)
 	defer resp.Body.Close()
 
 	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 
 	var result map[string]string
-	json.NewDecoder(resp.Body).Decode(&result)
+	err = json.NewDecoder(resp.Body).Decode(&result)
+	require.NoError(t, err)
 	assert.Equal(t, "invalid token", result["error"])
 }
 
@@ -477,11 +494,13 @@ func TestUnauthorizedResponseDefaultMessage(t *testing.T) {
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
-	resp, _ := http.Get(server.URL)
+	resp, err := http.Get(server.URL)
+	require.NoError(t, err)
 	defer resp.Body.Close()
 
 	var result map[string]string
-	json.NewDecoder(resp.Body).Decode(&result)
+	err = json.NewDecoder(resp.Body).Decode(&result)
+	require.NoError(t, err)
 	assert.Equal(t, "unauthorized", result["error"])
 }
 
@@ -490,7 +509,8 @@ func TestForbiddenResponse(t *testing.T) {
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
-	resp, _ := http.Get(server.URL)
+	resp, err := http.Get(server.URL)
+	require.NoError(t, err)
 	defer resp.Body.Close()
 
 	assert.Equal(t, http.StatusForbidden, resp.StatusCode)
@@ -501,7 +521,8 @@ func TestNotFoundResponse(t *testing.T) {
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
-	resp, _ := http.Get(server.URL)
+	resp, err := http.Get(server.URL)
+	require.NoError(t, err)
 	defer resp.Body.Close()
 
 	assert.Equal(t, http.StatusNotFound, resp.StatusCode)
@@ -512,7 +533,8 @@ func TestTooManyRequestsResponse(t *testing.T) {
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
-	resp, _ := http.Get(server.URL)
+	resp, err := http.Get(server.URL)
+	require.NoError(t, err)
 	defer resp.Body.Close()
 
 	assert.Equal(t, http.StatusTooManyRequests, resp.StatusCode)
@@ -521,7 +543,8 @@ func TestTooManyRequestsResponse(t *testing.T) {
 	assert.Equal(t, "0", resp.Header.Get("X-RateLimit-Remaining"))
 
 	var result map[string]interface{}
-	json.NewDecoder(resp.Body).Decode(&result)
+	err = json.NewDecoder(resp.Body).Decode(&result)
+	require.NoError(t, err)
 	errorObj, ok := result["error"].(map[string]interface{})
 	require.True(t, ok)
 	assert.Equal(t, "rate_limit_error", errorObj["type"])
@@ -532,7 +555,8 @@ func TestInternalServerErrorResponse(t *testing.T) {
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
-	resp, _ := http.Get(server.URL)
+	resp, err := http.Get(server.URL)
+	require.NoError(t, err)
 	defer resp.Body.Close()
 
 	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
@@ -543,7 +567,8 @@ func TestServiceUnavailableResponse(t *testing.T) {
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
-	resp, _ := http.Get(server.URL)
+	resp, err := http.Get(server.URL)
+	require.NoError(t, err)
 	defer resp.Body.Close()
 
 	assert.Equal(t, http.StatusServiceUnavailable, resp.StatusCode)
@@ -554,7 +579,8 @@ func TestBadGatewayResponse(t *testing.T) {
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
-	resp, _ := http.Get(server.URL)
+	resp, err := http.Get(server.URL)
+	require.NoError(t, err)
 	defer resp.Body.Close()
 
 	assert.Equal(t, http.StatusBadGateway, resp.StatusCode)
@@ -565,7 +591,8 @@ func TestGatewayTimeoutResponse(t *testing.T) {
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
-	resp, _ := http.Get(server.URL)
+	resp, err := http.Get(server.URL)
+	require.NoError(t, err)
 	defer resp.Body.Close()
 
 	assert.Equal(t, http.StatusGatewayTimeout, resp.StatusCode)
@@ -584,7 +611,8 @@ func TestChunkedResponseHandler(t *testing.T) {
 	defer server.Close()
 
 	start := time.Now()
-	resp, _ := http.Get(server.URL)
+	resp, err := http.Get(server.URL)
+	require.NoError(t, err)
 	defer resp.Body.Close()
 
 	body, _ := io.ReadAll(resp.Body)
@@ -744,7 +772,8 @@ func TestAssertCommonHeaders(t *testing.T) {
 	}))
 	defer server.Close()
 
-	resp, _ := http.Get(server.URL)
+	resp, err := http.Get(server.URL)
+	require.NoError(t, err)
 	defer resp.Body.Close()
 
 	expectedHeaders := map[string]string{
@@ -775,16 +804,19 @@ func TestRetryableServer(t *testing.T) {
 	defer server.Close()
 
 	// First two requests fail
-	resp1, _ := http.Get(server.URL)
+	resp1, err := http.Get(server.URL)
+	require.NoError(t, err)
 	resp1.Body.Close()
 	assert.Equal(t, http.StatusServiceUnavailable, resp1.StatusCode)
 
-	resp2, _ := http.Get(server.URL)
+	resp2, err := http.Get(server.URL)
+	require.NoError(t, err)
 	resp2.Body.Close()
 	assert.Equal(t, http.StatusServiceUnavailable, resp2.StatusCode)
 
 	// Third request succeeds
-	resp3, _ := http.Get(server.URL)
+	resp3, err := http.Get(server.URL)
+	require.NoError(t, err)
 	resp3.Body.Close()
 	assert.Equal(t, http.StatusOK, resp3.StatusCode)
 }
@@ -805,7 +837,8 @@ func TestNewRedirectHandler(t *testing.T) {
 		},
 	}
 
-	resp, _ := client.Get(server.URL)
+	resp, err := client.Get(server.URL)
+	require.NoError(t, err)
 	resp.Body.Close()
 
 	assert.Equal(t, http.StatusFound, resp.StatusCode)
@@ -817,7 +850,8 @@ func TestWebSocketUpgradeHandler(t *testing.T) {
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
-	resp, _ := http.Get(server.URL)
+	resp, err := http.Get(server.URL)
+	require.NoError(t, err)
 	resp.Body.Close()
 
 	assert.Equal(t, http.StatusSwitchingProtocols, resp.StatusCode)
