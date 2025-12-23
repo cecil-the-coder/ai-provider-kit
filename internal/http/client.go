@@ -511,11 +511,11 @@ func (c *HTTPClient) Client() *http.Client {
 // GetLastRequestInfo returns information about the last request for error handling.
 // This can be used to enrich errors with request/response context.
 type LastRequestInfo struct {
-	Request     *http.Request
-	Response    *http.Response
-	Attempts    int
+	Request      *http.Request
+	Response     *http.Response
+	Attempts     int
 	TotalLatency time.Duration
-	Error       error
+	Error        error
 }
 
 // GetLastRequestInfo returns info about the last request made.

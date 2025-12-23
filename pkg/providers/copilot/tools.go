@@ -201,9 +201,9 @@ func CreateToolResponseMessage(toolCallID, content string) ChatMessage {
 // CreateAssistantToolCallMessage creates an assistant message with tool calls
 func CreateAssistantToolCallMessage(toolCalls []ToolCall, content string) ChatMessage {
 	msg := ChatMessage{
-		Role:       "assistant",
-		Content:    content,
-		ToolCalls:  toolCalls,
+		Role:      "assistant",
+		Content:   content,
+		ToolCalls: toolCalls,
 	}
 	return msg
 }

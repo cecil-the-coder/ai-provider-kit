@@ -37,9 +37,10 @@ func NewProviderErrorHelperWithConfig(provider types.ProviderType, config *Snaps
 func (h *ProviderErrorHelper) WrapHTTPError(req *http.Request, resp *http.Response, err error) *RichError {
 	// Determine the base error and wrap with appropriate sentinel error
 	var baseErr error
-	if err != nil {
+	switch {
+	case err != nil:
 		baseErr = err
-	} else if resp != nil {
+	case resp != nil:
 		// Create error from response and wrap with sentinel error based on status code
 		statusMsg := fmt.Sprintf("HTTP %d: %s", resp.StatusCode, http.StatusText(resp.StatusCode))
 		switch resp.StatusCode {
@@ -56,7 +57,7 @@ func (h *ProviderErrorHelper) WrapHTTPError(req *http.Request, resp *http.Respon
 		default:
 			baseErr = fmt.Errorf("%s", statusMsg)
 		}
-	} else {
+	default:
 		baseErr = fmt.Errorf("unknown HTTP error")
 	}
 

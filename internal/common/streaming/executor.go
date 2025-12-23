@@ -177,6 +177,7 @@ func (e *StreamingExecutor) setAuthHeaders(req *http.Request, authToken string, 
 			req.Header.Set("Authorization", "Bearer "+authToken)
 		}
 	}
+	return
 }
 
 // setStandardHeaders sets standard headers common to all streaming requests

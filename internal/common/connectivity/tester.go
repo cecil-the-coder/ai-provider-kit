@@ -119,7 +119,7 @@ func (t *Tester) TestConnectivity(ctx context.Context, config TestRequestConfig,
 // TestConnectivityWithResult performs a connectivity test and returns detailed results
 func (t *Tester) TestConnectivityWithResult(ctx context.Context, config TestRequestConfig, bypassCache bool) *TestResult {
 	startTime := time.Now()
-	result := &TestResult{}
+	var result TestResult
 
 	err := t.cache.TestConnectivity(
 		ctx,
@@ -134,7 +134,7 @@ func (t *Tester) TestConnectivityWithResult(ctx context.Context, config TestRequ
 	result.Success = err == nil
 	result.Error = err
 
-	return result
+	return &result
 }
 
 // performTest performs the actual connectivity test without caching

@@ -1,4 +1,4 @@
-// Package errors provides sentinel errors for common AI provider scenarios.
+// Package sentinel provides sentinel errors for common AI provider scenarios.
 //
 // These sentinel errors enable standardized error checking using errors.Is(),
 // making it easier to handle specific error scenarios consistently across

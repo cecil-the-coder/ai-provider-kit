@@ -2,11 +2,11 @@
 package anthropic
 
 import (
-	stderrors "errors"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	stderrors "errors"
 
 	"github.com/cecil-the-coder/ai-provider-kit/internal/common/errors"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"

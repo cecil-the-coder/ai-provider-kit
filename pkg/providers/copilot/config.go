@@ -463,7 +463,7 @@ func (p *CopilotProvider) fetchModelsFromAPI(ctx context.Context) ([]types.Model
 	}
 
 	// Convert to internal Model format
-	var models []types.Model
+	models := make([]types.Model, 0, len(modelsResp.Data))
 	for _, model := range modelsResp.Data {
 		if !model.ModelPickerEnabled {
 			continue // Skip disabled models

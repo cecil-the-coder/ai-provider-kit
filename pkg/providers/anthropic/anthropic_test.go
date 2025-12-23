@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/cecil-the-coder/ai-provider-kit/pkg/auth"
 	"github.com/cecil-the-coder/ai-provider-kit/internal/common/streaming"
+	"github.com/cecil-the-coder/ai-provider-kit/pkg/auth"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 )
 
