@@ -29,18 +29,18 @@ type (
 	Provider            = types.Provider
 
 	// Common types from pkg/types
-	ProviderType     = types.ProviderType
-	ProviderConfig   = types.ProviderConfig
-	AuthConfig       = types.AuthConfig
-	Model            = types.Model
-	GenerateOptions  = types.GenerateOptions
+	ProviderType         = types.ProviderType
+	ProviderConfig       = types.ProviderConfig
+	AuthConfig           = types.AuthConfig
+	Model                = types.Model
+	GenerateOptions      = types.GenerateOptions
 	ChatCompletionStream = types.ChatCompletionStream
 	ChatCompletionChunk  = types.ChatCompletionChunk
-	ToolFormat       = types.ToolFormat
-	ProviderMetrics  = types.ProviderMetrics
-	ProviderInfo     = types.ProviderInfo
-	HealthStatus     = types.HealthStatus
-	Pricing          = types.Pricing
+	ToolFormat           = types.ToolFormat
+	ProviderMetrics      = types.ProviderMetrics
+	ProviderInfo         = types.ProviderInfo
+	HealthStatus         = types.HealthStatus
+	Pricing              = types.Pricing
 )
 
 // ModelDiscoveryService only needs to discover models, so it depends only on ModelProvider
