@@ -1161,3 +1161,192 @@ func TestHTTPClient_HighConcurrencyActualUsage(t *testing.T) {
 		t.Errorf("expected %d completed requests, got %d", numRequests, completed.Load())
 	}
 }
+
+func TestHTTPClient_ConnectionTrace_Enabled(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("success"))
+	}))
+	defer server.Close()
+
+	client := NewHTTPClient(HTTPClientConfig{
+		EnableConnectionTrace: true,
+	})
+
+	req, err := http.NewRequest("GET", server.URL, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	resp, err := client.Do(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	metrics := client.GetMetrics()
+	if metrics.ConnectionMetricsSummary == nil {
+		t.Fatal("expected connection metrics summary to be initialized")
+	}
+
+	if metrics.ConnectionMetricsSummary.TotalMeasurements == 0 {
+		t.Error("expected at least 1 connection measurement")
+	}
+
+	// For localhost connections, DNS is usually cached/very fast
+	// so we may get zero values, but TTFB should be non-zero
+	if metrics.ConnectionMetricsSummary.AvgTimeToFirstByte == 0 {
+		t.Error("expected non-zero average TTFB")
+	}
+}
+
+func TestHTTPClient_ConnectionTrace_Disabled(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("success"))
+	}))
+	defer server.Close()
+
+	client := NewHTTPClient(HTTPClientConfig{
+		EnableConnectionTrace: false,
+	})
+
+	req, err := http.NewRequest("GET", server.URL, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	resp, err := client.Do(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	metrics := client.GetMetrics()
+	if metrics.ConnectionMetricsSummary != nil {
+		t.Error("expected connection metrics summary to be nil when disabled")
+	}
+}
+
+func TestHTTPClient_ConnectionTrace_MultipleRequests(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("success"))
+	}))
+	defer server.Close()
+
+	client := NewHTTPClient(HTTPClientConfig{
+		EnableConnectionTrace: true,
+	})
+
+	numRequests := 5
+	for i := 0; i < numRequests; i++ {
+		req, err := http.NewRequest("GET", server.URL, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp, err := client.Do(context.Background(), req)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		_ = resp.Body.Close()
+	}
+
+	metrics := client.GetMetrics()
+	if metrics.ConnectionMetricsSummary.TotalMeasurements != int64(numRequests) {
+		t.Errorf("expected %d measurements, got %d", numRequests, metrics.ConnectionMetricsSummary.TotalMeasurements)
+	}
+
+	// Verify that we have min/max values set
+	if metrics.ConnectionMetricsSummary.MinTimeToFirstByte <= 0 {
+		t.Error("expected positive min TTFB")
+	}
+	if metrics.ConnectionMetricsSummary.MaxTimeToFirstByte <= 0 {
+		t.Error("expected positive max TTFB")
+	}
+}
+
+func TestHTTPClient_ConnectionTrace_Reset(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("success"))
+	}))
+	defer server.Close()
+
+	client := NewHTTPClient(HTTPClientConfig{
+		EnableConnectionTrace: true,
+	})
+
+	// Make a request to populate connection metrics
+	req, err := http.NewRequest("GET", server.URL, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err := client.Do(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	_ = resp.Body.Close()
+
+	metrics := client.GetMetrics()
+	if metrics.ConnectionMetricsSummary == nil {
+		t.Fatal("expected connection metrics summary")
+	}
+	if metrics.ConnectionMetricsSummary.TotalMeasurements == 0 {
+		t.Error("expected connection metrics to be populated")
+	}
+
+	// Reset metrics
+	client.ResetMetrics()
+
+	// Verify connection metrics are also reset
+	metrics = client.GetMetrics()
+	if metrics.ConnectionMetricsSummary != nil {
+		// After reset, a new summary is created on first measurement
+		// But TotalMeasurements should be 0
+		if metrics.ConnectionMetricsSummary.TotalMeasurements != 0 {
+			t.Errorf("expected 0 measurements after reset, got %d", metrics.ConnectionMetricsSummary.TotalMeasurements)
+		}
+	}
+}
+
+func TestHTTPClient_ConnectionTrace_WithRetry(t *testing.T) {
+	attempts := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		if attempts < 2 {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("success"))
+	}))
+	defer server.Close()
+
+	client := NewHTTPClient(HTTPClientConfig{
+		EnableConnectionTrace: true,
+		MaxRetries:           2,
+		BaseRetryDelay:       10 * time.Millisecond,
+	})
+
+	req, err := http.NewRequest("GET", server.URL, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	resp, err := client.Do(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	metrics := client.GetMetrics()
+	// We should have connection metrics from the successful request
+	// (final request that succeeds populates the metrics)
+	if metrics.ConnectionMetricsSummary == nil {
+		t.Fatal("expected connection metrics summary")
+	}
+	if metrics.ConnectionMetricsSummary.TotalMeasurements == 0 {
+		t.Error("expected at least 1 connection measurement")
+	}
+}

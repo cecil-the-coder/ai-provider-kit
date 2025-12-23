@@ -23,6 +23,9 @@ type MetricsSnapshot struct {
 	// Streaming metrics (aggregated across all streaming requests)
 	Streaming *StreamMetrics `json:"streaming,omitempty"`
 
+	// Connection metrics (HTTP client-level connection timings)
+	Connection *ConnectionMetricsSnapshot `json:"connection,omitempty"`
+
 	// Provider breakdown
 	ProviderBreakdown map[string]*ProviderMetricsSnapshot `json:"provider_breakdown"`
 
@@ -272,6 +275,35 @@ type ErrorMetrics struct {
 	SuccessfulRetries int64   `json:"successful_retries"`
 	FailedRetries     int64   `json:"failed_retries"`
 	RetrySuccessRate  float64 `json:"retry_success_rate"` // Calculated: successful_retries / total_retries
+
+	// Last updated
+	LastUpdated time.Time `json:"last_updated"`
+}
+
+// ConnectionMetricsSnapshot represents connection-level timing metrics for HTTP requests.
+// These metrics provide visibility into DNS lookup, TCP connection, TLS handshake, and TTFB.
+type ConnectionMetricsSnapshot struct {
+	// Number of requests with connection metrics
+	TotalMeasurements int64 `json:"total_measurements"`
+
+	// Average durations
+	AvgDNSLookupDuration    time.Duration `json:"avg_dns_lookup_duration"`
+	AvgTCPConnectDuration   time.Duration `json:"avg_tcp_connect_duration"`
+	AvgTLSHandshakeDuration time.Duration `json:"avg_tls_handshake_duration"`
+	AvgTimeToFirstByte      time.Duration `json:"avg_time_to_first_byte"`
+	AvgTotalConnectionTime  time.Duration `json:"avg_total_connection_time"`
+
+	// Min/Max durations
+	MinDNSLookupDuration    time.Duration `json:"min_dns_lookup_duration"`
+	MaxDNSLookupDuration    time.Duration `json:"max_dns_lookup_duration"`
+	MinTCPConnectDuration   time.Duration `json:"min_tcp_connect_duration"`
+	MaxTCPConnectDuration   time.Duration `json:"max_tcp_connect_duration"`
+	MinTLSHandshakeDuration time.Duration `json:"min_tls_handshake_duration"`
+	MaxTLSHandshakeDuration time.Duration `json:"max_tls_handshake_duration"`
+	MinTimeToFirstByte      time.Duration `json:"min_time_to_first_byte"`
+	MaxTimeToFirstByte      time.Duration `json:"max_time_to_first_byte"`
+	MinTotalConnectionTime  time.Duration `json:"min_total_connection_time"`
+	MaxTotalConnectionTime  time.Duration `json:"max_total_connection_time"`
 
 	// Last updated
 	LastUpdated time.Time `json:"last_updated"`

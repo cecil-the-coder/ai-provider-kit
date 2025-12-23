@@ -36,6 +36,7 @@ type HTTPClientConfig struct {
 	Headers             map[string]string   `json:"headers,omitempty"`
 	UserAgent           string              `json:"user_agent,omitempty"`
 	EnableMetrics       bool                `json:"enable_metrics,omitempty"`
+	EnableConnectionTrace bool              `json:"enable_connection_trace,omitempty"` // Opt-in connection-level tracing
 	RequestInterceptor  RequestInterceptor  `json:"-"`
 	ResponseInterceptor ResponseInterceptor `json:"-"`
 	// Transport configuration
@@ -58,6 +59,63 @@ type ClientMetrics struct {
 	LastRequestTime time.Time     `json:"last_request_time"`
 	RetryCount      int64         `json:"retry_count"`
 	ErrorsByType    map[int]int64 `json:"errors_by_type"`
+	// Connection-level metrics (aggregated across all requests)
+	ConnectionMetricsSummary *ConnectionMetricsSummary `json:"connection_metrics_summary,omitempty"`
+}
+
+// ConnectionMetrics holds detailed connection timing for a single request
+type ConnectionMetrics struct {
+	// DNS lookup duration
+	DNSLookupDuration time.Duration `json:"dns_lookup_duration"`
+	// TCP connect duration
+	TCPConnectDuration time.Duration `json:"tcp_connect_duration"`
+	// TLS handshake duration (for HTTPS)
+	TLSHandshakeDuration time.Duration `json:"tls_handshake_duration"`
+	// Time to first byte (TTFB)
+	TimeToFirstByte time.Duration `json:"time_to_first_byte"`
+	// Total connection time
+	TotalConnectionTime time.Duration `json:"total_connection_time"`
+}
+
+// ConnectionMetricsSummary aggregates connection metrics across multiple requests
+type ConnectionMetricsSummary struct {
+	// Number of requests with connection metrics
+	TotalMeasurements int64 `json:"total_measurements"`
+	// Average DNS lookup duration
+	AvgDNSLookupDuration time.Duration `json:"avg_dns_lookup_duration"`
+	// Average TCP connect duration
+	AvgTCPConnectDuration time.Duration `json:"avg_tcp_connect_duration"`
+	// Average TLS handshake duration
+	AvgTLSHandshakeDuration time.Duration `json:"avg_tls_handshake_duration"`
+	// Average TTFB
+	AvgTimeToFirstByte time.Duration `json:"avg_time_to_first_byte"`
+	// Average total connection time
+	AvgTotalConnectionTime time.Duration `json:"avg_total_connection_time"`
+	// Min/Max for each metric
+	MinDNSLookupDuration     time.Duration `json:"min_dns_lookup_duration"`
+	MaxDNSLookupDuration     time.Duration `json:"max_dns_lookup_duration"`
+	MinTCPConnectDuration    time.Duration `json:"min_tcp_connect_duration"`
+	MaxTCPConnectDuration    time.Duration `json:"max_tcp_connect_duration"`
+	MinTLSHandshakeDuration  time.Duration `json:"min_tls_handshake_duration"`
+	MaxTLSHandshakeDuration  time.Duration `json:"max_tls_handshake_duration"`
+	MinTimeToFirstByte       time.Duration `json:"min_time_to_first_byte"`
+	MaxTimeToFirstByte       time.Duration `json:"max_time_to_first_byte"`
+	MinTotalConnectionTime   time.Duration `json:"min_total_connection_time"`
+	MaxTotalConnectionTime   time.Duration `json:"max_total_connection_time"`
+}
+
+// connectionTrace holds per-request timing data for httptrace callbacks
+type connectionTrace struct {
+	mu                  sync.Mutex
+	dnsStart            time.Time
+	dnsDone             time.Time
+	connectStart        time.Time
+	connectDone         time.Time
+	tlsHandshakeStart   time.Time
+	tlsHandshakeDone    time.Time
+	gotConn             time.Time
+	gotFirstResponseByte time.Time
+	requestStartTime    time.Time
 }
 
 // RequestInterceptor allows modifying requests before sending
@@ -203,6 +261,15 @@ func (c *HTTPClient) Do(ctx context.Context, req *http.Request) (*http.Response,
 	var err error
 	var attempts int
 
+	// Set up connection trace if enabled
+	var connTrace *connectionTrace
+	var tracedReq *http.Request
+	if c.config.EnableConnectionTrace {
+		tracedReq, connTrace = withConnectionTrace(req)
+	} else {
+		tracedReq = req
+	}
+
 	for attempts = 0; attempts <= c.config.MaxRetries; attempts++ {
 		if attempts > 0 {
 			// Calculate delay and wait
@@ -217,7 +284,7 @@ func (c *HTTPClient) Do(ctx context.Context, req *http.Request) (*http.Response,
 		}
 
 		// Create new request for retry (to avoid body reuse issues)
-		retryReq := c.cloneRequest(req)
+		retryReq := c.cloneRequest(tracedReq)
 		retryReq = retryReq.WithContext(ctx)
 
 		// Make the request
@@ -227,6 +294,11 @@ func (c *HTTPClient) Do(ctx context.Context, req *http.Request) (*http.Response,
 				continue
 			}
 			break
+		}
+
+		// Mark response received time for TTFB calculation
+		if c.config.EnableConnectionTrace && connTrace != nil {
+			connTrace.markResponseReceived()
 		}
 
 		// Apply response interceptor
@@ -243,7 +315,11 @@ func (c *HTTPClient) Do(ctx context.Context, req *http.Request) (*http.Response,
 			continue
 		}
 
-		// Success!
+		// Success! Collect connection metrics if tracing is enabled
+		if c.config.EnableConnectionTrace && connTrace != nil && resp != nil {
+			connMetrics := connTrace.toConnectionMetrics()
+			c.updateConnectionMetricsSummary(connMetrics)
+		}
 		break
 	}
 
