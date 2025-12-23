@@ -8,8 +8,8 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/cecil-the-coder/ai-provider-kit/pkg/utils"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
+	"github.com/cecil-the-coder/ai-provider-kit/pkg/utils"
 )
 
 // Test texts of varying sizes
