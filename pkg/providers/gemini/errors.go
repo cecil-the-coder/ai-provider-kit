@@ -3,16 +3,17 @@ package gemini
 
 import (
 	"encoding/json"
+	stderrors "errors"
 	"fmt"
 	"io"
 	"net/http"
-	stderrors "errors"
 
 	"github.com/cecil-the-coder/ai-provider-kit/internal/common/errors"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 )
 
 // richErrorHelper provides RichError integration for the Gemini provider.
+// nolint: unused // This is a package-level helper for error handling
 var richErrorHelper *errors.ProviderErrorHelper
 
 func init() {
@@ -21,6 +22,7 @@ func init() {
 
 // wrapAPIError wraps an API error with rich context using RichError.
 // This is the preferred error handling method for Gemini API calls.
+// nolint: unused // Kept for future use in API error handling
 func (p *GeminiProvider) wrapAPIError(req *http.Request, resp *http.Response, err error) error {
 	richErr := richErrorHelper.WrapHTTPError(req, resp, err)
 
@@ -49,6 +51,7 @@ func (p *GeminiProvider) wrapAPIError(req *http.Request, resp *http.Response, er
 }
 
 // wrapRequestError wraps a request preparation error with rich context.
+// nolint: unused // Kept for future use in request error handling
 func (p *GeminiProvider) wrapRequestError(operation string, req *http.Request, err error) error {
 	if err == nil {
 		return nil
@@ -57,6 +60,7 @@ func (p *GeminiProvider) wrapRequestError(operation string, req *http.Request, e
 }
 
 // wrapResponseError wraps a response parsing error with rich context.
+// nolint: unused // Kept for future use in response error handling
 func (p *GeminiProvider) wrapResponseError(operation string, req *http.Request, resp *http.Response, err error) error {
 	if err == nil {
 		return nil
@@ -65,6 +69,7 @@ func (p *GeminiProvider) wrapResponseError(operation string, req *http.Request, 
 }
 
 // wrapAuthError wraps an authentication error with rich context.
+// nolint: unused // Kept for future use in authentication error handling
 func (p *GeminiProvider) wrapAuthError(operation string, err error) error {
 	if err == nil {
 		return nil
@@ -73,11 +78,13 @@ func (p *GeminiProvider) wrapAuthError(operation string, err error) error {
 }
 
 // wrapRateLimitError wraps a rate limit error with rich context.
+// nolint: unused // Kept for future use in rate limit error handling
 func (p *GeminiProvider) wrapRateLimitError(req *http.Request, resp *http.Response) error {
 	return richErrorHelper.WrapRateLimitError(req, resp)
 }
 
 // wrapNetworkError wraps a network error with rich context.
+// nolint: unused // Kept for future use in network error handling
 func (p *GeminiProvider) wrapNetworkError(operation string, err error) error {
 	if err == nil {
 		return nil
@@ -86,6 +93,7 @@ func (p *GeminiProvider) wrapNetworkError(operation string, err error) error {
 }
 
 // wrapOAuthError wraps an OAuth-related error with rich context.
+// nolint: unused // Kept for future use in OAuth error handling
 func (p *GeminiProvider) wrapOAuthError(operation string, err error) error {
 	if err == nil {
 		return nil
@@ -131,6 +139,7 @@ func (p *GeminiProvider) IsClientError(err error) bool {
 }
 
 // classifyHTTPStatusCode classifies an HTTP status code into an error type.
+// nolint: unused // Kept for future use in HTTP error classification
 func (p *GeminiProvider) classifyHTTPStatusCode(statusCode int) types.ErrorCode {
 	return types.ClassifyHTTPError(statusCode)
 }
@@ -148,6 +157,7 @@ type GeminiErrorDetail struct {
 }
 
 // createAPIError creates a detailed API error from response.
+// nolint: unused // Kept for future use in API error creation
 func (p *GeminiProvider) createAPIError(resp *http.Response, body []byte) error {
 	var errorResponse GeminiErrorResponse
 	if parseErr := json.Unmarshal(body, &errorResponse); parseErr == nil && errorResponse.Error != nil {

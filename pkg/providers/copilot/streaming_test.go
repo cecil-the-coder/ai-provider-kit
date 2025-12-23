@@ -12,9 +12,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 )
 
 // TestGenerateChatCompletion_Streaming tests streaming chat completion
@@ -91,10 +92,10 @@ func TestGenerateChatCompletion_Streaming(t *testing.T) {
 		defer server.Close()
 
 		provider := NewCopilotProvider(types.ProviderConfig{
-			Type:    types.ProviderTypeCopilot,
+			Type: types.ProviderTypeCopilot,
 			ProviderConfig: map[string]interface{}{
-			"base_url": server.URL,
-		},
+				"base_url": server.URL,
+			},
 		})
 		provider.tokenMutex.Lock()
 		provider.copilotToken = "test_token"
@@ -224,10 +225,10 @@ func TestGenerateChatCompletion_Streaming(t *testing.T) {
 		defer server.Close()
 
 		provider := NewCopilotProvider(types.ProviderConfig{
-			Type:    types.ProviderTypeCopilot,
+			Type: types.ProviderTypeCopilot,
 			ProviderConfig: map[string]interface{}{
-			"base_url": server.URL,
-		},
+				"base_url": server.URL,
+			},
 		})
 		provider.tokenMutex.Lock()
 		provider.copilotToken = "test_token"
@@ -338,10 +339,10 @@ func TestGenerateChatCompletion_Streaming(t *testing.T) {
 		defer server.Close()
 
 		provider := NewCopilotProvider(types.ProviderConfig{
-			Type:    types.ProviderTypeCopilot,
+			Type: types.ProviderTypeCopilot,
 			ProviderConfig: map[string]interface{}{
-			"base_url": server.URL,
-		},
+				"base_url": server.URL,
+			},
 		})
 		provider.tokenMutex.Lock()
 		provider.copilotToken = "test_token"
@@ -434,10 +435,10 @@ func TestGenerateChatCompletion_Streaming(t *testing.T) {
 		defer server.Close()
 
 		provider := NewCopilotProvider(types.ProviderConfig{
-			Type:    types.ProviderTypeCopilot,
+			Type: types.ProviderTypeCopilot,
 			ProviderConfig: map[string]interface{}{
-			"base_url": server.URL,
-		},
+				"base_url": server.URL,
+			},
 		})
 		provider.tokenMutex.Lock()
 		provider.copilotToken = "test_token"
@@ -447,7 +448,7 @@ func TestGenerateChatCompletion_Streaming(t *testing.T) {
 		options := types.GenerateOptions{
 			Messages: []types.ChatMessage{
 				{
-					Role: "user",
+					Role:    "user",
 					Content: "What's in this image?",
 					Parts: []types.ContentPart{
 						{Type: "image", Source: &types.MediaSource{Type: "url", MediaType: "image/png", URL: "https://example.com/image.png"}},
@@ -475,10 +476,10 @@ func TestGenerateChatCompletion_Streaming(t *testing.T) {
 		defer server.Close()
 
 		provider := NewCopilotProvider(types.ProviderConfig{
-			Type:    types.ProviderTypeCopilot,
+			Type: types.ProviderTypeCopilot,
 			ProviderConfig: map[string]interface{}{
-			"base_url": server.URL,
-		},
+				"base_url": server.URL,
+			},
 		})
 		provider.tokenMutex.Lock()
 		provider.copilotToken = "test_token"
@@ -536,10 +537,10 @@ func TestGenerateChatCompletion_Streaming(t *testing.T) {
 		defer server.Close()
 
 		provider := NewCopilotProvider(types.ProviderConfig{
-			Type:    types.ProviderTypeCopilot,
+			Type: types.ProviderTypeCopilot,
 			ProviderConfig: map[string]interface{}{
-			"base_url": server.URL,
-		},
+				"base_url": server.URL,
+			},
 		})
 		provider.tokenMutex.Lock()
 		provider.copilotToken = "test_token"
@@ -687,7 +688,6 @@ func TestCopilotStream(t *testing.T) {
 	t.Run("stream handles scanner errors", func(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// Close immediately to cause error
-			return
 		}))
 		defer server.Close()
 
@@ -755,10 +755,10 @@ func TestMakeStreamingAPICall(t *testing.T) {
 		defer server.Close()
 
 		provider := NewCopilotProvider(types.ProviderConfig{
-			Type:    types.ProviderTypeCopilot,
+			Type: types.ProviderTypeCopilot,
 			ProviderConfig: map[string]interface{}{
-			"base_url": server.URL,
-		},
+				"base_url": server.URL,
+			},
 		})
 
 		req := &ChatCompletionRequest{
@@ -784,10 +784,10 @@ func TestMakeStreamingAPICall(t *testing.T) {
 		defer server.Close()
 
 		provider := NewCopilotProvider(types.ProviderConfig{
-			Type:    types.ProviderTypeCopilot,
+			Type: types.ProviderTypeCopilot,
 			ProviderConfig: map[string]interface{}{
-			"base_url": server.URL,
-		},
+				"base_url": server.URL,
+			},
 		})
 
 		req := &ChatCompletionRequest{
@@ -838,10 +838,10 @@ func TestExecuteStreamWithAuth(t *testing.T) {
 		defer server.Close()
 
 		provider := NewCopilotProvider(types.ProviderConfig{
-			Type:    types.ProviderTypeCopilot,
+			Type: types.ProviderTypeCopilot,
 			ProviderConfig: map[string]interface{}{
-			"base_url": server.URL,
-		},
+				"base_url": server.URL,
+			},
 		})
 		provider.tokenMutex.Lock()
 		provider.copilotToken = "test_token"

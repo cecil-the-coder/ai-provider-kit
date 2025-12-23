@@ -319,7 +319,7 @@ func (t *Tester) setAuthHeaders(req *http.Request, config TestRequestConfig) {
 }
 
 // defaultSuccessValidator provides default response validation
-func (t *Tester) defaultSuccessValidator(resp *http.Response, body []byte, config TestRequestConfig) error {
+func (t *Tester) defaultSuccessValidator(_ *http.Response, body []byte, config TestRequestConfig) error {
 	switch config.EndpointType {
 	case EndpointTypeModels:
 		// Validate models endpoint response

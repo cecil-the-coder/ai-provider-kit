@@ -12,7 +12,7 @@ import (
 // ProviderErrorHelper provides helper methods for creating rich errors from provider operations.
 // This simplifies error handling in provider implementations.
 type ProviderErrorHelper struct {
-	provider     types.ProviderType
+	provider       types.ProviderType
 	snapshotConfig *SnapshotConfig
 }
 
@@ -249,7 +249,7 @@ func (h *ProviderErrorHelper) WrapServerError(req *http.Request, resp *http.Resp
 	return richErr
 }
 
-// IsRetryableError checks if an error is retryable.
+// IsRetryableErrorRich checks if an error is retryable.
 // This works with both RichError and standard errors.
 func IsRetryableErrorRich(err error) bool {
 	if err == nil {
@@ -267,7 +267,7 @@ func IsRetryableErrorRich(err error) bool {
 	return IsRetryableError(err)
 }
 
-// IsAuthenticationError checks if an error is authentication-related.
+// IsAuthenticationErrorRich checks if an error is authentication-related.
 func IsAuthenticationErrorRich(err error) bool {
 	if err == nil {
 		return false
@@ -370,37 +370,38 @@ func ExtractProviderError(richErr *RichError) *types.ProviderError {
 
 	// Determine error code from wrapped error
 	var code types.ErrorCode
-	if errors.Is(richErr, ErrNotAuthenticated) || errors.Is(richErr, ErrUnauthorized) {
+	switch {
+	case errors.Is(richErr, ErrNotAuthenticated) || errors.Is(richErr, ErrUnauthorized):
 		code = types.ErrCodeAuthentication
-	} else if errors.Is(richErr, ErrRateLimited) {
+	case errors.Is(richErr, ErrRateLimited):
 		code = types.ErrCodeRateLimit
-	} else if errors.Is(richErr, ErrInvalidRequest) {
+	case errors.Is(richErr, ErrInvalidRequest):
 		code = types.ErrCodeInvalidRequest
-	} else if errors.Is(richErr, ErrModelNotFound) {
+	case errors.Is(richErr, ErrModelNotFound):
 		code = types.ErrCodeNotFound
-	} else if errors.Is(richErr, ErrContextLengthExceeded) {
+	case errors.Is(richErr, ErrContextLengthExceeded):
 		code = types.ErrCodeContextLength
-	} else if errors.Is(richErr, ErrContentFiltered) {
+	case errors.Is(richErr, ErrContentFiltered):
 		code = types.ErrCodeContentFilter
-	} else if errors.Is(richErr, ErrTimeout) {
+	case errors.Is(richErr, ErrTimeout):
 		code = types.ErrCodeTimeout
-	} else if errors.Is(richErr, ErrNetworkError) {
+	case errors.Is(richErr, ErrNetworkError):
 		code = types.ErrCodeNetwork
-	} else if errors.Is(richErr, ErrServerError) || errors.Is(richErr, ErrServiceUnavailable) {
+	case errors.Is(richErr, ErrServerError) || errors.Is(richErr, ErrServiceUnavailable):
 		code = types.ErrCodeServerError
-	} else {
+	default:
 		code = types.ErrCodeUnknown
 	}
 
 	providerErr := &types.ProviderError{
-		Code:          code,
-		Message:       richErr.Error(),
-		Provider:      ctx.Provider,
-		Operation:     ctx.Operation,
-		RequestID:     ctx.RequestID,
-		CorrelationID: ctx.CorrelationID,
+		Code:           code,
+		Message:        richErr.Error(),
+		Provider:       ctx.Provider,
+		Operation:      ctx.Operation,
+		RequestID:      ctx.RequestID,
+		CorrelationID:  ctx.CorrelationID,
 		RequestLatency: ctx.Duration,
-		OriginalErr:   richErr.Unwrap(),
+		OriginalErr:    richErr.Unwrap(),
 	}
 
 	// Extract status code from response if available

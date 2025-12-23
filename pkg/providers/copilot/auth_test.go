@@ -9,9 +9,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 )
 
 // TestCopilotProvider_Authenticate_APIKey tests authentication with pre-existing API key (Copilot token)
@@ -276,10 +277,10 @@ func TestStartTokenRefreshLoop(t *testing.T) {
 // TestCalculateRefreshInterval tests token refresh interval calculation
 func TestCalculateRefreshInterval(t *testing.T) {
 	tests := []struct {
-		name              string
-		refreshIn         int
-		expectedMin       time.Duration
-		expectedMax       time.Duration
+		name        string
+		refreshIn   int
+		expectedMin time.Duration
+		expectedMax time.Duration
 	}{
 		{
 			name:        "normal refresh interval",

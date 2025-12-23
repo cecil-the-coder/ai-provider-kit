@@ -508,7 +508,7 @@ func (c *HTTPClient) Client() *http.Client {
 	return c.client
 }
 
-// GetLastRequestInfo returns information about the last request for error handling.
+// LastRequestInfo represents information about the last request for error handling.
 // This can be used to enrich errors with request/response context.
 type LastRequestInfo struct {
 	Request      *http.Request

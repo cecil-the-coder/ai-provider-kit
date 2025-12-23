@@ -13,10 +13,11 @@ import (
 	"testing"
 	"time"
 
-	richerrors "github.com/cecil-the-coder/ai-provider-kit/internal/common/errors"
-	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	richerrors "github.com/cecil-the-coder/ai-provider-kit/internal/common/errors"
+	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 )
 
 // TestWrapAPIError tests API error wrapping with RichError
@@ -405,53 +406,53 @@ func TestClassifyHTTPStatusCode(t *testing.T) {
 	})
 
 	tests := []struct {
-		name            string
-		statusCode      int
+		name             string
+		statusCode       int
 		expectedCategory types.ErrorCode
 	}{
 		{
-			name:            "400 bad request",
-			statusCode:      http.StatusBadRequest,
+			name:             "400 bad request",
+			statusCode:       http.StatusBadRequest,
 			expectedCategory: types.ErrCodeInvalidRequest,
 		},
 		{
-			name:            "401 unauthorized",
-			statusCode:      http.StatusUnauthorized,
+			name:             "401 unauthorized",
+			statusCode:       http.StatusUnauthorized,
 			expectedCategory: types.ErrCodeAuthentication,
 		},
 		{
-			name:            "403 forbidden",
-			statusCode:      http.StatusForbidden,
+			name:             "403 forbidden",
+			statusCode:       http.StatusForbidden,
 			expectedCategory: types.ErrCodeAuthentication,
 		},
 		{
-			name:            "404 not found",
-			statusCode:      http.StatusNotFound,
+			name:             "404 not found",
+			statusCode:       http.StatusNotFound,
 			expectedCategory: types.ErrCodeNotFound,
 		},
 		{
-			name:            "429 rate limit",
-			statusCode:      http.StatusTooManyRequests,
+			name:             "429 rate limit",
+			statusCode:       http.StatusTooManyRequests,
 			expectedCategory: types.ErrCodeRateLimit,
 		},
 		{
-			name:            "500 internal server error",
-			statusCode:      http.StatusInternalServerError,
+			name:             "500 internal server error",
+			statusCode:       http.StatusInternalServerError,
 			expectedCategory: types.ErrCodeServerError,
 		},
 		{
-			name:            "502 bad gateway",
-			statusCode:      http.StatusBadGateway,
+			name:             "502 bad gateway",
+			statusCode:       http.StatusBadGateway,
 			expectedCategory: types.ErrCodeServerError,
 		},
 		{
-			name:            "503 service unavailable",
-			statusCode:      http.StatusServiceUnavailable,
+			name:             "503 service unavailable",
+			statusCode:       http.StatusServiceUnavailable,
 			expectedCategory: types.ErrCodeServerError,
 		},
 		{
-			name:            "504 gateway timeout",
-			statusCode:      http.StatusGatewayTimeout,
+			name:             "504 gateway timeout",
+			statusCode:       http.StatusGatewayTimeout,
 			expectedCategory: types.ErrCodeServerError,
 		},
 	}

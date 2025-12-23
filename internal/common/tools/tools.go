@@ -24,8 +24,8 @@ const (
 
 // OpenAIFormat represents the OpenAI tool format structure
 type OpenAIFormat struct {
-	Type     string                 `json:"type"` // Always "function"
-	Function OpenAIFunctionDef      `json:"function"`
+	Type     string            `json:"type"` // Always "function"
+	Function OpenAIFunctionDef `json:"function"`
 }
 
 // OpenAIFunctionDef represents a function definition in OpenAI format
@@ -37,9 +37,9 @@ type OpenAIFunctionDef struct {
 
 // OpenAIToolCall represents a tool call in OpenAI format
 type OpenAIToolCall struct {
-	ID       string                       `json:"id"`
-	Type     string                       `json:"type"` // "function"
-	Function OpenAIToolCallFunction       `json:"function"`
+	ID       string                 `json:"id"`
+	Type     string                 `json:"type"` // "function"
+	Function OpenAIToolCallFunction `json:"function"`
 }
 
 // OpenAIToolCallFunction represents a function call in a tool call

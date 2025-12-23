@@ -36,9 +36,9 @@ type GeminiProperty struct {
 
 // GeminiPart represents a part in Gemini's content format
 type GeminiPart struct {
-	Text         string                `json:"text,omitempty"`
-	FunctionCall *GeminiFunctionCall   `json:"functionCall,omitempty"`
-	FunctionResp *GeminiFunctionResp   `json:"functionResponse,omitempty"`
+	Text         string              `json:"text,omitempty"`
+	FunctionCall *GeminiFunctionCall `json:"functionCall,omitempty"`
+	FunctionResp *GeminiFunctionResp `json:"functionResponse,omitempty"`
 }
 
 // GeminiFunctionCall represents a function call in Gemini's format

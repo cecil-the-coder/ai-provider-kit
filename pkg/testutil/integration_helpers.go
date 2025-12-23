@@ -590,7 +590,7 @@ func ConcurrentScenario(t *testing.T, provider types.Provider, ctx context.Conte
 
 		for i := 0; i < concurrency; i++ {
 			wg.Add(1)
-			go func(id int) {
+			go func(int) {
 				defer wg.Done()
 				_ = provider.GetMetrics()
 			}(i)

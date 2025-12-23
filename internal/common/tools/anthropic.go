@@ -9,16 +9,16 @@ import (
 
 // AnthropicTool represents a tool in Anthropic's format
 type AnthropicTool struct {
-	Name            string                 `json:"name"`
-	Description     string                 `json:"description,omitempty"`
-	InputSchema     map[string]interface{} `json:"input_schema,omitempty"`
-	Type            string                 `json:"type,omitempty"` // For native tools (e.g., "web_search_20250305")
+	Name        string                 `json:"name"`
+	Description string                 `json:"description,omitempty"`
+	InputSchema map[string]interface{} `json:"input_schema,omitempty"`
+	Type        string                 `json:"type,omitempty"` // For native tools (e.g., "web_search_20250305")
 
 	// Native tool fields (for Anthropic's built-in tools)
-	MaxUses         *int                   `json:"max_uses,omitempty"`
-	AllowedDomains  []string               `json:"allowed_domains,omitempty"`
-	BlockedDomains  []string               `json:"blocked_domains,omitempty"`
-	UserLocation    map[string]interface{} `json:"user_location,omitempty"`
+	MaxUses        *int                   `json:"max_uses,omitempty"`
+	AllowedDomains []string               `json:"allowed_domains,omitempty"`
+	BlockedDomains []string               `json:"blocked_domains,omitempty"`
+	UserLocation   map[string]interface{} `json:"user_location,omitempty"`
 }
 
 // AnthropicContentBlock represents a content block in Anthropic's format

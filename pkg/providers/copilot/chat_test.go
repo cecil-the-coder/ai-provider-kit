@@ -11,9 +11,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 )
 
 // TestGenerateChatCompletion_NonStreaming tests non-streaming chat completion
@@ -44,10 +45,10 @@ func TestGenerateChatCompletion_NonStreaming(t *testing.T) {
 			// Return response
 			w.Header().Set("Content-Type", "application/json")
 			response := ChatCompletionResponse{
-				ID:     "chatcmpl-test123",
-				Object: "chat.completion",
+				ID:      "chatcmpl-test123",
+				Object:  "chat.completion",
 				Created: time.Now().Unix(),
-				Model:  "gpt-4o",
+				Model:   "gpt-4o",
 				Choices: []ChatChoice{
 					{
 						Index: 0,
@@ -150,7 +151,7 @@ func TestGenerateChatCompletion_NonStreaming(t *testing.T) {
 		provider.tokenMutex.Unlock()
 
 		options := types.GenerateOptions{
-			Prompt:     "Test prompt",
+			Prompt:    "Test prompt",
 			MaxTokens: 100,
 		}
 
@@ -283,8 +284,7 @@ func TestPrepareRequest(t *testing.T) {
 			},
 		}
 
-		req, err := provider.prepareRequest(options, "gpt-4o")
-		require.NoError(t, err)
+		req := provider.prepareRequest(options, "gpt-4o")
 
 		assert.Equal(t, "gpt-4o", req.Model)
 		assert.Equal(t, 2, len(req.Messages))
@@ -302,8 +302,7 @@ func TestPrepareRequest(t *testing.T) {
 			MaxTokens: 500,
 		}
 
-		req, err := provider.prepareRequest(options, "gpt-4o")
-		require.NoError(t, err)
+		req := provider.prepareRequest(options, "gpt-4o")
 		assert.Equal(t, 500, req.MaxTokens)
 	})
 
@@ -313,8 +312,7 @@ func TestPrepareRequest(t *testing.T) {
 			Temperature: 0.8,
 		}
 
-		req, err := provider.prepareRequest(options, "gpt-4o")
-		require.NoError(t, err)
+		req := provider.prepareRequest(options, "gpt-4o")
 		assert.Equal(t, 0.8, req.Temperature)
 	})
 
@@ -332,8 +330,7 @@ func TestPrepareRequest(t *testing.T) {
 			},
 		}
 
-		req, err := provider.prepareRequest(options, "gpt-4o")
-		require.NoError(t, err)
+		req := provider.prepareRequest(options, "gpt-4o")
 
 		parts, ok := req.Messages[0].Content.([]ContentPart)
 		require.True(t, ok)
@@ -357,8 +354,7 @@ func TestPrepareRequest(t *testing.T) {
 			},
 		}
 
-		req, err := provider.prepareRequest(options, "gpt-4o")
-		require.NoError(t, err)
+		req := provider.prepareRequest(options, "gpt-4o")
 
 		assert.True(t, provider.hasVisionContent(req.Messages))
 	})

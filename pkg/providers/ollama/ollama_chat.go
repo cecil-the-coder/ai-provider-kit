@@ -10,8 +10,8 @@ import (
 	"time"
 
 	common "github.com/cecil-the-coder/ai-provider-kit/internal/common"
-	commontools "github.com/cecil-the-coder/ai-provider-kit/internal/common/tools"
 	"github.com/cecil-the-coder/ai-provider-kit/internal/common/telemetry"
+	commontools "github.com/cecil-the-coder/ai-provider-kit/internal/common/tools"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 )
 

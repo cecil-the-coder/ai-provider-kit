@@ -21,7 +21,7 @@ func ConvertTools(tools []types.Tool) []Tool {
 		}
 
 		// Convert InputSchema to Parameters
-		if tool.InputSchema != nil && len(tool.InputSchema) > 0 {
+		if len(tool.InputSchema) > 0 {
 			t.Function.Parameters = tool.InputSchema
 		}
 
@@ -121,7 +121,7 @@ func ValidateToolDefinition(tool types.Tool) error {
 	}
 
 	// Check if InputSchema is valid JSON schema
-	if tool.InputSchema != nil && len(tool.InputSchema) > 0 {
+	if len(tool.InputSchema) > 0 {
 		// Validate that it has a type
 		if _, ok := tool.InputSchema["type"]; !ok {
 			return &ToolValidationError{Message: "tool InputSchema must have a 'type' field"}

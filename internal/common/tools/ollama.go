@@ -9,8 +9,8 @@ import (
 
 // OllamaTool represents a tool in Ollama's format (OpenAI-compatible)
 type OllamaTool struct {
-	Type     string             `json:"type"` // Always "function"
-	Function OllamaFunctionDef  `json:"function"`
+	Type     string            `json:"type"` // Always "function"
+	Function OllamaFunctionDef `json:"function"`
 }
 
 // OllamaFunctionDef represents a function definition in Ollama's format
@@ -22,9 +22,9 @@ type OllamaFunctionDef struct {
 
 // OllamaToolCall represents a tool call in Ollama's format (OpenAI-compatible)
 type OllamaToolCall struct {
-	ID       string                   `json:"id"`
-	Type     string                   `json:"type"` // "function"
-	Function OllamaToolCallFunction   `json:"function"`
+	ID       string                 `json:"id"`
+	Type     string                 `json:"type"` // "function"
+	Function OllamaToolCallFunction `json:"function"`
 }
 
 // OllamaToolCallFunction represents a function call in a tool call

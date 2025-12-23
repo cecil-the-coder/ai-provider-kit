@@ -678,4 +678,3 @@ func (c *connectivityCache) TestConnectivity(ctx context.Context, providerType t
 
 	return result
 }
-

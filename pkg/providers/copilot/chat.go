@@ -13,9 +13,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/cecil-the-coder/ai-provider-kit/internal/common/streaming"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
+	"github.com/google/uuid"
 )
 
 // GenerateChatCompletion generates a chat completion
@@ -56,11 +56,7 @@ func (p *CopilotProvider) GenerateChatCompletion(
 			WithOriginalErr(err)
 	}
 
-	requestData, err := p.prepareRequest(options, model)
-	if err != nil {
-		p.RecordError(err)
-		return nil, err
-	}
+	requestData := p.prepareRequest(options, model)
 
 	response, err := p.makeAPICall(ctx, requestData, token)
 	if err != nil {
@@ -70,8 +66,7 @@ func (p *CopilotProvider) GenerateChatCompletion(
 
 	// Record success
 	latency := time.Since(startTime)
-	var tokensUsed int64
-	tokensUsed = int64(response.Usage.TotalTokens)
+	tokensUsed := int64(response.Usage.TotalTokens)
 	p.RecordSuccess(latency, tokensUsed)
 
 	// Convert response to ChatCompletionChunk
@@ -94,9 +89,9 @@ func (p *CopilotProvider) GenerateChatCompletion(
 			{
 				Index: response.Choices[0].Index,
 				Message: types.ChatMessage{
-					Role:       response.Choices[0].Message.Role,
-					Content:    extractMessageContent(response.Choices[0].Message.Content),
-					ToolCalls:  convertToolCalls(response.Choices[0].Message.ToolCalls),
+					Role:      response.Choices[0].Message.Role,
+					Content:   extractMessageContent(response.Choices[0].Message.Content),
+					ToolCalls: convertToolCalls(response.Choices[0].Message.ToolCalls),
 				},
 				FinishReason: response.Choices[0].FinishReason,
 			},
@@ -107,7 +102,7 @@ func (p *CopilotProvider) GenerateChatCompletion(
 }
 
 // prepareRequest prepares the API request payload
-func (p *CopilotProvider) prepareRequest(options types.GenerateOptions, model string) (*ChatCompletionRequest, error) {
+func (p *CopilotProvider) prepareRequest(options types.GenerateOptions, model string) *ChatCompletionRequest {
 	// Convert messages
 	messages := make([]ChatMessage, 0, len(options.Messages))
 
@@ -166,7 +161,7 @@ func (p *CopilotProvider) prepareRequest(options types.GenerateOptions, model st
 		}
 	}
 
-	return req, nil
+	return req
 }
 
 // makeAPICall makes the actual HTTP request to the Copilot API
@@ -192,8 +187,8 @@ func (p *CopilotProvider) makeAPICall(ctx context.Context, requestData *ChatComp
 	}
 
 	p.LogRequest("POST", url, map[string]string{
-		"Authorization":         "Bearer ***",
-		"Content-Type":          "application/json",
+		"Authorization":          "Bearer ***",
+		"Content-Type":           "application/json",
 		"copilot-integration-id": CopilotIntegrationID,
 	}, requestData)
 
@@ -225,11 +220,7 @@ func (p *CopilotProvider) executeStreamWithAuth(ctx context.Context, options typ
 			WithOriginalErr(err)
 	}
 
-	requestData, err := p.prepareRequest(options, model)
-	if err != nil {
-		return nil, err
-	}
-
+	requestData := p.prepareRequest(options, model)
 	requestData.Stream = true
 
 	return p.makeStreamingAPICall(ctx, requestData, token)
@@ -536,9 +527,9 @@ func (s *CopilotStream) Next() (types.ChatCompletionChunk, error) {
 				{
 					Index: chunk.Choices[0].Index,
 					Delta: types.ChatMessage{
-						Role:       chunk.Choices[0].Delta.Role,
-						Content:    chunk.Choices[0].Delta.Content,
-						ToolCalls:  convertToolCalls(chunk.Choices[0].Delta.ToolCalls),
+						Role:      chunk.Choices[0].Delta.Role,
+						Content:   chunk.Choices[0].Delta.Content,
+						ToolCalls: convertToolCalls(chunk.Choices[0].Delta.ToolCalls),
 					},
 					FinishReason: getFinishReason(chunk.Choices[0].FinishReason),
 				},

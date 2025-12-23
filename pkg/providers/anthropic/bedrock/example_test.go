@@ -7,8 +7,8 @@ import (
 	"log"
 	"net/http/httptest"
 
-	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/anthropic/bedrock"
 	"github.com/cecil-the-coder/ai-provider-kit/internal/common/middleware"
+	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/anthropic/bedrock"
 )
 
 // Example_basic demonstrates basic Bedrock middleware usage

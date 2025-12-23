@@ -8,9 +8,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 )
 
 // TestNewCopilotProvider_VariousConfigs tests provider creation with different configurations
@@ -404,8 +405,8 @@ func TestCopilotProvider_TestConnectivity(t *testing.T) {
 		defer server.Close()
 
 		provider := NewCopilotProvider(types.ProviderConfig{
-			Type:         types.ProviderTypeCopilot,
-			BaseURL:      server.URL,
+			Type:    types.ProviderTypeCopilot,
+			BaseURL: server.URL,
 			ProviderConfig: map[string]interface{}{
 				"copilot_token": "test_token",
 			},
@@ -426,8 +427,8 @@ func TestCopilotProvider_TestConnectivity(t *testing.T) {
 		defer server.Close()
 
 		provider := NewCopilotProvider(types.ProviderConfig{
-			Type:         types.ProviderTypeCopilot,
-			BaseURL:      server.URL,
+			Type:    types.ProviderTypeCopilot,
+			BaseURL: server.URL,
 			ProviderConfig: map[string]interface{}{
 				"copilot_token": "test_token",
 			},

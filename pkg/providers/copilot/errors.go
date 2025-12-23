@@ -2,8 +2,8 @@
 package copilot
 
 import (
-	stderrors "errors"
 	"encoding/json"
+	stderrors "errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -21,8 +21,8 @@ func init() {
 
 // wrapAPIError wraps an API error with rich context using RichError.
 // This is the preferred error handling method for Copilot API calls.
-func (p *CopilotProvider) wrapAPIError(req *http.Request, resp *http.Response, err error) error {
-	richErr := richErrorHelper.WrapHTTPError(req, resp, err)
+func (p *CopilotProvider) wrapAPIError(req *http.Request, resp *http.Response, _ error) error {
+	richErr := richErrorHelper.WrapHTTPError(req, resp, nil)
 
 	// Add specific error context based on status code
 	if resp != nil && resp.StatusCode != http.StatusOK {

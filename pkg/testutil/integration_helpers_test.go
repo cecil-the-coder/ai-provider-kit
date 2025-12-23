@@ -595,12 +595,12 @@ func TestGenerateOptionsBuilder_DefaultValues(t *testing.T) {
 // Mock Provider Extensions for Testing
 // ============================================================================
 
-// Extending MockProvider with additional fields for testing
-type extendedMockProvider struct {
+// ExtendedMockProvider extends MockProvider with additional fields for testing
+type ExtendedMockProvider struct {
 	*MockProvider
 	supportsStreaming bool
 }
 
-func (m *extendedMockProvider) SupportsStreaming() bool {
+func (m *ExtendedMockProvider) SupportsStreaming() bool {
 	return m.supportsStreaming
 }

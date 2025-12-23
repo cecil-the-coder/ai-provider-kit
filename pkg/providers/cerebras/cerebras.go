@@ -12,12 +12,12 @@ import (
 	"time"
 
 	"github.com/cecil-the-coder/ai-provider-kit/internal/clientpool"
-	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/base"
 	common "github.com/cecil-the-coder/ai-provider-kit/internal/common"
 	"github.com/cecil-the-coder/ai-provider-kit/internal/common/auth"
 	commonconfig "github.com/cecil-the-coder/ai-provider-kit/internal/common/config"
 	"github.com/cecil-the-coder/ai-provider-kit/internal/common/models"
 	commontools "github.com/cecil-the-coder/ai-provider-kit/internal/common/tools"
+	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/base"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/ratelimit"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 )

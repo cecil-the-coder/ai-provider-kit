@@ -177,7 +177,6 @@ func (e *StreamingExecutor) setAuthHeaders(req *http.Request, authToken string, 
 			req.Header.Set("Authorization", "Bearer "+authToken)
 		}
 	}
-	return
 }
 
 // setStandardHeaders sets standard headers common to all streaming requests
@@ -186,8 +185,7 @@ func (e *StreamingExecutor) setStandardHeaders(req *http.Request) {
 	req.Header.Set("User-Agent", telemetry.GetUserAgent())
 
 	// Provider-specific standard headers
-	switch e.config.ProviderType {
-	case types.ProviderTypeAnthropic:
+	if e.config.ProviderType == types.ProviderTypeAnthropic {
 		req.Header.Set("anthropic-version", "2023-06-01")
 	}
 }

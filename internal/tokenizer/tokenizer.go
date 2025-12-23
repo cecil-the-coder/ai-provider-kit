@@ -13,9 +13,11 @@
 //	count, err := tokenizer.CountTokens("Hello, world!", "gpt-4")
 //
 // Build with Rust tokenizer:
+//
 //	go build -tags=rusttokenizer
 //
 // Or use pure Go (always available):
+//
 //	go build
 package tokenizer
 

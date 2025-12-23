@@ -486,10 +486,10 @@ func TestConvertProviderError(t *testing.T) {
 		{
 			name: "invalid request error",
 			providerError: &types.ProviderError{
-				Code:       types.ErrCodeInvalidRequest,
-				Message:    "invalid model",
-				Provider:   types.ProviderTypeGemini,
-				Operation:  "get_models",
+				Code:      types.ErrCodeInvalidRequest,
+				Message:   "invalid model",
+				Provider:  types.ProviderTypeGemini,
+				Operation: "get_models",
 			},
 			checkSentinel: ErrInvalidRequest,
 		},
@@ -592,8 +592,8 @@ func TestExtractProviderError(t *testing.T) {
 					WithProvider(types.ProviderTypeGemini).
 					WithResponseSnapshot(resp)
 			}(),
-			expectedCode:      types.ErrCodeServerError,
-			expectedProvider:  types.ProviderTypeGemini,
+			expectedCode:     types.ErrCodeServerError,
+			expectedProvider: types.ProviderTypeGemini,
 		},
 		{
 			name:              "nil error",
@@ -638,14 +638,14 @@ func TestExtractProviderError(t *testing.T) {
 func TestRoundTripConversion(t *testing.T) {
 	// Create a provider error
 	originalErr := &types.ProviderError{
-		Code:          types.ErrCodeAuthentication,
-		Message:       "invalid API key",
-		Provider:      types.ProviderTypeAnthropic,
-		Operation:     "chat_completion",
-		RequestID:     "req-abc-123",
-		CorrelationID: "corr-xyz-789",
+		Code:           types.ErrCodeAuthentication,
+		Message:        "invalid API key",
+		Provider:       types.ProviderTypeAnthropic,
+		Operation:      "chat_completion",
+		RequestID:      "req-abc-123",
+		CorrelationID:  "corr-xyz-789",
 		RequestLatency: time.Second,
-		StatusCode:    401,
+		StatusCode:     401,
 	}
 
 	// Convert to RichError

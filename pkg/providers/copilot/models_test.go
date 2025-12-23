@@ -10,9 +10,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 )
 
 // TestFetchModelsFromAPI tests fetching models from Copilot API
@@ -570,9 +571,9 @@ func TestGetModels_AccountTypes(t *testing.T) {
 // TestGetDefaultModel tests getting the default model
 func TestGetDefaultModel(t *testing.T) {
 	tests := []struct {
-		name              string
-		config            types.ProviderConfig
-		expectedModel     string
+		name          string
+		config        types.ProviderConfig
+		expectedModel string
 	}{
 		{
 			name: "default model when not specified",

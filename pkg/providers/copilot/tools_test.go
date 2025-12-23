@@ -11,9 +11,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 )
 
 // TestConvertTools_Copilot tests tool conversion for Copilot
@@ -393,7 +394,7 @@ func TestValidateToolDefinition(t *testing.T) {
 							"description": "First parameter",
 						},
 						"param2": map[string]interface{}{
-							"type": "integer",
+							"type":        "integer",
 							"description": "Second parameter",
 						},
 					},
@@ -558,10 +559,10 @@ func TestGenerateChatCompletion_WithTools(t *testing.T) {
 		defer server.Close()
 
 		provider := NewCopilotProvider(types.ProviderConfig{
-			Type:    types.ProviderTypeCopilot,
+			Type: types.ProviderTypeCopilot,
 			ProviderConfig: map[string]interface{}{
-			"base_url": server.URL,
-		},
+				"base_url": server.URL,
+			},
 		})
 		provider.tokenMutex.Lock()
 		provider.copilotToken = "test_token"
@@ -624,8 +625,8 @@ func TestGenerateChatCompletion_WithTools(t *testing.T) {
 
 			// Send tool call delta
 			chunk := map[string]interface{}{
-				"id":      "chatcmpl-test",
-				"object":  "chat.completion.chunk",
+				"id":     "chatcmpl-test",
+				"object": "chat.completion.chunk",
 				"choices": []map[string]interface{}{
 					{
 						"index": 0,
@@ -633,8 +634,8 @@ func TestGenerateChatCompletion_WithTools(t *testing.T) {
 							"tool_calls": []map[string]interface{}{
 								{
 									"index": 0,
-									"id":     "call_123",
-									"type":   "function",
+									"id":    "call_123",
+									"type":  "function",
 									"function": map[string]interface{}{
 										"name":      "get_weather",
 										"arguments": "",
@@ -656,10 +657,10 @@ func TestGenerateChatCompletion_WithTools(t *testing.T) {
 		defer server.Close()
 
 		provider := NewCopilotProvider(types.ProviderConfig{
-			Type:    types.ProviderTypeCopilot,
+			Type: types.ProviderTypeCopilot,
 			ProviderConfig: map[string]interface{}{
-			"base_url": server.URL,
-		},
+				"base_url": server.URL,
+			},
 		})
 		provider.tokenMutex.Lock()
 		provider.copilotToken = "test_token"
@@ -704,8 +705,8 @@ func TestToolChoiceVariations(t *testing.T) {
 		// Verify tool choice based on what was sent
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(ChatCompletionResponse{
-			ID:      "test",
-			Object:  "chat.completion",
+			ID:     "test",
+			Object: "chat.completion",
 			Choices: []ChatChoice{
 				{
 					Index: 0,
@@ -722,14 +723,14 @@ func TestToolChoiceVariations(t *testing.T) {
 	defer server.Close()
 
 	provider := NewCopilotProvider(types.ProviderConfig{
-		Type:    types.ProviderTypeCopilot,
+		Type: types.ProviderTypeCopilot,
 		ProviderConfig: map[string]interface{}{
 			"base_url": server.URL,
 		},
 	})
 	provider.tokenMutex.Lock()
 	provider.copilotToken = "test_token"
-		provider.copilotTokenExpiry = time.Now().Add(1 * time.Hour)
+	provider.copilotTokenExpiry = time.Now().Add(1 * time.Hour)
 	provider.tokenMutex.Unlock()
 
 	tools := []types.Tool{
