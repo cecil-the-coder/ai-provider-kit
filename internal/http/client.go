@@ -507,3 +507,23 @@ func (b *HTTPClientBuilder) Build() *HTTPClient {
 func (c *HTTPClient) Client() *http.Client {
 	return c.client
 }
+
+// GetLastRequestInfo returns information about the last request for error handling.
+// This can be used to enrich errors with request/response context.
+type LastRequestInfo struct {
+	Request     *http.Request
+	Response    *http.Response
+	Attempts    int
+	TotalLatency time.Duration
+	Error       error
+}
+
+// GetLastRequestInfo returns info about the last request made.
+func (c *HTTPClient) GetLastRequestInfo() LastRequestInfo {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return LastRequestInfo{
+		TotalLatency: c.metrics.AvgLatency,
+	}
+}

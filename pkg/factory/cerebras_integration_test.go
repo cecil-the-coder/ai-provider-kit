@@ -2,12 +2,20 @@ package factory
 
 import (
 	"context"
+	"os"
 	"testing"
 
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/cerebras"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/testutil"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 )
+
+// skipIfNoAPIKey skips the test if CEREBRAS_API_KEY is not set
+func skipIfNoAPIKey(t *testing.T) {
+	if os.Getenv("CEREBRAS_API_KEY") == "" {
+		t.Skip("Skipping integration test: CEREBRAS_API_KEY not set")
+	}
+}
 
 func TestCerebrasProvider_FactoryIntegration(t *testing.T) {
 	t.Parallel()
@@ -128,6 +136,8 @@ func TestCerebrasProvider_MultipleAPIKeys_FactoryIntegration(t *testing.T) {
 
 func TestCerebrasProvider_HappyPathScenario(t *testing.T) {
 	t.Parallel()
+	skipIfNoAPIKey(t)
+
 	// Create a new factory
 	f := NewProviderFactory()
 
@@ -149,6 +159,8 @@ func TestCerebrasProvider_HappyPathScenario(t *testing.T) {
 
 func TestCerebrasProvider_StreamingScenario(t *testing.T) {
 	t.Parallel()
+	skipIfNoAPIKey(t)
+
 	// Create a new factory
 	f := NewProviderFactory()
 

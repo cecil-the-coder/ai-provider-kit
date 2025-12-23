@@ -2,11 +2,19 @@ package factory
 
 import (
 	"context"
+	"os"
 	"testing"
 
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/testutil"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 )
+
+// skipIfNoAPIKey skips the test if QWEN_API_KEY is not set
+func skipIfNoQwenAPIKey(t *testing.T) {
+	if os.Getenv("QWEN_API_KEY") == "" {
+		t.Skip("Skipping integration test: QWEN_API_KEY not set")
+	}
+}
 
 func TestQwenProvider_FactoryIntegration(t *testing.T) {
 	t.Parallel()
@@ -133,6 +141,8 @@ func TestQwenProvider_OAuthFlow(t *testing.T) {
 
 func TestQwenProvider_HappyPathScenario(t *testing.T) {
 	t.Parallel()
+	skipIfNoQwenAPIKey(t)
+
 	// Create a new factory
 	f := NewProviderFactory()
 
