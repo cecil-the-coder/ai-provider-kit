@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
+	"github.com/cecil-the-coder/ai-provider-kit/pkg/utils"
 )
 
 // OpenAIExtension implements CoreProviderExtension for OpenAI
@@ -48,24 +49,25 @@ func (e *OpenAIExtension) StandardToProvider(request types.StandardRequest) (int
 		Stream:      request.Stream,
 	}
 
-	// Convert messages
-	openAIReq.Messages = make([]OpenAIMessage, len(request.Messages))
-	for i, msg := range request.Messages {
-		openAIReq.Messages[i] = OpenAIMessage{
+	// Convert messages using parallel processing
+	openAIReq.Messages = utils.ProcessSlice(request.Messages, func(msg types.ChatMessage) OpenAIMessage {
+		openAIMsg := OpenAIMessage{
 			Role:    msg.Role,
 			Content: msg.Content,
 		}
 
 		// Convert tool calls if present
 		if len(msg.ToolCalls) > 0 {
-			openAIReq.Messages[i].ToolCalls = convertToOpenAIToolCalls(msg.ToolCalls)
+			openAIMsg.ToolCalls = convertToOpenAIToolCalls(msg.ToolCalls)
 		}
 
 		// Include tool call ID for tool response messages
 		if msg.ToolCallID != "" {
-			openAIReq.Messages[i].ToolCallID = msg.ToolCallID
+			openAIMsg.ToolCallID = msg.ToolCallID
 		}
-	}
+
+		return openAIMsg
+	})
 
 	// Convert stop sequences
 	if len(request.Stop) > 0 {

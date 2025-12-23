@@ -5,8 +5,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/pkoukk/tiktoken-go"
 	lru "github.com/hashicorp/golang-lru/v2"
+	"github.com/pkoukk/tiktoken-go"
 )
 
 // TiktokenCache provides cached tiktoken-based token counting

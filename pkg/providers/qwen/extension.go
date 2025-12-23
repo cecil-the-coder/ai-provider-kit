@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
+	"github.com/cecil-the-coder/ai-provider-kit/pkg/utils"
 )
 
 // QwenExtension implements CoreProviderExtension for Qwen (Alibaba Cloud)
@@ -73,9 +74,13 @@ func (e *QwenExtension) setDefaultValues(req *QwenRequest) {
 }
 
 // convertMessages converts standard messages to Qwen message format
+// Uses parallel processing for improved performance on multi-core systems.
 func (e *QwenExtension) convertMessages(req *QwenRequest, messages []types.ChatMessage) {
-	req.Messages = make([]QwenMessage, len(messages))
-	for i, msg := range messages {
+	if len(messages) == 0 {
+		return
+	}
+	// Use parallel processing for message conversion
+	req.Messages = utils.ProcessSlice(messages, func(msg types.ChatMessage) QwenMessage {
 		qwenMsg := QwenMessage{
 			Role:    msg.Role,
 			Content: msg.Content,
@@ -91,8 +96,8 @@ func (e *QwenExtension) convertMessages(req *QwenRequest, messages []types.ChatM
 			qwenMsg.ToolCallID = msg.ToolCallID
 		}
 
-		req.Messages[i] = qwenMsg
-	}
+		return qwenMsg
+	})
 }
 
 // convertStopSequences converts stop sequences to Qwen format

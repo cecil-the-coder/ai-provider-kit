@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	pkghttp "github.com/cecil-the-coder/ai-provider-kit/internal/http"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 )
 
@@ -76,6 +77,42 @@ func (f *DefaultProviderFactory) GetSupportedProviders() []types.ProviderType {
 	}
 
 	return providerTypes
+}
+
+// GetHTTPClient returns a shared HTTP client for the given base URL.
+// This method provides access to the global HTTP client pool, enabling
+// HTTP/2 connection sharing across providers targeting the same host.
+//
+// The client pool is keyed by base URL (scheme://host), so providers
+// targeting the same host will share the same underlying HTTP client.
+func (f *DefaultProviderFactory) GetHTTPClient(baseURL string) *pkghttp.HTTPClient {
+	return pkghttp.GetClient(baseURL)
+}
+
+// GetHTTPClientWithTimeout returns a shared HTTP client for the given base URL
+// with a specific timeout. The first caller's timeout will be used for all
+// subsequent requests to the same base URL.
+func (f *DefaultProviderFactory) GetHTTPClientWithTimeout(baseURL string, timeout time.Duration) *pkghttp.HTTPClient {
+	return pkghttp.GetClientWithTimeout(baseURL, timeout)
+}
+
+// GetHTTPClientWithConfig returns a shared HTTP client for the given base URL
+// with the specified configuration. The first caller's configuration will be
+// used for all subsequent requests to the same base URL.
+func (f *DefaultProviderFactory) GetHTTPClientWithConfig(baseURL string, config pkghttp.HTTPClientConfig) *pkghttp.HTTPClient {
+	return pkghttp.GetClientWithConfig(baseURL, config)
+}
+
+// ShutdownHTTPClients closes all idle connections in the HTTP client pool.
+// This should be called when shutting down the application to ensure
+// all connections are properly closed.
+func (f *DefaultProviderFactory) ShutdownHTTPClients(ctx context.Context) error {
+	return pkghttp.Shutdown(ctx)
+}
+
+// GetHTTPClientStats returns statistics about the HTTP client pool.
+func (f *DefaultProviderFactory) GetHTTPClientStats() pkghttp.ClientStats {
+	return pkghttp.GetStats()
 }
 
 // InitializeDefaultProviders registers stub providers only for providers without real implementations

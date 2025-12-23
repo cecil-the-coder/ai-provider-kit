@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
+	"github.com/cecil-the-coder/ai-provider-kit/pkg/utils"
 )
 
 // OpenRouterExtension implements CoreProviderExtension for OpenRouter
@@ -77,9 +78,13 @@ func (e *OpenRouterExtension) setBasicParameters(req *OpenRouterRequest, request
 }
 
 // convertMessages converts standard messages to OpenRouter message format
+// Uses parallel processing for improved performance on multi-core systems.
 func (e *OpenRouterExtension) convertMessages(req *OpenRouterRequest, messages []types.ChatMessage) {
-	req.Messages = make([]OpenRouterMessage, len(messages))
-	for i, msg := range messages {
+	if len(messages) == 0 {
+		return
+	}
+	// Use parallel processing for message conversion
+	req.Messages = utils.ProcessSlice(messages, func(msg types.ChatMessage) OpenRouterMessage {
 		openrouterMsg := OpenRouterMessage{
 			Role:    msg.Role,
 			Content: msg.Content,
@@ -95,8 +100,8 @@ func (e *OpenRouterExtension) convertMessages(req *OpenRouterRequest, messages [
 			openrouterMsg.ToolCallID = msg.ToolCallID
 		}
 
-		req.Messages[i] = openrouterMsg
-	}
+		return openrouterMsg
+	})
 }
 
 // convertTools converts tools and tool choice to OpenRouter format

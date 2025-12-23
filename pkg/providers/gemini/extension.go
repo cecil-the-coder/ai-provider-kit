@@ -4,6 +4,7 @@ package gemini
 
 import (
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
+	"github.com/cecil-the-coder/ai-provider-kit/pkg/utils"
 )
 
 // GeminiExtension implements CoreProviderExtension for Google Gemini
@@ -50,9 +51,8 @@ func (e *GeminiExtension) StandardToProvider(request types.StandardRequest) (int
 		},
 	}
 
-	// Convert messages to Gemini format
-	contents := make([]Content, len(request.Messages))
-	for i, msg := range request.Messages {
+	// Convert messages to Gemini format using parallel processing
+	geminiReq.Contents = utils.ProcessSlice(request.Messages, func(msg types.ChatMessage) Content {
 		parts := []Part{{Text: msg.Content}}
 
 		// Convert tool calls if present - use existing function from gemini.go
@@ -60,12 +60,11 @@ func (e *GeminiExtension) StandardToProvider(request types.StandardRequest) (int
 			parts = append(parts, convertUniversalToolCallsToGeminiParts(msg.ToolCalls)...)
 		}
 
-		contents[i] = Content{
+		return Content{
 			Role:  msg.Role,
 			Parts: parts,
 		}
-	}
-	geminiReq.Contents = contents
+	})
 
 	// Convert stop sequences
 	if len(request.Stop) > 0 {

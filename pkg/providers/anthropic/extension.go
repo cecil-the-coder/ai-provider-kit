@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
+	"github.com/cecil-the-coder/ai-provider-kit/pkg/utils"
 )
 
 // AnthropicExtension implements CoreProviderExtension for Anthropic Claude
@@ -57,14 +58,13 @@ func (e *AnthropicExtension) StandardToProvider(request types.StandardRequest) (
 		anthropicReq.MaxTokens = 4096
 	}
 
-	// Convert messages
-	anthropicReq.Messages = make([]AnthropicMessage, len(request.Messages))
-	for i, msg := range request.Messages {
-		anthropicReq.Messages[i] = AnthropicMessage{
+	// Convert messages using parallel processing
+	anthropicReq.Messages = utils.ProcessSlice(request.Messages, func(msg types.ChatMessage) AnthropicMessage {
+		return AnthropicMessage{
 			Role:    msg.Role,
 			Content: convertToAnthropicContent(msg),
 		}
-	}
+	})
 
 	// Convert stop sequences
 	if len(request.Stop) > 0 {

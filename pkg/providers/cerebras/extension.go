@@ -4,6 +4,7 @@ package cerebras
 
 import (
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
+	"github.com/cecil-the-coder/ai-provider-kit/pkg/utils"
 )
 
 // CerebrasExtension implements CoreProviderExtension for Cerebras
@@ -77,9 +78,13 @@ func (e *CerebrasExtension) setBasicParameters(req *CerebrasRequest, request typ
 }
 
 // convertMessages converts standard messages to Cerebras format
+// Uses parallel processing for improved performance on multi-core systems.
 func (e *CerebrasExtension) convertMessages(req *CerebrasRequest, messages []types.ChatMessage) {
-	req.Messages = make([]CerebrasMessage, len(messages))
-	for i, msg := range messages {
+	if len(messages) == 0 {
+		return
+	}
+	// Use parallel processing for message conversion
+	req.Messages = utils.ProcessSlice(messages, func(msg types.ChatMessage) CerebrasMessage {
 		cerebrasMsg := CerebrasMessage{
 			Role:    msg.Role,
 			Content: msg.Content,
@@ -95,8 +100,8 @@ func (e *CerebrasExtension) convertMessages(req *CerebrasRequest, messages []typ
 			cerebrasMsg.ToolCallID = msg.ToolCallID
 		}
 
-		req.Messages[i] = cerebrasMsg
-	}
+		return cerebrasMsg
+	})
 }
 
 // convertStopSequences converts stop sequences to Cerebras format

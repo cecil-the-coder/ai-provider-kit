@@ -1116,8 +1116,9 @@ func TestHTTPClient_TransportKeepAliveEnabled(t *testing.T) {
 	if transport.DisableKeepAlives {
 		t.Error("expected DisableKeepAlives=false")
 	}
-	if transport.DisableCompression {
-		t.Error("expected DisableCompression=false")
+	// LLM API content is already compressed, so we disable HTTP compression
+	if !transport.DisableCompression {
+		t.Error("expected DisableCompression=true for LLM APIs")
 	}
 }
 
