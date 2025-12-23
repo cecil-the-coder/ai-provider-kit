@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cecil-the-coder/ai-provider-kit/internal/common/telemetry"
 	commonhttp "github.com/cecil-the-coder/ai-provider-kit/internal/common/http"
+	"github.com/cecil-the-coder/ai-provider-kit/internal/common/telemetry"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 )
 
