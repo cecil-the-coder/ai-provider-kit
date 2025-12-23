@@ -38,16 +38,16 @@ type CopilotConfig struct {
 
 // NewCopilotProvider creates a new Copilot provider
 func NewCopilotProvider(config types.ProviderConfig) *CopilotProvider {
+	// Track if BaseURL was explicitly provided (before setting defaults)
+	explicitBaseURL := config.BaseURL != ""
+
 	// Set defaults
 	mergedConfig := config
 	if mergedConfig.BaseURL == "" {
 		mergedConfig.BaseURL = CopilotBaseURL
 	}
-	if mergedConfig.DefaultModel == "" {
-		mergedConfig.DefaultModel = copilotDefaultModel
-	}
 
-	// Extract Copilot-specific config
+	// Extract Copilot-specific config first, before setting DefaultModel
 	var copilotConfig CopilotConfig
 	if mergedConfig.ProviderConfig != nil {
 		if displayName, ok := mergedConfig.ProviderConfig["display_name"].(string); ok {
@@ -70,6 +70,11 @@ func NewCopilotProvider(config types.ProviderConfig) *CopilotProvider {
 		}
 	}
 
+	// Set DefaultModel only if not already set and not in ProviderConfig
+	if mergedConfig.DefaultModel == "" && copilotConfig.Model == "" {
+		mergedConfig.DefaultModel = copilotDefaultModel
+	}
+
 	// Default account type
 	if copilotConfig.AccountType == "" {
 		copilotConfig.AccountType = AccountTypeIndividual
@@ -81,7 +86,21 @@ func NewCopilotProvider(config types.ProviderConfig) *CopilotProvider {
 		baseURL = mergedConfig.BaseURL
 	}
 	if baseURL == "" {
-		baseURL = CopilotBaseURL
+		// Use account type to determine base URL
+		switch copilotConfig.AccountType {
+		case AccountTypeBusiness:
+			baseURL = CopilotBusinessBaseURL
+		case AccountTypeEnterprise:
+			baseURL = CopilotEnterpriseBaseURL
+		default:
+			baseURL = CopilotBaseURL
+		}
+	}
+
+	// Store the resolved base URL in copilot config only if explicitly provided
+	// This allows GetBaseURL() to fall back to account type defaults
+	if copilotConfig.BaseURL != "" || explicitBaseURL {
+		copilotConfig.BaseURL = baseURL
 	}
 
 	// Get shared HTTP client
@@ -113,6 +132,11 @@ func NewCopilotProvider(config types.ProviderConfig) *CopilotProvider {
 		if err := provider.exchangeToken(ctx); err != nil {
 			log.Printf("Copilot: Failed to exchange GitHub token for Copilot token: %v", err)
 		}
+	}
+
+	// Set expiry for Copilot token if provided directly
+	if provider.copilotToken != "" && provider.copilotTokenExpiry.IsZero() {
+		provider.copilotTokenExpiry = time.Now().Add(24 * time.Hour)
 	}
 
 	// Start token refresh loop if we have a valid Copilot token
@@ -182,6 +206,10 @@ func (p *CopilotProvider) Configure(config types.ProviderConfig) error {
 	if copilotConfig.CopilotToken != "" {
 		p.tokenMutex.Lock()
 		p.copilotToken = copilotConfig.CopilotToken
+		// Set expiry if not already set or if current expiry is in the past
+		if p.copilotTokenExpiry.IsZero() || time.Now().After(p.copilotTokenExpiry) {
+			p.copilotTokenExpiry = time.Now().Add(24 * time.Hour)
+		}
 		p.tokenMutex.Unlock()
 	}
 
@@ -513,8 +541,7 @@ func (p *CopilotProvider) performConnectivityTest(ctx context.Context) error {
 
 	p.setCopilotHeaders(req, token)
 
-	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Do(req)
+	resp, err := p.client.Do(req)
 	if err != nil {
 		return types.NewNetworkError(types.ProviderTypeCopilot, "connectivity test failed").
 			WithOperation("test_connectivity").

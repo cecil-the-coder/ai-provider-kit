@@ -478,6 +478,7 @@ func TestCopilotProvider_HealthCheck(t *testing.T) {
 			BaseURL: server.URL,
 		})
 		provider.tokenMutex.Lock()
+		provider.githubToken = "test_github_token"
 		provider.copilotToken = "test_token"
 		provider.copilotTokenExpiry = time.Now().Add(1 * time.Hour)
 		provider.tokenMutex.Unlock()
