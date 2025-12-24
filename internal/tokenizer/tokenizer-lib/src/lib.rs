@@ -28,9 +28,11 @@ fn get_encoding_for_model(model: &str) -> &'static CoreBPE {
         || model_lower.contains("gpt-35")
         || model_lower.contains("embedding")
     {
-        &cl100k_base()
+        let bpe = cl100k_base().unwrap();
+        Box::leak(Box::new(bpe))
     } else if model_lower.contains("gpt-4o") {
-        &o200k_base()
+        let bpe = o200k_base().unwrap();
+        Box::leak(Box::new(bpe))
     } else if model_lower.contains("code")
         || model_lower.contains("codex")
         || model_lower.contains("davinci")
@@ -38,12 +40,15 @@ fn get_encoding_for_model(model: &str) -> &'static CoreBPE {
         || model_lower.contains("babbage")
         || model_lower.contains("ada")
     {
-        &p50k_base()
+        let bpe = p50k_base().unwrap();
+        Box::leak(Box::new(bpe))
     } else if model_lower.contains("gpt-3") {
-        &r50k_base()
+        let bpe = r50k_base().unwrap();
+        Box::leak(Box::new(bpe))
     } else {
         // Default to cl100k_base (most common)
-        &cl100k_base()
+        let bpe = cl100k_base().unwrap();
+        Box::leak(Box::new(bpe))
     }
 }
 

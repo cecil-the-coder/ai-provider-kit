@@ -192,3 +192,9 @@ func CountTokensDetailed(text, model string) (count int, errMsg string, err erro
 
 	return int(result.count), "", nil
 }
+
+// getGoCounter returns nil since we're using the Rust implementation
+// When building with the rusttokenizer tag, the pure Go implementation is not available
+func getGoCounter() tokenCounter {
+	return nil
+}
