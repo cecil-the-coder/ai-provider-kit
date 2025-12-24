@@ -48,20 +48,45 @@ func (p *GeminiProvider) Description() string {
 }
 
 // GetModels returns the list of available models
+// Context lengths differ by backend:
+// - Code Assist backend: 1M tokens for all models (to align with ecosystem tools)
+// - Gemini API/Vertex AI backends: Various context lengths per model (2M, 1M, 512K)
 func (p *GeminiProvider) GetModels(ctx context.Context) ([]types.Model, error) {
+	// Determine context lengths based on backend
+	// Code Assist has a 1M context limit for all models
+	var gemini3ProTokens, gemini25ProTokens, gemini25FlashTokens, gemini25FlashLiteTokens, gemini20FlashTokens, gemini20FlashLiteTokens int
+
+	if p.backendRouter.GetBackend() == BackendCodeAssist {
+		// Code Assist backend: 1M context for all models (per ecosystem tools report)
+		gemini3ProTokens = 1048576
+		gemini25ProTokens = 1048576
+		gemini25FlashTokens = 1048576
+		gemini25FlashLiteTokens = 1048576
+		gemini20FlashTokens = 1048576
+		gemini20FlashLiteTokens = 1048576
+	} else {
+		// Gemini API and Vertex AI backends: use standard context lengths
+		gemini3ProTokens = 2097152
+		gemini25ProTokens = 2097152
+		gemini25FlashTokens = 1048576
+		gemini25FlashLiteTokens = 524288
+		gemini20FlashTokens = 1048576
+		gemini20FlashLiteTokens = 524288
+	}
+
 	return []types.Model{
 		// Gemini 3 Series (Preview)
-		{ID: "gemini-3-pro-preview", Name: "Gemini 3 Pro Preview", Provider: p.Type(), MaxTokens: 2097152, SupportsStreaming: true, SupportsToolCalling: true, Capabilities: []string{"vision", "multimodal"}, Description: "Google's latest Gemini 3 Pro model with 2M context (preview)"},
-		{ID: "gemini-3-pro-image-preview", Name: "Gemini 3 Pro Image Preview", Provider: p.Type(), MaxTokens: 2097152, SupportsStreaming: true, SupportsToolCalling: true, Capabilities: []string{"vision", "multimodal"}, Description: "Gemini 3 Pro with enhanced image understanding (preview)"},
+		{ID: "gemini-3-pro-preview", Name: "Gemini 3 Pro Preview", Provider: p.Type(), MaxTokens: gemini3ProTokens, SupportsStreaming: true, SupportsToolCalling: true, Capabilities: []string{"vision", "multimodal"}, Description: "Google's latest Gemini 3 Pro model (preview)"},
+		{ID: "gemini-3-pro-image-preview", Name: "Gemini 3 Pro Image Preview", Provider: p.Type(), MaxTokens: gemini3ProTokens, SupportsStreaming: true, SupportsToolCalling: true, Capabilities: []string{"vision", "multimodal"}, Description: "Gemini 3 Pro with enhanced image understanding (preview)"},
 
 		// Gemini 2.5 Series
-		{ID: "gemini-2.5-pro", Name: "Gemini 2.5 Pro", Provider: p.Type(), MaxTokens: 2097152, SupportsStreaming: true, SupportsToolCalling: true, Capabilities: []string{"vision", "multimodal"}, Description: "State-of-the-art thinking model for complex problems with 2M context"},
-		{ID: "gemini-2.5-flash", Name: "Gemini 2.5 Flash", Provider: p.Type(), MaxTokens: 1048576, SupportsStreaming: true, SupportsToolCalling: true, Capabilities: []string{"vision", "multimodal"}, Description: "Best price-performance for high-volume tasks and agentic use cases"},
-		{ID: "gemini-2.5-flash-lite", Name: "Gemini 2.5 Flash Lite", Provider: p.Type(), MaxTokens: 524288, SupportsStreaming: true, SupportsToolCalling: true, Capabilities: []string{"vision", "multimodal"}, Description: "Built for massive scale, optimized for efficiency"},
+		{ID: "gemini-2.5-pro", Name: "Gemini 2.5 Pro", Provider: p.Type(), MaxTokens: gemini25ProTokens, SupportsStreaming: true, SupportsToolCalling: true, Capabilities: []string{"vision", "multimodal"}, Description: "State-of-the-art thinking model for complex problems"},
+		{ID: "gemini-2.5-flash", Name: "Gemini 2.5 Flash", Provider: p.Type(), MaxTokens: gemini25FlashTokens, SupportsStreaming: true, SupportsToolCalling: true, Capabilities: []string{"vision", "multimodal"}, Description: "Best price-performance for high-volume tasks and agentic use cases"},
+		{ID: "gemini-2.5-flash-lite", Name: "Gemini 2.5 Flash Lite", Provider: p.Type(), MaxTokens: gemini25FlashLiteTokens, SupportsStreaming: true, SupportsToolCalling: true, Capabilities: []string{"vision", "multimodal"}, Description: "Built for massive scale, optimized for efficiency"},
 
 		// Gemini 2.0 Series
-		{ID: "gemini-2.0-flash", Name: "Gemini 2.0 Flash", Provider: p.Type(), MaxTokens: 1048576, SupportsStreaming: true, SupportsToolCalling: true, Capabilities: []string{"vision", "multimodal"}, Description: "Multimodal model for general-purpose tasks"},
-		{ID: "gemini-2.0-flash-lite", Name: "Gemini 2.0 Flash Lite", Provider: p.Type(), MaxTokens: 524288, SupportsStreaming: true, SupportsToolCalling: true, Capabilities: []string{"vision", "multimodal"}, Description: "Ultra-efficient for simple, high-frequency tasks"},
+		{ID: "gemini-2.0-flash", Name: "Gemini 2.0 Flash", Provider: p.Type(), MaxTokens: gemini20FlashTokens, SupportsStreaming: true, SupportsToolCalling: true, Capabilities: []string{"vision", "multimodal"}, Description: "Multimodal model for general-purpose tasks"},
+		{ID: "gemini-2.0-flash-lite", Name: "Gemini 2.0 Flash Lite", Provider: p.Type(), MaxTokens: gemini20FlashLiteTokens, SupportsStreaming: true, SupportsToolCalling: true, Capabilities: []string{"vision", "multimodal"}, Description: "Ultra-efficient for simple, high-frequency tasks"},
 	}, nil
 }
 

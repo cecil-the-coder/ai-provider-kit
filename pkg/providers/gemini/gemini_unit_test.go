@@ -686,3 +686,139 @@ func TestParseStandardGeminiResponse_WithUsage(t *testing.T) {
 		t.Errorf("Expected 30 total tokens, got %d", usage.TotalTokens)
 	}
 }
+
+// TestGetModels_CodeAssistBackend verifies that Code Assist backend returns 1M context
+// for all models to align with ecosystem tools (llxprt-code, cp-gem, code_puppy)
+func TestGetModels_CodeAssistBackend(t *testing.T) {
+	config := types.ProviderConfig{
+		Type: types.ProviderTypeGemini,
+		ProviderConfig: map[string]interface{}{
+			"backend": "code-assist",
+		},
+	}
+	provider := NewGeminiProvider(config)
+
+	models, err := provider.GetModels(context.Background())
+	if err != nil {
+		t.Fatalf("GetModels failed: %v", err)
+	}
+
+	if len(models) == 0 {
+		t.Fatal("No models returned")
+	}
+
+	// Expected context limits for Code Assist backend: 1M for all models
+	expectedContextLengths := map[string]int{
+		"gemini-3-pro-preview":       1048576,
+		"gemini-3-pro-image-preview": 1048576,
+		"gemini-2.5-pro":             1048576,
+		"gemini-2.5-flash":           1048576,
+		"gemini-2.5-flash-lite":      1048576,
+		"gemini-2.0-flash":           1048576,
+		"gemini-2.0-flash-lite":      1048576,
+	}
+
+	modelMap := make(map[string]types.Model)
+	for _, model := range models {
+		modelMap[model.ID] = model
+	}
+
+	for modelID, expectedTokens := range expectedContextLengths {
+		model, exists := modelMap[modelID]
+		if !exists {
+			t.Errorf("Expected model '%s' not found", modelID)
+			continue
+		}
+		if model.MaxTokens != expectedTokens {
+			t.Errorf("Model %s: expected MaxTokens=%d (1M), got %d",
+				modelID, expectedTokens, model.MaxTokens)
+		}
+	}
+}
+
+// TestGetModels_GeminiAPIBackend verifies that Gemini API backend returns
+// standard context lengths (2M for pro models, 1M for flash, 512K for lite)
+func TestGetModels_GeminiAPIBackend(t *testing.T) {
+	config := types.ProviderConfig{
+		Type:   types.ProviderTypeGemini,
+		APIKey: "test-api-key",
+		ProviderConfig: map[string]interface{}{
+			"backend": "gemini-api",
+		},
+	}
+	provider := NewGeminiProvider(config)
+
+	models, err := provider.GetModels(context.Background())
+	if err != nil {
+		t.Fatalf("GetModels failed: %v", err)
+	}
+
+	if len(models) == 0 {
+		t.Fatal("No models returned")
+	}
+
+	// Expected context limits for Gemini API backend
+	expectedContextLengths := map[string]int{
+		"gemini-3-pro-preview":       2097152, // 2M
+		"gemini-3-pro-image-preview": 2097152, // 2M
+		"gemini-2.5-pro":             2097152, // 2M
+		"gemini-2.5-flash":           1048576, // 1M
+		"gemini-2.5-flash-lite":      524288,  // 512K
+		"gemini-2.0-flash":           1048576, // 1M
+		"gemini-2.0-flash-lite":      524288,  // 512K
+	}
+
+	modelMap := make(map[string]types.Model)
+	for _, model := range models {
+		modelMap[model.ID] = model
+	}
+
+	for modelID, expectedTokens := range expectedContextLengths {
+		model, exists := modelMap[modelID]
+		if !exists {
+			t.Errorf("Expected model '%s' not found", modelID)
+			continue
+		}
+		if model.MaxTokens != expectedTokens {
+			t.Errorf("Model %s: expected MaxTokens=%d, got %d",
+				modelID, expectedTokens, model.MaxTokens)
+		}
+	}
+}
+
+// TestGetModels_DefaultBackend verifies that default (non-CodeAssist) backend
+// returns standard context lengths
+func TestGetModels_DefaultBackend(t *testing.T) {
+	// Create provider without specifying backend (should default to Gemini API)
+	config := types.ProviderConfig{
+		Type:   types.ProviderTypeGemini,
+		APIKey: "test-api-key",
+	}
+	provider := NewGeminiProvider(config)
+
+	models, err := provider.GetModels(context.Background())
+	if err != nil {
+		t.Fatalf("GetModels failed: %v", err)
+	}
+
+	if len(models) == 0 {
+		t.Fatal("No models returned")
+	}
+
+	// Verify gemini-2.5-flash has 1M context (not 2M like Code Assist would give)
+	modelMap := make(map[string]types.Model)
+	for _, model := range models {
+		modelMap[model.ID] = model
+	}
+
+	flashModel, exists := modelMap["gemini-2.5-flash"]
+	if !exists {
+		t.Fatal("Expected model 'gemini-2.5-flash' not found")
+	}
+
+	// Default backend should use 1M for gemini-2.5-flash
+	if flashModel.MaxTokens != 1048576 {
+		t.Errorf("Model gemini-2.5-flash: expected MaxTokens=%d (1M), got %d",
+			1048576, flashModel.MaxTokens)
+	}
+}
