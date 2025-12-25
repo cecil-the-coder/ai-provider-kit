@@ -1092,6 +1092,63 @@ func TestHTTPClientBuilder_WithTransportConfig(t *testing.T) {
 	}
 }
 
+func TestHTTPClientBuilder_WithResponseHeaderTimeout(t *testing.T) {
+	tests := []struct {
+		name                       string
+		responseHeaderTimeout      time.Duration
+		expectedConfigResponseHeaderTimeout time.Duration
+		expectedTransportResponseHeaderTimeout time.Duration
+	}{
+		{
+			name:                       "custom response header timeout",
+			responseHeaderTimeout:      30 * time.Second,
+			expectedConfigResponseHeaderTimeout: 30 * time.Second,
+			expectedTransportResponseHeaderTimeout: 30 * time.Second,
+		},
+		{
+			name:                       "longer response header timeout",
+			responseHeaderTimeout:      60 * time.Second,
+			expectedConfigResponseHeaderTimeout: 60 * time.Second,
+			expectedTransportResponseHeaderTimeout: 60 * time.Second,
+		},
+		{
+			name:                       "response header timeout longer than default",
+			responseHeaderTimeout:      120 * time.Second,
+			expectedConfigResponseHeaderTimeout: 120 * time.Second,
+			expectedTransportResponseHeaderTimeout: 120 * time.Second,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			builder := NewHTTPClientBuilder()
+			client := builder.
+				WithTimeout(30 * time.Second).
+				WithResponseHeaderTimeout(tt.responseHeaderTimeout).
+				Build()
+
+			if client == nil {
+				t.Fatal("expected non-nil client")
+			}
+
+			if client.config.ResponseHeaderTimeout != tt.expectedConfigResponseHeaderTimeout {
+				t.Errorf("expected config ResponseHeaderTimeout=%v, got %v",
+					tt.expectedConfigResponseHeaderTimeout, client.config.ResponseHeaderTimeout)
+			}
+
+			transport, ok := client.client.Transport.(*http.Transport)
+			if !ok {
+				t.Fatal("expected client to have custom http.Transport")
+			}
+
+			if transport.ResponseHeaderTimeout != tt.expectedTransportResponseHeaderTimeout {
+				t.Errorf("expected transport ResponseHeaderTimeout=%v, got %v",
+					tt.expectedTransportResponseHeaderTimeout, transport.ResponseHeaderTimeout)
+			}
+		})
+	}
+}
+
 func TestHTTPClient_TransportProxyFromEnvironment(t *testing.T) {
 	client := NewHTTPClient(HTTPClientConfig{})
 	transport, ok := client.client.Transport.(*http.Transport)

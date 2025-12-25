@@ -24,6 +24,12 @@ type LoadBalanceProvider struct {
 type Config struct {
 	Strategy      Strategy `yaml:"strategy"`
 	ProviderNames []string `yaml:"providers"`
+	// EnableFailover enables automatic retry with other providers on failure.
+	// When enabled, if the selected provider fails, the load balancer will
+	// try other available providers (excluding already-tried ones) before
+	// returning an error. This combines load distribution with high availability.
+	// Default is false (backward compatible).
+	EnableFailover bool `yaml:"enable_failover"`
 }
 
 type Strategy string
@@ -70,77 +76,167 @@ func (lb *LoadBalanceProvider) GenerateChatCompletion(ctx context.Context, opts 
 		})
 	}
 
-	provider := lb.selectProvider()
+	// Track tried providers to avoid retrying the same one
+	triedProviderIndices := make(map[int]bool)
+	var lastErr error
 
-	chatProvider, ok := provider.(types.ChatProvider)
-	if !ok {
-		if collector != nil {
-			_ = collector.RecordEvent(ctx, types.MetricEvent{
-				Type:         types.MetricEventError,
-				ProviderName: lb.name,
-				ProviderType: lb.Type(),
-				ModelID:      opts.Model,
-				Timestamp:    time.Now(),
-				ErrorMessage: "selected provider does not support chat",
-				ErrorType:    "provider_incompatible",
-			})
+	for attempt := 0; attempt < len(providers); attempt++ {
+		// Select a provider that hasn't been tried yet
+		provider, providerIdx, err := lb.selectProviderExcluding(triedProviderIndices)
+		if err != nil {
+			break // No more providers to try
 		}
-		return nil, fmt.Errorf("selected provider does not support chat")
-	}
+		triedProviderIndices[providerIdx] = true
 
-	start := time.Now()
-	stream, err := chatProvider.GenerateChatCompletion(ctx, opts)
-	latency := time.Since(start)
+		chatProvider, ok := provider.(types.ChatProvider)
+		if !ok {
+			if collector != nil {
+				_ = collector.RecordEvent(ctx, types.MetricEvent{
+					Type:         types.MetricEventError,
+					ProviderName: lb.name,
+					ProviderType: lb.Type(),
+					ModelID:      opts.Model,
+					Timestamp:    time.Now(),
+					ErrorMessage: "selected provider does not support chat",
+					ErrorType:    "provider_incompatible",
+				})
+			}
+			lastErr = fmt.Errorf("selected provider does not support chat")
+			// Try next provider if failover is enabled
+			if !lb.config.EnableFailover {
+				return nil, lastErr
+			}
+			continue
+		}
 
-	if err != nil {
+		start := time.Now()
+		stream, err := chatProvider.GenerateChatCompletion(ctx, opts)
+		latency := time.Since(start)
+
+		if err != nil {
+			lastErr = err
+			// Record error for this attempt
+			if collector != nil {
+				_ = collector.RecordEvent(ctx, types.MetricEvent{
+					Type:         types.MetricEventError,
+					ProviderName: lb.name,
+					ProviderType: lb.Type(),
+					ModelID:      opts.Model,
+					Timestamp:    time.Now(),
+					ErrorMessage: err.Error(),
+					ErrorType:    "provider_error",
+					Latency:      latency,
+					Metadata: map[string]interface{}{
+						"attempt":           attempt + 1,
+						"selected_provider": provider.Name(),
+					},
+				})
+			}
+			// Try next provider if failover is enabled
+			if !lb.config.EnableFailover {
+				return nil, lastErr
+			}
+			// When failover is enabled, continue to try next provider
+			// The loop will exit when all providers have been tried
+			continue
+		}
+
+		// Record success
 		if collector != nil {
 			_ = collector.RecordEvent(ctx, types.MetricEvent{
-				Type:         types.MetricEventError,
+				Type:         types.MetricEventSuccess,
 				ProviderName: lb.name,
 				ProviderType: lb.Type(),
 				ModelID:      opts.Model,
 				Timestamp:    time.Now(),
-				ErrorMessage: err.Error(),
-				ErrorType:    "provider_error",
 				Latency:      latency,
+				Metadata: map[string]interface{}{
+					"selected_provider": provider.Name(),
+					"strategy":          string(lb.config.Strategy),
+					"attempt":           attempt + 1,
+					"failover_used":     attempt > 0,
+				},
 			})
 		}
-		return nil, err
+
+		return &loadBalanceStream{
+			StreamWrapper: common.NewStreamWrapper(stream, "loadbalance_provider", provider.Name()),
+		}, nil
 	}
 
-	// Record success
+	// All providers failed
 	if collector != nil {
 		_ = collector.RecordEvent(ctx, types.MetricEvent{
-			Type:         types.MetricEventSuccess,
+			Type:         types.MetricEventError,
 			ProviderName: lb.name,
 			ProviderType: lb.Type(),
 			ModelID:      opts.Model,
 			Timestamp:    time.Now(),
-			Latency:      latency,
-			Metadata: map[string]interface{}{
-				"selected_provider": provider.Name(),
-				"strategy":          string(lb.config.Strategy),
-			},
+			ErrorMessage: fmt.Sprintf("all %d providers failed, last error: %v", len(triedProviderIndices), lastErr),
+			ErrorType:    "all_providers_failed",
 		})
 	}
 
-	return &loadBalanceStream{
-		StreamWrapper: common.NewStreamWrapper(stream, "loadbalance_provider", provider.Name()),
-	}, nil
+	return nil, fmt.Errorf("all %d providers failed, last error: %w", len(triedProviderIndices), lastErr)
 }
 
 type loadBalanceStream struct {
 	*common.StreamWrapper
 }
 
-func (lb *LoadBalanceProvider) selectProvider() types.Provider {
+// selectProviderExcluding selects a provider using the configured strategy,
+// excluding providers at the specified indices. Returns the provider, its index,
+// and an error if no providers are available.
+func (lb *LoadBalanceProvider) selectProviderExcluding(excludedIndices map[int]bool) (types.Provider, int, error) {
+	if len(lb.providers) == 0 {
+		return nil, -1, fmt.Errorf("no providers available")
+	}
+
 	switch lb.config.Strategy {
 	case StrategyRandom:
-		return lb.providers[randomInt(len(lb.providers))]
-	default: // Round robin
-		idx := atomic.AddUint64(&lb.counter, 1) - 1
-		return lb.providers[idx%uint64(len(lb.providers))]
+		return lb.selectRandomProviderExcluding(excludedIndices)
+	default: // Round robin (and Weighted, which falls back to round-robin)
+		return lb.selectRoundRobinProviderExcluding(excludedIndices)
 	}
+}
+
+// selectRandomProviderExcluding selects a random provider excluding specified indices.
+func (lb *LoadBalanceProvider) selectRandomProviderExcluding(excludedIndices map[int]bool) (types.Provider, int, error) {
+	// Collect available provider indices
+	availableIndices := make([]int, 0, len(lb.providers))
+	for i := range lb.providers {
+		if !excludedIndices[i] {
+			availableIndices = append(availableIndices, i)
+		}
+	}
+
+	if len(availableIndices) == 0 {
+		return nil, -1, fmt.Errorf("no available providers")
+	}
+
+	// Select randomly from available
+	selectedIdx := availableIndices[randomInt(len(availableIndices))]
+	return lb.providers[selectedIdx], selectedIdx, nil
+}
+
+// selectRoundRobinProviderExcluding selects a provider in round-robin fashion excluding specified indices.
+func (lb *LoadBalanceProvider) selectRoundRobinProviderExcluding(excludedIndices map[int]bool) (types.Provider, int, error) {
+	if len(excludedIndices) == 0 {
+		// No exclusions, use standard round-robin (simpler and preserves existing behavior when no failover)
+		idx := int(atomic.AddUint64(&lb.counter, 1) - 1) % len(lb.providers)
+		return lb.providers[idx], idx, nil
+	}
+
+	// Find the first available provider starting from current position
+	n := uint64(len(lb.providers))
+	for i := uint64(0); i < n; i++ {
+		idx := int((atomic.AddUint64(&lb.counter, 1) - 1) % n)
+		if !excludedIndices[idx] {
+			return lb.providers[idx], idx, nil
+		}
+	}
+
+	return nil, -1, fmt.Errorf("no available providers after exclusions")
 }
 
 func randomInt(max int) int {

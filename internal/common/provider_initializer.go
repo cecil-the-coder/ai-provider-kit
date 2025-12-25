@@ -29,6 +29,8 @@ type ProviderInitializerOptions struct {
 	SkipOAuthSetup bool
 	// CustomTimeout allows overriding the timeout from config
 	CustomTimeout time.Duration
+	// CustomResponseHeaderTimeout allows overriding the response header timeout from config
+	CustomResponseHeaderTimeout time.Duration
 }
 
 // InitializeProvider provides a shared initialization pattern for all providers
@@ -59,17 +61,26 @@ func InitializeProvider(
 		timeout = configHelper.ExtractTimeout(mergedConfig)
 	}
 
-	// Step 4: Determine base URL for client pooling
+	// Step 4: Extract response header timeout (use custom timeout if provided)
+	responseHeaderTimeout := options.CustomResponseHeaderTimeout
+	if responseHeaderTimeout == 0 {
+		responseHeaderTimeout = configHelper.ExtractResponseHeaderTimeout(mergedConfig)
+	}
+
+	// Step 5: Determine base URL for client pooling
 	baseURL := configHelper.ExtractBaseURL(mergedConfig)
 
-	// Step 5: Get shared HTTP client from pool keyed by base URL
-	pooledClient := clientpool.GetClientWithTimeout(baseURL, timeout)
+	// Step 6: Get shared HTTP client from pool keyed by base URL
+	pooledClient := clientpool.GetClientWithConfig(baseURL, pkghttp.HTTPClientConfig{
+		Timeout:               timeout,
+		ResponseHeaderTimeout: responseHeaderTimeout,
+	})
 	httpClient := pooledClient.Client()
 
-	// Step 6: Create auth helper
+	// Step 7: Create auth helper
 	authHelper := auth.NewAuthHelper(providerName, mergedConfig, httpClient)
 
-	// Step 7: Setup API keys using shared helper (unless skipped)
+	// Step 8: Setup API keys using shared helper (unless skipped)
 	if !options.SkipAPIKeySetup {
 		authHelper.SetupAPIKeys()
 	}

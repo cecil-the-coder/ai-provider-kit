@@ -574,6 +574,12 @@ func (b *HTTPClientBuilder) WithExpectContinueTimeout(timeout time.Duration) *HT
 	return b
 }
 
+// WithResponseHeaderTimeout sets the response header timeout
+func (b *HTTPClientBuilder) WithResponseHeaderTimeout(timeout time.Duration) *HTTPClientBuilder {
+	b.config.ResponseHeaderTimeout = timeout
+	return b
+}
+
 // Build creates the HTTP client
 func (b *HTTPClientBuilder) Build() *HTTPClient {
 	return NewHTTPClient(b.config)

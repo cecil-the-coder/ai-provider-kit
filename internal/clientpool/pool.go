@@ -44,10 +44,11 @@ func GetClient(baseURL string) *pkghttp.HTTPClient {
 	config := pkghttp.HTTPClientConfig{
 		Timeout: 60 * time.Second,
 		// Default connection pooling settings
-		MaxIdleConns:        100,
-		MaxIdleConnsPerHost: 10,
-		MaxConnsPerHost:     0, // unlimited
-		IdleConnTimeout:     90 * time.Second,
+		MaxIdleConns:          100,
+		MaxIdleConnsPerHost:   10,
+		MaxConnsPerHost:       0, // unlimited
+		IdleConnTimeout:       90 * time.Second,
+		ResponseHeaderTimeout: 15 * time.Second,
 	}
 	client := pkghttp.NewHTTPClient(config)
 	globalPool.clients[baseURL] = client
@@ -90,6 +91,9 @@ func GetClientWithConfig(baseURL string, config pkghttp.HTTPClientConfig) *pkght
 	}
 	if config.IdleConnTimeout == 0 {
 		config.IdleConnTimeout = 90 * time.Second
+	}
+	if config.ResponseHeaderTimeout == 0 {
+		config.ResponseHeaderTimeout = 15 * time.Second
 	}
 
 	client := pkghttp.NewHTTPClient(config)

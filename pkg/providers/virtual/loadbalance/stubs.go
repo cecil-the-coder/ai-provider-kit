@@ -55,6 +55,9 @@ func (lb *LoadBalanceProvider) Configure(config types.ProviderConfig) error {
 		if providers, ok := config.ProviderConfig["providers"].([]string); ok {
 			lb.config.ProviderNames = providers
 		}
+		if enableFailover, ok := config.ProviderConfig["enable_failover"].(bool); ok {
+			lb.config.EnableFailover = enableFailover
+		}
 	}
 	return nil
 }
@@ -64,8 +67,9 @@ func (lb *LoadBalanceProvider) GetConfig() types.ProviderConfig {
 		Type: "loadbalance",
 		Name: lb.name,
 		ProviderConfig: map[string]interface{}{
-			"strategy":  string(lb.config.Strategy),
-			"providers": lb.config.ProviderNames,
+			"strategy":       string(lb.config.Strategy),
+			"providers":      lb.config.ProviderNames,
+			"enable_failover": lb.config.EnableFailover,
 		},
 	}
 }

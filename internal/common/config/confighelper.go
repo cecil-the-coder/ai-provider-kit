@@ -47,6 +47,11 @@ func (h *ConfigHelper) ValidateProviderConfig(config types.ProviderConfig) Valid
 		errors = append(errors, "timeout cannot be negative")
 	}
 
+	// Validate response header timeout if specified (zero is allowed for defaults)
+	if config.ResponseHeaderTimeout < 0 {
+		errors = append(errors, "response_header_timeout cannot be negative")
+	}
+
 	// Validate max tokens if specified
 	if config.MaxTokens < 0 {
 		errors = append(errors, "max_tokens cannot be negative")
@@ -114,6 +119,15 @@ func (h *ConfigHelper) ExtractTimeout(config types.ProviderConfig) time.Duration
 		return config.Timeout
 	}
 	return 60 * time.Second // Default timeout
+}
+
+// ExtractResponseHeaderTimeout extracts response header timeout with sensible defaults
+// This is the timeout for waiting for the first response header from the server.
+func (h *ConfigHelper) ExtractResponseHeaderTimeout(config types.ProviderConfig) time.Duration {
+	if config.ResponseHeaderTimeout > 0 {
+		return config.ResponseHeaderTimeout
+	}
+	return 15 * time.Second // Default response header timeout
 }
 
 // ExtractMaxTokens extracts max tokens with provider-specific defaults
@@ -341,6 +355,9 @@ func (h *ConfigHelper) MergeWithDefaults(config types.ProviderConfig) types.Prov
 	}
 	if merged.Timeout == 0 {
 		merged.Timeout = h.ExtractTimeout(config)
+	}
+	if merged.ResponseHeaderTimeout == 0 {
+		merged.ResponseHeaderTimeout = h.ExtractResponseHeaderTimeout(config)
 	}
 	if merged.MaxTokens == 0 {
 		merged.MaxTokens = h.ExtractMaxTokens(config)

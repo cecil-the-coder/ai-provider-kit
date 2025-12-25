@@ -124,6 +124,8 @@ type ProviderConfig struct {
 	// Limits and timeouts
 	MaxTokens int           `json:"max_tokens,omitempty"`
 	Timeout   time.Duration `json:"timeout,omitempty"`
+	// ResponseHeaderTimeout is the timeout for waiting for the first response header
+	ResponseHeaderTimeout time.Duration `json:"response_header_timeout,omitempty"`
 
 	// Tool format
 	ToolFormat ToolFormat `json:"tool_format,omitempty"`

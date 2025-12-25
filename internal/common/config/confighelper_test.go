@@ -56,6 +56,14 @@ func TestConfigHelper_ValidateProviderConfig(t *testing.T) {
 			expectValid: false,
 		},
 		{
+			name: "negative response header timeout",
+			config: types.ProviderConfig{
+				Type:                 types.ProviderTypeOpenAI,
+				ResponseHeaderTimeout: -5 * time.Second,
+			},
+			expectValid: false,
+		},
+		{
 			name: "negative max tokens",
 			config: types.ProviderConfig{
 				Type:      types.ProviderTypeOpenAI,
@@ -68,6 +76,22 @@ func TestConfigHelper_ValidateProviderConfig(t *testing.T) {
 			config: types.ProviderConfig{
 				Type:    types.ProviderTypeOpenAI,
 				Timeout: 0,
+			},
+			expectValid: true,
+		},
+		{
+			name: "zero response header timeout allowed",
+			config: types.ProviderConfig{
+				Type:                 types.ProviderTypeOpenAI,
+				ResponseHeaderTimeout: 0,
+			},
+			expectValid: true,
+		},
+		{
+			name: "custom response header timeout",
+			config: types.ProviderConfig{
+				Type:                 types.ProviderTypeOpenAI,
+				ResponseHeaderTimeout: 30 * time.Second,
 			},
 			expectValid: true,
 		},
@@ -224,6 +248,46 @@ func TestConfigHelper_ExtractTimeout(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := helper.ExtractTimeout(tt.config)
+
+			if result != tt.expected {
+				t.Errorf("got %v, expected %v", result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestConfigHelper_ExtractResponseHeaderTimeout(t *testing.T) {
+	helper := NewConfigHelper("openai", types.ProviderTypeOpenAI)
+
+	tests := []struct {
+		name     string
+		config   types.ProviderConfig
+		expected time.Duration
+	}{
+		{
+			name: "custom response header timeout",
+			config: types.ProviderConfig{
+				ResponseHeaderTimeout: 30 * time.Second,
+			},
+			expected: 30 * time.Second,
+		},
+		{
+			name:     "default response header timeout",
+			config:   types.ProviderConfig{},
+			expected: 15 * time.Second,
+		},
+		{
+			name: "custom longer response header timeout",
+			config: types.ProviderConfig{
+				ResponseHeaderTimeout: 60 * time.Second,
+			},
+			expected: 60 * time.Second,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := helper.ExtractResponseHeaderTimeout(tt.config)
 
 			if result != tt.expected {
 				t.Errorf("got %v, expected %v", result, tt.expected)
@@ -547,16 +611,21 @@ func TestConfigHelper_MergeWithDefaults(t *testing.T) {
 		t.Error("expected Timeout to be filled with default")
 	}
 
+	if merged.ResponseHeaderTimeout == 0 {
+		t.Error("expected ResponseHeaderTimeout to be filled with default")
+	}
+
 	if merged.MaxTokens == 0 {
 		t.Error("expected MaxTokens to be filled with default")
 	}
 
 	// Test that existing values are preserved
 	config2 := types.ProviderConfig{
-		Type:      types.ProviderTypeOpenAI,
-		BaseURL:   "https://custom.com",
-		Timeout:   120 * time.Second,
-		MaxTokens: 8000,
+		Type:                 types.ProviderTypeOpenAI,
+		BaseURL:              "https://custom.com",
+		Timeout:              120 * time.Second,
+		ResponseHeaderTimeout: 30 * time.Second,
+		MaxTokens:            8000,
 	}
 
 	merged2 := helper.MergeWithDefaults(config2)
@@ -567,6 +636,10 @@ func TestConfigHelper_MergeWithDefaults(t *testing.T) {
 
 	if merged2.Timeout != 120*time.Second {
 		t.Errorf("got Timeout %v, expected custom value", merged2.Timeout)
+	}
+
+	if merged2.ResponseHeaderTimeout != 30*time.Second {
+		t.Errorf("got ResponseHeaderTimeout %v, expected custom value", merged2.ResponseHeaderTimeout)
 	}
 
 	if merged2.MaxTokens != 8000 {
