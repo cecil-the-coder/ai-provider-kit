@@ -991,7 +991,7 @@ func TestLoadBalanceProvider_StreamClose(t *testing.T) {
 
 func TestLoadBalanceProvider_FailoverDisabled_ReturnsFirstError(t *testing.T) {
 	lb := NewLoadBalanceProvider("test", &Config{
-		Strategy:      StrategyRoundRobin,
+		Strategy:       StrategyRoundRobin,
 		EnableFailover: false, // Default behavior - backward compatible
 	})
 
@@ -1018,7 +1018,7 @@ func TestLoadBalanceProvider_FailoverDisabled_ReturnsFirstError(t *testing.T) {
 
 func TestLoadBalanceProvider_FailoverEnabled_RetriesOnFailure(t *testing.T) {
 	lb := NewLoadBalanceProvider("test", &Config{
-		Strategy:      StrategyRoundRobin,
+		Strategy:       StrategyRoundRobin,
 		EnableFailover: true,
 	})
 
@@ -1044,7 +1044,7 @@ func TestLoadBalanceProvider_FailoverEnabled_RetriesOnFailure(t *testing.T) {
 
 func TestLoadBalanceProvider_FailoverWithRoundRobin_RetriesRemainingProviders(t *testing.T) {
 	lb := NewLoadBalanceProvider("test", &Config{
-		Strategy:      StrategyRoundRobin,
+		Strategy:       StrategyRoundRobin,
 		EnableFailover: true,
 	})
 
@@ -1071,24 +1071,24 @@ func TestLoadBalanceProvider_FailoverWithRoundRobin_RetriesRemainingProviders(t 
 
 func TestLoadBalanceProvider_FailoverWithRandom_RetriesOnFailure(t *testing.T) {
 	lb := NewLoadBalanceProvider("test", &Config{
-		Strategy:      StrategyRandom,
+		Strategy:       StrategyRandom,
 		EnableFailover: true,
 	})
 
 	// All mock providers have failure tracking
 	callCount := map[string]int{}
 	provider1 := &mockChatProviderWithTracking{
-		name:       "provider1",
-		response:   "success",
-		callCount:  callCount,
-		shouldErr:  func(m *mockChatProviderWithTracking) bool { return m.name == "provider1" && m.callCount[m.name] == 0 },
-		err:        errors.New("provider1 failed"),
+		name:      "provider1",
+		response:  "success",
+		callCount: callCount,
+		shouldErr: func(m *mockChatProviderWithTracking) bool { return m.name == "provider1" && m.callCount[m.name] == 0 },
+		err:       errors.New("provider1 failed"),
 	}
 	provider2 := &mockChatProviderWithTracking{
-		name:       "provider2",
-		response:   "success",
-		callCount:  callCount,
-		shouldErr:  func(m *mockChatProviderWithTracking) bool { return false },
+		name:      "provider2",
+		response:  "success",
+		callCount: callCount,
+		shouldErr: func(m *mockChatProviderWithTracking) bool { return false },
 	}
 
 	lb.SetProviders([]types.Provider{provider1, provider2})
@@ -1109,7 +1109,7 @@ func TestLoadBalanceProvider_FailoverWithRandom_RetriesOnFailure(t *testing.T) {
 
 func TestLoadBalanceProvider_FailoverAllProvidersFail_ReturnsLastError(t *testing.T) {
 	lb := NewLoadBalanceProvider("test", &Config{
-		Strategy:      StrategyRoundRobin,
+		Strategy:       StrategyRoundRobin,
 		EnableFailover: true,
 	})
 
@@ -1137,16 +1137,16 @@ func TestLoadBalanceProvider_FailoverAllProvidersFail_ReturnsLastError(t *testin
 
 func TestLoadBalanceProvider_FailoverFirstProviderSucceeds_NoRetry(t *testing.T) {
 	lb := NewLoadBalanceProvider("test", &Config{
-		Strategy:      StrategyRoundRobin,
+		Strategy:       StrategyRoundRobin,
 		EnableFailover: true,
 	})
 
 	// First provider succeeds, we should only call it once
 	callCount := 0
 	provider1 := &mockChatProviderWithCounter{
-		name:       "provider1",
-		response:   "success",
-		callCount:  &callCount,
+		name:      "provider1",
+		response:  "success",
+		callCount: &callCount,
 	}
 	provider2 := &mockChatProvider{name: "provider2", err: errors.New("provider2 failed")}
 
@@ -1173,7 +1173,7 @@ func TestLoadBalanceProvider_FailoverFirstProviderSucceeds_NoRetry(t *testing.T)
 
 func TestLoadBalanceProvider_FailoverNonChatProvider_SkipsToNext(t *testing.T) {
 	lb := NewLoadBalanceProvider("test", &Config{
-		Strategy:      StrategyRoundRobin,
+		Strategy:       StrategyRoundRobin,
 		EnableFailover: true,
 	})
 
@@ -1200,7 +1200,7 @@ func TestLoadBalanceProvider_FailoverNonChatProvider_SkipsToNext(t *testing.T) {
 
 func TestLoadBalanceProvider_FailoverWithSingleProvider_FailsImmediately(t *testing.T) {
 	lb := NewLoadBalanceProvider("test", &Config{
-		Strategy:      StrategyRoundRobin,
+		Strategy:       StrategyRoundRobin,
 		EnableFailover: true,
 	})
 
@@ -1251,8 +1251,8 @@ func TestLoadBalanceProvider_GetConfig_IncludesEnableFailover(t *testing.T) {
 
 func TestLoadBalanceProvider_Configure_UpdatesEnableFailover(t *testing.T) {
 	lb := NewLoadBalanceProvider("test", &Config{
-		Strategy:      StrategyRoundRobin,
-		ProviderNames: []string{"old1"},
+		Strategy:       StrategyRoundRobin,
+		ProviderNames:  []string{"old1"},
 		EnableFailover: false,
 	})
 
@@ -1339,12 +1339,14 @@ func (m *mockChatProviderWithCounter) GetConfig() types.ProviderConfig          
 func (m *mockChatProviderWithCounter) InvokeServerTool(ctx context.Context, toolName string, params interface{}) (interface{}, error) {
 	return nil, nil
 }
-func (m *mockChatProviderWithCounter) SupportsToolCalling() bool              { return false }
-func (m *mockChatProviderWithCounter) GetToolFormat() types.ToolFormat        { return "" }
-func (m *mockChatProviderWithCounter) SupportsStreaming() bool                { return true }
-func (m *mockChatProviderWithCounter) SupportsResponsesAPI() bool             { return false }
+func (m *mockChatProviderWithCounter) SupportsToolCalling() bool             { return false }
+func (m *mockChatProviderWithCounter) GetToolFormat() types.ToolFormat       { return "" }
+func (m *mockChatProviderWithCounter) SupportsStreaming() bool               { return true }
+func (m *mockChatProviderWithCounter) SupportsResponsesAPI() bool            { return false }
 func (m *mockChatProviderWithCounter) HealthCheck(ctx context.Context) error { return nil }
-func (m *mockChatProviderWithCounter) GetMetrics() types.ProviderMetrics     { return types.ProviderMetrics{} }
+func (m *mockChatProviderWithCounter) GetMetrics() types.ProviderMetrics {
+	return types.ProviderMetrics{}
+}
 
 // mockChatProviderWithTracking provides conditional error behavior based on call count
 type mockChatProviderWithTracking struct {
@@ -1378,16 +1380,20 @@ func (m *mockChatProviderWithTracking) Authenticate(ctx context.Context, authCon
 func (m *mockChatProviderWithTracking) IsAuthenticated() bool                       { return true }
 func (m *mockChatProviderWithTracking) Logout(ctx context.Context) error            { return nil }
 func (m *mockChatProviderWithTracking) Configure(config types.ProviderConfig) error { return nil }
-func (m *mockChatProviderWithTracking) GetConfig() types.ProviderConfig             { return types.ProviderConfig{} }
+func (m *mockChatProviderWithTracking) GetConfig() types.ProviderConfig {
+	return types.ProviderConfig{}
+}
 func (m *mockChatProviderWithTracking) InvokeServerTool(ctx context.Context, toolName string, params interface{}) (interface{}, error) {
 	return nil, nil
 }
-func (m *mockChatProviderWithTracking) SupportsToolCalling() bool              { return false }
-func (m *mockChatProviderWithTracking) GetToolFormat() types.ToolFormat        { return "" }
-func (m *mockChatProviderWithTracking) SupportsStreaming() bool                { return true }
-func (m *mockChatProviderWithTracking) SupportsResponsesAPI() bool             { return false }
+func (m *mockChatProviderWithTracking) SupportsToolCalling() bool             { return false }
+func (m *mockChatProviderWithTracking) GetToolFormat() types.ToolFormat       { return "" }
+func (m *mockChatProviderWithTracking) SupportsStreaming() bool               { return true }
+func (m *mockChatProviderWithTracking) SupportsResponsesAPI() bool            { return false }
 func (m *mockChatProviderWithTracking) HealthCheck(ctx context.Context) error { return nil }
-func (m *mockChatProviderWithTracking) GetMetrics() types.ProviderMetrics     { return types.ProviderMetrics{} }
+func (m *mockChatProviderWithTracking) GetMetrics() types.ProviderMetrics {
+	return types.ProviderMetrics{}
+}
 
 // ============================================================================
 // Benchmark Tests

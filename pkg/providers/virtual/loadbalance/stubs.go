@@ -67,8 +67,8 @@ func (lb *LoadBalanceProvider) GetConfig() types.ProviderConfig {
 		Type: "loadbalance",
 		Name: lb.name,
 		ProviderConfig: map[string]interface{}{
-			"strategy":       string(lb.config.Strategy),
-			"providers":      lb.config.ProviderNames,
+			"strategy":        string(lb.config.Strategy),
+			"providers":       lb.config.ProviderNames,
 			"enable_failover": lb.config.EnableFailover,
 		},
 	}

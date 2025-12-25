@@ -1094,27 +1094,27 @@ func TestHTTPClientBuilder_WithTransportConfig(t *testing.T) {
 
 func TestHTTPClientBuilder_WithResponseHeaderTimeout(t *testing.T) {
 	tests := []struct {
-		name                       string
-		responseHeaderTimeout      time.Duration
-		expectedConfigResponseHeaderTimeout time.Duration
+		name                                   string
+		responseHeaderTimeout                  time.Duration
+		expectedConfigResponseHeaderTimeout    time.Duration
 		expectedTransportResponseHeaderTimeout time.Duration
 	}{
 		{
-			name:                       "custom response header timeout",
-			responseHeaderTimeout:      30 * time.Second,
-			expectedConfigResponseHeaderTimeout: 30 * time.Second,
+			name:                                   "custom response header timeout",
+			responseHeaderTimeout:                  30 * time.Second,
+			expectedConfigResponseHeaderTimeout:    30 * time.Second,
 			expectedTransportResponseHeaderTimeout: 30 * time.Second,
 		},
 		{
-			name:                       "longer response header timeout",
-			responseHeaderTimeout:      60 * time.Second,
-			expectedConfigResponseHeaderTimeout: 60 * time.Second,
+			name:                                   "longer response header timeout",
+			responseHeaderTimeout:                  60 * time.Second,
+			expectedConfigResponseHeaderTimeout:    60 * time.Second,
 			expectedTransportResponseHeaderTimeout: 60 * time.Second,
 		},
 		{
-			name:                       "response header timeout longer than default",
-			responseHeaderTimeout:      120 * time.Second,
-			expectedConfigResponseHeaderTimeout: 120 * time.Second,
+			name:                                   "response header timeout longer than default",
+			responseHeaderTimeout:                  120 * time.Second,
+			expectedConfigResponseHeaderTimeout:    120 * time.Second,
 			expectedTransportResponseHeaderTimeout: 120 * time.Second,
 		},
 	}

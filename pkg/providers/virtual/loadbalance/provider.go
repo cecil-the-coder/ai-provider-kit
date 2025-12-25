@@ -223,7 +223,8 @@ func (lb *LoadBalanceProvider) selectRandomProviderExcluding(excludedIndices map
 func (lb *LoadBalanceProvider) selectRoundRobinProviderExcluding(excludedIndices map[int]bool) (types.Provider, int, error) {
 	if len(excludedIndices) == 0 {
 		// No exclusions, use standard round-robin (simpler and preserves existing behavior when no failover)
-		idx := int(atomic.AddUint64(&lb.counter, 1) - 1) % len(lb.providers)
+		n := uint64(len(lb.providers))
+		idx := int((atomic.AddUint64(&lb.counter, 1) - 1) % n)
 		return lb.providers[idx], idx, nil
 	}
 

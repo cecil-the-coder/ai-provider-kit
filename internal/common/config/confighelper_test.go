@@ -58,7 +58,7 @@ func TestConfigHelper_ValidateProviderConfig(t *testing.T) {
 		{
 			name: "negative response header timeout",
 			config: types.ProviderConfig{
-				Type:                 types.ProviderTypeOpenAI,
+				Type:                  types.ProviderTypeOpenAI,
 				ResponseHeaderTimeout: -5 * time.Second,
 			},
 			expectValid: false,
@@ -82,7 +82,7 @@ func TestConfigHelper_ValidateProviderConfig(t *testing.T) {
 		{
 			name: "zero response header timeout allowed",
 			config: types.ProviderConfig{
-				Type:                 types.ProviderTypeOpenAI,
+				Type:                  types.ProviderTypeOpenAI,
 				ResponseHeaderTimeout: 0,
 			},
 			expectValid: true,
@@ -90,7 +90,7 @@ func TestConfigHelper_ValidateProviderConfig(t *testing.T) {
 		{
 			name: "custom response header timeout",
 			config: types.ProviderConfig{
-				Type:                 types.ProviderTypeOpenAI,
+				Type:                  types.ProviderTypeOpenAI,
 				ResponseHeaderTimeout: 30 * time.Second,
 			},
 			expectValid: true,
@@ -621,11 +621,11 @@ func TestConfigHelper_MergeWithDefaults(t *testing.T) {
 
 	// Test that existing values are preserved
 	config2 := types.ProviderConfig{
-		Type:                 types.ProviderTypeOpenAI,
-		BaseURL:              "https://custom.com",
-		Timeout:              120 * time.Second,
+		Type:                  types.ProviderTypeOpenAI,
+		BaseURL:               "https://custom.com",
+		Timeout:               120 * time.Second,
 		ResponseHeaderTimeout: 30 * time.Second,
-		MaxTokens:            8000,
+		MaxTokens:             8000,
 	}
 
 	merged2 := helper.MergeWithDefaults(config2)
