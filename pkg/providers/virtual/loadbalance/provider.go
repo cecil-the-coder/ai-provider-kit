@@ -224,6 +224,7 @@ func (lb *LoadBalanceProvider) selectRoundRobinProviderExcluding(excludedIndices
 	if len(excludedIndices) == 0 {
 		// No exclusions, use standard round-robin (simpler and preserves existing behavior when no failover)
 		n := uint64(len(lb.providers))
+		// #nosec G115 -- Safe conversion: result is modded by n (slice length), which fits within int on 64-bit systems
 		idx := int((atomic.AddUint64(&lb.counter, 1) - 1) % n)
 		return lb.providers[idx], idx, nil
 	}
@@ -231,6 +232,7 @@ func (lb *LoadBalanceProvider) selectRoundRobinProviderExcluding(excludedIndices
 	// Find the first available provider starting from current position
 	n := uint64(len(lb.providers))
 	for i := uint64(0); i < n; i++ {
+		// #nosec G115 -- Safe conversion: result is modded by n (slice length), which fits within int on 64-bit systems
 		idx := int((atomic.AddUint64(&lb.counter, 1) - 1) % n)
 		if !excludedIndices[idx] {
 			return lb.providers[idx], idx, nil
