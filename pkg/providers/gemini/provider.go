@@ -455,7 +455,7 @@ func (p *GeminiProvider) GetQuotaHistory(ctx context.Context, model string, star
 
 // convertToQuotaHistory converts a GetQuotaHistoryResponse to types.QuotaHistory format.
 // This is called internally by GetQuotaHistory.
-// nolint:dupl // Similar logic to code_assist.ConvertToQuotaHistory but uses types package
+// nolint:dupl,unparam // Similar logic to code_assist.ConvertToQuotaHistory but uses types package; projectID kept for API consistency
 func (p *GeminiProvider) convertToQuotaHistory(resp *GetQuotaHistoryResponse, projectID string, model string) *types.QuotaHistory {
 	if resp == nil {
 		return nil
