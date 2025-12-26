@@ -525,9 +525,9 @@ const (
 
 // Quota API routes for Code Assist
 const (
-	getQuotaRoute          = ":getQuota"
-	getQuotaUsageRoute     = ":getQuotaUsage"
-	getQuotaHistoryRoute   = ":getQuotaHistory"
+	getQuotaRoute        = ":getQuota"
+	getQuotaUsageRoute   = ":getQuotaUsage"
+	getQuotaHistoryRoute = ":getQuotaHistory"
 )
 
 // Constants for client metadata

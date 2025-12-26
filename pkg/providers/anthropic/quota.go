@@ -139,20 +139,10 @@ func calculateRemainingPercent(remaining, limit int) float64 {
 
 // calculatePeriodStart estimates when the current quota period started
 // based on the reset time and the period type.
+// nolint:unparam // period parameter is provided for future extensibility
 func calculatePeriodStart(resetTime time.Time, period quota.QuotaPeriod) time.Time {
 	if resetTime.IsZero() {
 		return time.Time{}
-	}
-
-	now := time.Now()
-	durationUntilReset := resetTime.Sub(now)
-
-	// Ensure duration is positive and reasonable
-	if durationUntilReset < 0 {
-		durationUntilReset = 0
-	} else if durationUntilReset > time.Hour*24 {
-		// Cap at 24 hours to avoid unreasonable values
-		durationUntilReset = time.Hour * 24
 	}
 
 	switch period {

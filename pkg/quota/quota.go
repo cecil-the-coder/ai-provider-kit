@@ -139,14 +139,14 @@ func (q *QuotaInfo) Clone() *QuotaInfo {
 	}
 
 	clone := &QuotaInfo{
-		Provider:              q.Provider,
-		ProviderType:          q.ProviderType,
-		Model:                 q.Model,
-		Timestamp:             q.Timestamp,
-		Quotas:                make(map[QuotaType]*QuotaUsage, len(q.Quotas)),
-		ProviderQuotaConfigs:  make(map[QuotaType]*QuotaConfig, len(q.ProviderQuotaConfigs)),
-		CustomUsage:           make(map[string]interface{}, len(q.CustomUsage)),
-		Metadata:              make(map[string]interface{}, len(q.Metadata)),
+		Provider:             q.Provider,
+		ProviderType:         q.ProviderType,
+		Model:                q.Model,
+		Timestamp:            q.Timestamp,
+		Quotas:               make(map[QuotaType]*QuotaUsage, len(q.Quotas)),
+		ProviderQuotaConfigs: make(map[QuotaType]*QuotaConfig, len(q.ProviderQuotaConfigs)),
+		CustomUsage:          make(map[string]interface{}, len(q.CustomUsage)),
+		Metadata:             make(map[string]interface{}, len(q.Metadata)),
 	}
 
 	for k, v := range q.Quotas {
@@ -366,12 +366,12 @@ func (m *Manager) UpdateFromRateLimit(info *ratelimit.Info) *QuotaInfo {
 	quotaKey := info.Provider + ":" + info.Model
 
 	quotaInfo := &QuotaInfo{
-		Provider:     info.Provider,
-		Model:        info.Model,
-		Timestamp:    info.Timestamp,
-		Quotas:       make(map[QuotaType]*QuotaUsage),
-		CustomUsage:  info.CustomData,
-		Metadata:     make(map[string]interface{}),
+		Provider:    info.Provider,
+		Model:       info.Model,
+		Timestamp:   info.Timestamp,
+		Quotas:      make(map[QuotaType]*QuotaUsage),
+		CustomUsage: info.CustomData,
+		Metadata:    make(map[string]interface{}),
 	}
 
 	// Populate Quotas from rate limit info
@@ -546,9 +546,7 @@ func (m *Manager) GetHistory(provider, model string, limit int) []*QuotaRecord {
 
 	if provider == "" && model == "" {
 		// Return all records
-		for _, record := range m.history {
-			result = append(result, record)
-		}
+		result = append(result, m.history...)
 	} else {
 		// Filter by provider and/or model
 		for _, record := range m.history {

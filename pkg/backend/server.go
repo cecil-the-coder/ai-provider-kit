@@ -17,22 +17,22 @@ import (
 
 // Server represents the backend HTTP server that ties all components together
 type Server struct {
-	config        backendtypes.BackendConfig
-	httpServer    *http.Server
-	providers     map[string]types.Provider
-	extensions    extensions.ExtensionRegistry
-	mux           *http.ServeMux
-	quotaManager  *quota.Manager
+	config       backendtypes.BackendConfig
+	httpServer   *http.Server
+	providers    map[string]types.Provider
+	extensions   extensions.ExtensionRegistry
+	mux          *http.ServeMux
+	quotaManager *quota.Manager
 }
 
 // NewServer creates a new backend server with the given configuration and providers
 func NewServer(config backendtypes.BackendConfig, providers map[string]types.Provider) *Server {
 	s := &Server{
-		config:        config,
-		providers:     providers,
-		extensions:    extensions.NewRegistry(),
-		mux:           http.NewServeMux(),
-		quotaManager:  quota.NewManager(),
+		config:       config,
+		providers:    providers,
+		extensions:   extensions.NewRegistry(),
+		mux:          http.NewServeMux(),
+		quotaManager: quota.NewManager(),
 	}
 
 	// Initialize extensions if configured

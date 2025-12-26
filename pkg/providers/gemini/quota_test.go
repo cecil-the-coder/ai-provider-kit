@@ -159,22 +159,22 @@ func TestGetQuotaUsageSuccess(t *testing.T) {
 		response := GetQuotaUsageResponse{
 			Records: []UsageRecord{
 				{
-					Timestamp:     time.Now().Add(-time.Hour).Format(time.RFC3339),
-					Model:         "gemini-2.5-flash",
-					InputTokens:   1000,
-					OutputTokens:  500,
-					TotalTokens:   1500,
-					RequestCount:  1,
-					Operation:     "generateContent",
+					Timestamp:    time.Now().Add(-time.Hour).Format(time.RFC3339),
+					Model:        "gemini-2.5-flash",
+					InputTokens:  1000,
+					OutputTokens: 500,
+					TotalTokens:  1500,
+					RequestCount: 1,
+					Operation:    "generateContent",
 				},
 			},
 			Summary: UsageSummary{
-				TotalInputTokens: 5000,
+				TotalInputTokens:  5000,
 				TotalOutputTokens: 2500,
-				TotalTokens:      7500,
-				TotalRequests:    5,
-				StartTime:        time.Now().Add(-24 * time.Hour).Format(time.RFC3339),
-				EndTime:          time.Now().Format(time.RFC3339),
+				TotalTokens:       7500,
+				TotalRequests:     5,
+				StartTime:         time.Now().Add(-24 * time.Hour).Format(time.RFC3339),
+				EndTime:           time.Now().Format(time.RFC3339),
 			},
 		}
 
@@ -227,31 +227,31 @@ func TestGetQuotaHistorySuccess(t *testing.T) {
 		response := GetQuotaHistoryResponse{
 			Records: []UsageRecord{
 				{
-					Timestamp:     time.Now().Add(-2 * time.Hour).Format(time.RFC3339),
-					Model:         "gemini-2.5-flash",
-					InputTokens:   2000,
-					OutputTokens:  1000,
-					TotalTokens:   3000,
-					RequestCount:  1,
-					Operation:     "generateContent",
+					Timestamp:    time.Now().Add(-2 * time.Hour).Format(time.RFC3339),
+					Model:        "gemini-2.5-flash",
+					InputTokens:  2000,
+					OutputTokens: 1000,
+					TotalTokens:  3000,
+					RequestCount: 1,
+					Operation:    "generateContent",
 				},
 				{
-					Timestamp:     time.Now().Add(-time.Hour).Format(time.RFC3339),
-					Model:         "gemini-2.5-flash",
-					InputTokens:   1500,
-					OutputTokens:  750,
-					TotalTokens:   2250,
-					RequestCount:  1,
-					Operation:     "streamGenerateContent",
+					Timestamp:    time.Now().Add(-time.Hour).Format(time.RFC3339),
+					Model:        "gemini-2.5-flash",
+					InputTokens:  1500,
+					OutputTokens: 750,
+					TotalTokens:  2250,
+					RequestCount: 1,
+					Operation:    "streamGenerateContent",
 				},
 			},
 			Summary: UsageSummary{
-				TotalInputTokens: 3500,
+				TotalInputTokens:  3500,
 				TotalOutputTokens: 1750,
-				TotalTokens:      5250,
-				TotalRequests:    2,
-				StartTime:        time.Now().Add(-24 * time.Hour).Format(time.RFC3339),
-				EndTime:          time.Now().Format(time.RFC3339),
+				TotalTokens:       5250,
+				TotalRequests:     2,
+				StartTime:         time.Now().Add(-24 * time.Hour).Format(time.RFC3339),
+				EndTime:           time.Now().Format(time.RFC3339),
 			},
 		}
 
@@ -379,20 +379,16 @@ func TestConvertToQuotaInfo(t *testing.T) {
 	inputQuota, exists := quotaInfo.Quotas["input_tokens"]
 	if !exists {
 		t.Error("Input tokens quota not found")
-	} else {
-		if inputQuota.Limit != 1000000 {
-			t.Errorf("Expected input token limit 1000000, got %d", inputQuota.Limit)
-		}
+	} else if inputQuota.Limit != 1000000 {
+		t.Errorf("Expected input token limit 1000000, got %d", inputQuota.Limit)
 	}
 
 	// Check output token quota
 	outputQuota, exists := quotaInfo.Quotas["output_tokens"]
 	if !exists {
 		t.Error("Output tokens quota not found")
-	} else {
-		if outputQuota.Limit != 500000 {
-			t.Errorf("Expected output token limit 500000, got %d", outputQuota.Limit)
-		}
+	} else if outputQuota.Limit != 500000 {
+		t.Errorf("Expected output token limit 500000, got %d", outputQuota.Limit)
 	}
 }
 
@@ -405,22 +401,22 @@ func TestConvertToQuotaHistory(t *testing.T) {
 	resp := &GetQuotaHistoryResponse{
 		Records: []UsageRecord{
 			{
-				Timestamp:     now.Add(-time.Hour).Format(time.RFC3339),
-				Model:         "gemini-2.5-flash",
-				InputTokens:   1000,
-				OutputTokens:  500,
-				TotalTokens:   1500,
-				RequestCount:  1,
-				Operation:     "generateContent",
+				Timestamp:    now.Add(-time.Hour).Format(time.RFC3339),
+				Model:        "gemini-2.5-flash",
+				InputTokens:  1000,
+				OutputTokens: 500,
+				TotalTokens:  1500,
+				RequestCount: 1,
+				Operation:    "generateContent",
 			},
 		},
 		Summary: UsageSummary{
-			TotalInputTokens: 1000,
+			TotalInputTokens:  1000,
 			TotalOutputTokens: 500,
-			TotalTokens:      1500,
-			TotalRequests:    1,
-			StartTime:        now.Add(-24 * time.Hour).Format(time.RFC3339),
-			EndTime:          now.Format(time.RFC3339),
+			TotalTokens:       1500,
+			TotalRequests:     1,
+			StartTime:         now.Add(-24 * time.Hour).Format(time.RFC3339),
+			EndTime:           now.Format(time.RFC3339),
 		},
 	}
 
@@ -634,22 +630,22 @@ func TestProviderConvertToQuotaHistory(t *testing.T) {
 	resp := &GetQuotaHistoryResponse{
 		Records: []UsageRecord{
 			{
-				Timestamp:     now.Add(-time.Hour).Format(time.RFC3339),
-				Model:         "gemini-2.5-flash",
-				InputTokens:   1000,
-				OutputTokens:  500,
-				TotalTokens:   1500,
-				RequestCount:  1,
-				Operation:     "generateContent",
+				Timestamp:    now.Add(-time.Hour).Format(time.RFC3339),
+				Model:        "gemini-2.5-flash",
+				InputTokens:  1000,
+				OutputTokens: 500,
+				TotalTokens:  1500,
+				RequestCount: 1,
+				Operation:    "generateContent",
 			},
 		},
 		Summary: UsageSummary{
-			TotalInputTokens: 1000,
+			TotalInputTokens:  1000,
 			TotalOutputTokens: 500,
-			TotalTokens:      1500,
-			TotalRequests:    1,
-			StartTime:        now.Add(-24 * time.Hour).Format(time.RFC3339),
-			EndTime:          now.Format(time.RFC3339),
+			TotalTokens:       1500,
+			TotalRequests:     1,
+			StartTime:         now.Add(-24 * time.Hour).Format(time.RFC3339),
+			EndTime:           now.Format(time.RFC3339),
 		},
 	}
 

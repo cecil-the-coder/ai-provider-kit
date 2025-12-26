@@ -199,8 +199,8 @@ func (lb *LoadBalanceProvider) GenerateChatCompletion(ctx context.Context, opts 
 
 type loadBalanceStream struct {
 	*common.StreamWrapper
-	lb           *LoadBalanceProvider
-	providerIdx  int
+	lb          *LoadBalanceProvider
+	providerIdx int
 	decremented atomic.Bool
 }
 
@@ -288,8 +288,8 @@ func (lb *LoadBalanceProvider) selectFillFirstProviderExcluding(excludedIndices 
 	}
 
 	// Find the provider with the lowest active request count that is not excluded
-	var minActiveRequests uint64 = ^uint64(0) // Max uint64
-	var selectedIdx int = -1
+	minActiveRequests := ^uint64(0) // Max uint64
+	selectedIdx := -1
 
 	for i := range lb.providers {
 		if excludedIndices[i] {

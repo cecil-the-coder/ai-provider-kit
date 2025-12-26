@@ -288,13 +288,13 @@ func (p *GeminiProvider) convertToQuotaInfo(resp *GetQuotaResponse, model string
 	}
 
 	info := &types.QuotaInfo{
-		Provider:              "gemini",
-		ProviderType:          types.ProviderTypeGemini,
-		Model:                 model,
-		Timestamp:             time.Now(),
-		Quotas:                make(map[types.QuotaType]*types.QuotaUsage),
-		CustomUsage:           make(map[string]interface{}),
-		Metadata:              make(map[string]interface{}),
+		Provider:     "gemini",
+		ProviderType: types.ProviderTypeGemini,
+		Model:        model,
+		Timestamp:    time.Now(),
+		Quotas:       make(map[types.QuotaType]*types.QuotaUsage),
+		CustomUsage:  make(map[string]interface{}),
+		Metadata:     make(map[string]interface{}),
 	}
 
 	// Set project and tier in metadata
@@ -357,14 +357,17 @@ func (p *GeminiProvider) convertToQuotaInfo(resp *GetQuotaResponse, model string
 
 		// Determine period start time
 		var periodStartedAt time.Time
-		if !resetAt.IsZero() && qp == types.QuotaPeriodDay {
-			periodStartedAt = resetAt.AddDate(0, 0, -1)
-		} else if !resetAt.IsZero() && qp == types.QuotaPeriodMonth {
-			periodStartedAt = resetAt.AddDate(0, -1, 0)
-		} else if !resetAt.IsZero() && qp == types.QuotaPeriodHour {
-			periodStartedAt = resetAt.Add(-time.Hour)
-		} else if !resetAt.IsZero() && qp == types.QuotaPeriodMinute {
-			periodStartedAt = resetAt.Add(-time.Minute)
+		if !resetAt.IsZero() {
+			switch qp {
+			case types.QuotaPeriodDay:
+				periodStartedAt = resetAt.AddDate(0, 0, -1)
+			case types.QuotaPeriodMonth:
+				periodStartedAt = resetAt.AddDate(0, -1, 0)
+			case types.QuotaPeriodHour:
+				periodStartedAt = resetAt.Add(-time.Hour)
+			case types.QuotaPeriodMinute:
+				periodStartedAt = resetAt.Add(-time.Minute)
+			}
 		}
 
 		info.Quotas[qt] = &types.QuotaUsage{

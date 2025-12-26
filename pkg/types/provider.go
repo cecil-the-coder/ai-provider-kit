@@ -341,14 +341,14 @@ type QuotaProvider interface {
 // This type is defined in the quota package but re-exported here for convenience.
 // See github.com/cecil-the-coder/ai-provider-kit/pkg/quota for the full definition.
 type QuotaInfo struct {
-	Provider              string                      `json:"provider"`
-	ProviderType          ProviderType                `json:"provider_type"`
-	Model                 string                      `json:"model"`
-	Timestamp             time.Time                   `json:"timestamp"`
-	Quotas                map[QuotaType]*QuotaUsage   `json:"quotas"`
-	ProviderQuotaConfigs  map[QuotaType]*QuotaConfig  `json:"provider_quota_configs,omitempty"`
-	CustomUsage           map[string]interface{}       `json:"custom_usage,omitempty"`
-	Metadata              map[string]interface{}       `json:"metadata,omitempty"`
+	Provider             string                     `json:"provider"`
+	ProviderType         ProviderType               `json:"provider_type"`
+	Model                string                     `json:"model"`
+	Timestamp            time.Time                  `json:"timestamp"`
+	Quotas               map[QuotaType]*QuotaUsage  `json:"quotas"`
+	ProviderQuotaConfigs map[QuotaType]*QuotaConfig `json:"provider_quota_configs,omitempty"`
+	CustomUsage          map[string]interface{}     `json:"custom_usage,omitempty"`
+	Metadata             map[string]interface{}     `json:"metadata,omitempty"`
 }
 
 // QuotaType represents the type of quota being measured.
@@ -390,43 +390,43 @@ const (
 
 // QuotaUsage represents current usage for a specific quota.
 type QuotaUsage struct {
-	Type             QuotaType    `json:"type"`
-	Period           QuotaPeriod   `json:"period"`
-	Used             int          `json:"used"`
-	Limit            int          `json:"limit"`
-	Remaining        int          `json:"remaining"`
-	RemainingPercent float64      `json:"remaining_percent"`
-	ResetAt          time.Time    `json:"reset_at"`
-	PeriodStartedAt  time.Time    `json:"period_started_at"`
+	Type             QuotaType   `json:"type"`
+	Period           QuotaPeriod `json:"period"`
+	Used             int         `json:"used"`
+	Limit            int         `json:"limit"`
+	Remaining        int         `json:"remaining"`
+	RemainingPercent float64     `json:"remaining_percent"`
+	ResetAt          time.Time   `json:"reset_at"`
+	PeriodStartedAt  time.Time   `json:"period_started_at"`
 }
 
 // QuotaConfig represents a quota configuration for setting limits.
 type QuotaConfig struct {
-	Type       QuotaType            `json:"type"`
-	Period     QuotaPeriod          `json:"period"`
-	Limit      int                  `json:"limit"`
-	ResetAt    time.Time            `json:"reset_at"`
+	Type       QuotaType              `json:"type"`
+	Period     QuotaPeriod            `json:"period"`
+	Limit      int                    `json:"limit"`
+	ResetAt    time.Time              `json:"reset_at"`
 	CustomData map[string]interface{} `json:"custom_data,omitempty"`
 }
 
 // QuotaHistory represents historical quota usage data.
 type QuotaHistory struct {
-	Provider   string                       `json:"provider"`
-	Model      string                       `json:"model,omitempty"`
-	Records    []*QuotaRecord               `json:"records"`
-	TotalUsage map[QuotaType]int            `json:"total_usage"`
-	StartTime  time.Time                    `json:"start_time"`
-	EndTime    time.Time                    `json:"end_time"`
+	Provider   string            `json:"provider"`
+	Model      string            `json:"model,omitempty"`
+	Records    []*QuotaRecord    `json:"records"`
+	TotalUsage map[QuotaType]int `json:"total_usage"`
+	StartTime  time.Time         `json:"start_time"`
+	EndTime    time.Time         `json:"end_time"`
 }
 
 // QuotaRecord represents a single quota usage event record.
 type QuotaRecord struct {
-	ID        string              `json:"id"`
-	Provider  string              `json:"provider"`
-	Model     string              `json:"model"`
-	Timestamp time.Time           `json:"timestamp"`
-	Operation string              `json:"operation"`
-	Usage     map[QuotaType]int   `json:"usage"`
+	ID        string            `json:"id"`
+	Provider  string            `json:"provider"`
+	Model     string            `json:"model"`
+	Timestamp time.Time         `json:"timestamp"`
+	Operation string            `json:"operation"`
+	Usage     map[QuotaType]int `json:"usage"`
 }
 
 // ============================================================================

@@ -17,14 +17,14 @@ type QuotaRequest struct {
 
 // QuotaUsageResponse represents quota usage in API responses
 type QuotaUsageResponse struct {
-	Type             string    `json:"type"`             // "requests", "tokens", "input_tokens", "output_tokens", "daily", "custom"
-	Period           string    `json:"period"`           // "minute", "hour", "day", "week", "month", "custom"
-	Used             int       `json:"used"`
-	Limit            int       `json:"limit"`
-	Remaining        int       `json:"remaining"`
-	RemainingPercent float64   `json:"remaining_percent"`
-	ResetAt          int64     `json:"reset_at"`         // Unix timestamp
-	PeriodStartedAt  int64     `json:"period_started_at"` // Unix timestamp
+	Type             string  `json:"type"`   // "requests", "tokens", "input_tokens", "output_tokens", "daily", "custom"
+	Period           string  `json:"period"` // "minute", "hour", "day", "week", "month", "custom"
+	Used             int     `json:"used"`
+	Limit            int     `json:"limit"`
+	Remaining        int     `json:"remaining"`
+	RemainingPercent float64 `json:"remaining_percent"`
+	ResetAt          int64   `json:"reset_at"`          // Unix timestamp
+	PeriodStartedAt  int64   `json:"period_started_at"` // Unix timestamp
 }
 
 // QuotaConfigResponse represents quota configuration in API responses
@@ -32,20 +32,20 @@ type QuotaConfigResponse struct {
 	Type       string                 `json:"type"`
 	Period     string                 `json:"period"`
 	Limit      int                    `json:"limit"`
-	ResetAt    int64                  `json:"reset_at"`    // Unix timestamp
+	ResetAt    int64                  `json:"reset_at"` // Unix timestamp
 	CustomData map[string]interface{} `json:"custom_data,omitempty"`
 }
 
 // QuotaResponse represents quota information in API responses
 type QuotaResponse struct {
-	Provider              string                         `json:"provider"`
-	ProviderType          string                         `json:"provider_type"`
-	Model                 string                         `json:"model"`
-	Timestamp             int64                          `json:"timestamp"` // Unix timestamp
-	Quotas                map[string]*QuotaUsageResponse `json:"quotas"`
-	ProviderQuotaConfigs  map[string]*QuotaConfigResponse `json:"provider_quota_configs,omitempty"`
-	CustomUsage           map[string]interface{}         `json:"custom_usage,omitempty"`
-	Metadata              map[string]interface{}         `json:"metadata,omitempty"`
+	Provider             string                          `json:"provider"`
+	ProviderType         string                          `json:"provider_type"`
+	Model                string                          `json:"model"`
+	Timestamp            int64                           `json:"timestamp"` // Unix timestamp
+	Quotas               map[string]*QuotaUsageResponse  `json:"quotas"`
+	ProviderQuotaConfigs map[string]*QuotaConfigResponse `json:"provider_quota_configs,omitempty"`
+	CustomUsage          map[string]interface{}          `json:"custom_usage,omitempty"`
+	Metadata             map[string]interface{}          `json:"metadata,omitempty"`
 
 	// Computed fields
 	AnyQuotaExceeded bool `json:"any_quota_exceeded"`
@@ -72,23 +72,23 @@ type QuotaHistoryRequest struct {
 
 // QuotaRecordResponse represents a quota usage record in API responses
 type QuotaRecordResponse struct {
-	ID        string              `json:"id"`
-	Provider  string              `json:"provider"`
-	Model     string              `json:"model"`
-	Timestamp int64               `json:"timestamp"` // Unix timestamp
-	Operation string              `json:"operation"`
-	Usage     map[string]int      `json:"usage"`
+	ID        string         `json:"id"`
+	Provider  string         `json:"provider"`
+	Model     string         `json:"model"`
+	Timestamp int64          `json:"timestamp"` // Unix timestamp
+	Operation string         `json:"operation"`
+	Usage     map[string]int `json:"usage"`
 }
 
 // QuotaHistoryResponse represents historical quota usage in API responses
 type QuotaHistoryResponse struct {
-	Provider   string                     `json:"provider"`
-	Model      string                     `json:"model,omitempty"`
-	Records    []*QuotaRecordResponse     `json:"records"`
-	TotalUsage map[string]int             `json:"total_usage"`
-	StartTime  int64                      `json:"start_time"` // Unix timestamp
-	EndTime    int64                      `json:"end_time"`   // Unix timestamp
-	RecordCount int                       `json:"record_count"`
+	Provider    string                 `json:"provider"`
+	Model       string                 `json:"model,omitempty"`
+	Records     []*QuotaRecordResponse `json:"records"`
+	TotalUsage  map[string]int         `json:"total_usage"`
+	StartTime   int64                  `json:"start_time"` // Unix timestamp
+	EndTime     int64                  `json:"end_time"`   // Unix timestamp
+	RecordCount int                    `json:"record_count"`
 }
 
 // QuotaSummaryRequest represents a request for quota summary

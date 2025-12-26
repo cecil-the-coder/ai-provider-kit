@@ -4,16 +4,14 @@ package openai
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"strconv"
 	"time"
 
-	"github.com/cecil-the-coder/ai-provider-kit/internal/common/telemetry"
 	commonhttp "github.com/cecil-the-coder/ai-provider-kit/internal/common/http"
+	"github.com/cecil-the-coder/ai-provider-kit/internal/common/telemetry"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/quota"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 )
@@ -30,8 +28,8 @@ type OpenAIUsageRequest struct {
 
 // OpenAIUsageResponse represents a response from OpenAI's usage API
 type OpenAIUsageResponse struct {
-	Object  string                `json:"object"`
-	Daily   []OpenAIUsageDayData  `json:"daily"`
+	Object   string               `json:"object"`
+	Daily    []OpenAIUsageDayData `json:"daily"`
 	Metadata OpenAIUsageMetadata  `json:"metadata"`
 }
 
@@ -50,10 +48,10 @@ type OpenAIUsageLineItem struct {
 
 // OpenAIAggregatedUsage represents aggregated usage statistics
 type OpenAIAggregatedUsage struct {
-	Tokens     int64   `json:"tokens"`
-	Requests   int64   `json:"requests"`
-	Operation  string  `json:"operation"`
-	Model      string  `json:"model"`
+	Tokens    int64  `json:"tokens"`
+	Requests  int64  `json:"requests"`
+	Operation string `json:"operation"`
+	Model     string `json:"model"`
 }
 
 // OpenAIUsageMetadata contains metadata about the usage data
@@ -69,32 +67,32 @@ type OpenAIBillingPeriod struct {
 
 // OpenAISubscriptionResponse represents a response from OpenAI's subscription API
 type OpenAISubscriptionResponse struct {
-	Object         string              `json:"object"`
-	Subscription   OpenAISubscription   `json:"subscription"`
+	Object         string                `json:"object"`
+	Subscription   OpenAISubscription    `json:"subscription"`
 	PaymentMethods []OpenAIPaymentMethod `json:"payment_methods"`
 }
 
 // OpenAISubscription represents subscription information
 type OpenAISubscription struct {
-	Plan           OpenAIPlan          `json:"plan"`
-	AccountName    string              `json:"account_name"`
-	UserID         string              `json:"user_id"`
-	SoftLimitUSD   float64             `json:"soft_limit_usd"`
-	HardLimitUSD   float64             `json:"hard_limit_usd"`
-	AccessUntil    string              `json:"access_until"`
-	SystemIDs      []string            `json:"system_ids"`
-	HasPaymentMethod bool              `json:"has_payment_method"`
+	Plan             OpenAIPlan `json:"plan"`
+	AccountName      string     `json:"account_name"`
+	UserID           string     `json:"user_id"`
+	SoftLimitUSD     float64    `json:"soft_limit_usd"`
+	HardLimitUSD     float64    `json:"hard_limit_usd"`
+	AccessUntil      string     `json:"access_until"`
+	SystemIDs        []string   `json:"system_ids"`
+	HasPaymentMethod bool       `json:"has_payment_method"`
 }
 
 // OpenAIPlan represents the billing plan
 type OpenAIPlan struct {
-	ID             string    `json:"id"`
-	Title          string    `json:"title"`
-	Description    string    `json:"description"`
-	IsActive       bool      `json:"is_active"`
-	 BillingFrequency string  `json:"billing_frequency"` // e.g., "monthly"
-	SoftLimitUSD   float64   `json:"soft_limit_usd"`
-	HardLimitUSD   float64   `json:"hard_limit_usd"`
+	ID               string  `json:"id"`
+	Title            string  `json:"title"`
+	Description      string  `json:"description"`
+	IsActive         bool    `json:"is_active"`
+	BillingFrequency string  `json:"billing_frequency"` // e.g., "monthly"
+	SoftLimitUSD     float64 `json:"soft_limit_usd"`
+	HardLimitUSD     float64 `json:"hard_limit_usd"`
 }
 
 // OpenAIPaymentMethod represents a payment method
@@ -113,9 +111,9 @@ type OpenAIModelsUsage struct {
 
 // OpenAIUsageSummary represents a summary of usage data
 type OpenAIUsageSummary struct {
-	TotalTokens   int64                      `json:"total_tokens"`
-	TotalRequests int64                      `json:"total_requests"`
-	TotalCostUSD  float64                    `json:"total_cost_usd"`
+	TotalTokens   int64                        `json:"total_tokens"`
+	TotalRequests int64                        `json:"total_requests"`
+	TotalCostUSD  float64                      `json:"total_cost_usd"`
 	Models        map[string]OpenAIModelsUsage `json:"models"`
 }
 
@@ -160,14 +158,14 @@ func (p *OpenAIProvider) GetQuota(ctx context.Context, model string) (*quota.Quo
 
 	// Build quota info
 	quotaInfo := &quota.QuotaInfo{
-		Provider:              p.Name(),
-		ProviderType:          p.Type(),
-		Model:                 model,
-		Timestamp:             now,
-		Quotas:                make(map[quota.QuotaType]*quota.QuotaUsage),
-		ProviderQuotaConfigs:  make(map[quota.QuotaType]*quota.QuotaConfig),
-		CustomUsage:           make(map[string]interface{}),
-		Metadata:              make(map[string]interface{}),
+		Provider:             p.Name(),
+		ProviderType:         p.Type(),
+		Model:                model,
+		Timestamp:            now,
+		Quotas:               make(map[quota.QuotaType]*quota.QuotaUsage),
+		ProviderQuotaConfigs: make(map[quota.QuotaType]*quota.QuotaConfig),
+		CustomUsage:          make(map[string]interface{}),
+		Metadata:             make(map[string]interface{}),
 	}
 
 	// Get usage for the specific model (or overall if not specified)
@@ -182,7 +180,7 @@ func (p *OpenAIProvider) GetQuota(ctx context.Context, model string) (*quota.Quo
 	}
 
 	// Compute quota information based on subscription plan
-	monthlyLimit := int64(p.computeEffectiveLimit(subscription))
+	monthlyLimit := p.computeEffectiveLimit(subscription)
 
 	// Add daily quota usage (based on today's usage)
 	quotaInfo.Quotas[quota.QuotaTypeDaily] = &quota.QuotaUsage{
@@ -348,14 +346,14 @@ func (p *OpenAIProvider) GetQuotaInfo(ctx context.Context, model string) (*types
 
 	// Convert quota.QuotaInfo to types.QuotaInfo
 	return &types.QuotaInfo{
-		Provider:              quotaInfo.Provider,
-		ProviderType:          quotaInfo.ProviderType,
-		Model:                 quotaInfo.Model,
-		Timestamp:             quotaInfo.Timestamp,
-		Quotas:                convertQuotaUsageMap(quotaInfo.Quotas),
-		ProviderQuotaConfigs:  convertQuotaConfigMap(quotaInfo.ProviderQuotaConfigs),
-		CustomUsage:           quotaInfo.CustomUsage,
-		Metadata:              quotaInfo.Metadata,
+		Provider:             quotaInfo.Provider,
+		ProviderType:         quotaInfo.ProviderType,
+		Model:                quotaInfo.Model,
+		Timestamp:            quotaInfo.Timestamp,
+		Quotas:               convertQuotaUsageMap(quotaInfo.Quotas),
+		ProviderQuotaConfigs: convertQuotaConfigMap(quotaInfo.ProviderQuotaConfigs),
+		CustomUsage:          quotaInfo.CustomUsage,
+		Metadata:             quotaInfo.Metadata,
 	}, nil
 }
 
@@ -544,18 +542,18 @@ func (p *OpenAIProvider) getMockSubscription() *OpenAISubscriptionResponse {
 		Object: "billing.subscription",
 		Subscription: OpenAISubscription{
 			Plan: OpenAIPlan{
-				ID:              "mock-plan",
-				Title:           "Mock Provider Plan",
-				Description:     "Mock plan for OpenAI-compatible provider",
-				IsActive:        true,
-				SoftLimitUSD:    1000.0,
-				HardLimitUSD:    1200.0,
+				ID:           "mock-plan",
+				Title:        "Mock Provider Plan",
+				Description:  "Mock plan for OpenAI-compatible provider",
+				IsActive:     true,
+				SoftLimitUSD: 1000.0,
+				HardLimitUSD: 1200.0,
 			},
-			AccountName:       "Mock Account",
-			UserID:            "mock-user-id",
-			SoftLimitUSD:      1000.0,
-			HardLimitUSD:      1200.0,
-			HasPaymentMethod:  true,
+			AccountName:      "Mock Account",
+			UserID:           "mock-user-id",
+			SoftLimitUSD:     1000.0,
+			HardLimitUSD:     1200.0,
+			HasPaymentMethod: true,
 		},
 	}
 }
@@ -669,6 +667,7 @@ func getNextResetTime() time.Time {
 }
 
 // getMonthlyResetTime returns the monthly billing reset time
+// nolint:unparam // subscription parameter is kept for future use
 func getMonthlyResetTime(subscription *OpenAISubscriptionResponse) time.Time {
 	now := time.Now().UTC()
 	// Reset to first day of next month at midnight
@@ -735,13 +734,4 @@ func SafeStringToFloat64(s string) float64 {
 		return val
 	}
 	return 0.0
-}
-
-// parseSafeFloat safely parses a float from a reader
-func parseSafeFloat(r io.Reader) float64 {
-	var result float64
-	if err := json.NewDecoder(r).Decode(&result); err != nil {
-		return 0.0
-	}
-	return result
 }

@@ -13,7 +13,7 @@ import (
 
 // QuotaHandler manages quota-related API endpoints
 type QuotaHandler struct {
-	providers map[string]types.Provider
+	providers    map[string]types.Provider
 	quotaManager *quota.Manager
 }
 
@@ -74,12 +74,12 @@ func (h *QuotaHandler) GetQuota(w http.ResponseWriter, r *http.Request) {
 				quotaInfo = cachedInfo
 			} else {
 				quotaInfo = &quota.QuotaInfo{
-					Provider:     req.Provider,
-					Model:        req.Model,
-					Timestamp:    time.Now(),
-					Quotas:       make(map[quota.QuotaType]*quota.QuotaUsage),
-					CustomUsage:  make(map[string]interface{}),
-					Metadata:     make(map[string]interface{}),
+					Provider:    req.Provider,
+					Model:       req.Model,
+					Timestamp:   time.Now(),
+					Quotas:      make(map[quota.QuotaType]*quota.QuotaUsage),
+					CustomUsage: make(map[string]interface{}),
+					Metadata:    make(map[string]interface{}),
 				}
 			}
 		} else {
@@ -233,7 +233,7 @@ func (h *QuotaHandler) ClearQuota(w http.ResponseWriter, r *http.Request) {
 		}
 
 		SendSuccess(w, r, map[string]interface{}{
-			"message": fmt.Sprintf("Cleared %d quota entries for provider '%s'", count, provider),
+			"message":  fmt.Sprintf("Cleared %d quota entries for provider '%s'", count, provider),
 			"provider": provider,
 			"count":    count,
 		})
@@ -243,7 +243,7 @@ func (h *QuotaHandler) ClearQuota(w http.ResponseWriter, r *http.Request) {
 	h.quotaManager.RemoveQuota(provider, model)
 
 	SendSuccess(w, r, map[string]interface{}{
-		"message": fmt.Sprintf("Cleared quota for provider '%s', model '%s'", provider, model),
+		"message":  fmt.Sprintf("Cleared quota for provider '%s', model '%s'", provider, model),
 		"provider": provider,
 		"model":    model,
 	})
@@ -273,10 +273,10 @@ func (h *QuotaHandler) RecordUsage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		Provider  string            `json:"provider"`
-		Model     string            `json:"model"`
-		Operation string            `json:"operation"`
-		Usage     map[string]int    `json:"usage"`
+		Provider  string         `json:"provider"`
+		Model     string         `json:"model"`
+		Operation string         `json:"operation"`
+		Usage     map[string]int `json:"usage"`
 	}
 
 	if err := ParseJSON(r, &req); err != nil {
@@ -297,11 +297,11 @@ func (h *QuotaHandler) RecordUsage(w http.ResponseWriter, r *http.Request) {
 	h.quotaManager.RecordUsage(req.Provider, req.Model, req.Operation, typeMap)
 
 	SendSuccess(w, r, map[string]interface{}{
-		"message": "Usage recorded successfully",
-		"provider": req.Provider,
-		"model":    req.Model,
+		"message":   "Usage recorded successfully",
+		"provider":  req.Provider,
+		"model":     req.Model,
 		"operation": req.Operation,
-		"usage":    req.Usage,
+		"usage":     req.Usage,
 	})
 }
 
@@ -345,16 +345,16 @@ func (h *QuotaHandler) buildQuotaResponse(qi *quota.QuotaInfo) *backendtypes.Quo
 	}
 
 	response := &backendtypes.QuotaResponse{
-		Provider:              qi.Provider,
-		ProviderType:          string(qi.ProviderType),
-		Model:                 qi.Model,
-		Timestamp:             qi.Timestamp.Unix(),
-		Quotas:                make(map[string]*backendtypes.QuotaUsageResponse, len(qi.Quotas)),
-		ProviderQuotaConfigs:  make(map[string]*backendtypes.QuotaConfigResponse, len(qi.ProviderQuotaConfigs)),
-		CustomUsage:           qi.CustomUsage,
-		Metadata:              qi.Metadata,
-		AnyQuotaExceeded:      qi.AnyQuotaExceeded(),
-		Healthy:               !qi.AnyQuotaExceeded(),
+		Provider:             qi.Provider,
+		ProviderType:         string(qi.ProviderType),
+		Model:                qi.Model,
+		Timestamp:            qi.Timestamp.Unix(),
+		Quotas:               make(map[string]*backendtypes.QuotaUsageResponse, len(qi.Quotas)),
+		ProviderQuotaConfigs: make(map[string]*backendtypes.QuotaConfigResponse, len(qi.ProviderQuotaConfigs)),
+		CustomUsage:          qi.CustomUsage,
+		Metadata:             qi.Metadata,
+		AnyQuotaExceeded:     qi.AnyQuotaExceeded(),
+		Healthy:              !qi.AnyQuotaExceeded(),
 	}
 
 	for quotaType, usage := range qi.Quotas {
@@ -387,12 +387,12 @@ func (h *QuotaHandler) buildQuotaResponse(qi *quota.QuotaInfo) *backendtypes.Quo
 func (h *QuotaHandler) buildQuotaHistoryResponse(records []*quota.QuotaRecord, provider, model string) *backendtypes.QuotaHistoryResponse {
 	if len(records) == 0 {
 		return &backendtypes.QuotaHistoryResponse{
-			Provider:   provider,
-			Model:      model,
-			Records:    []*backendtypes.QuotaRecordResponse{},
-			TotalUsage: make(map[string]int),
-			StartTime:  0,
-			EndTime:    time.Now().Unix(),
+			Provider:    provider,
+			Model:       model,
+			Records:     []*backendtypes.QuotaRecordResponse{},
+			TotalUsage:  make(map[string]int),
+			StartTime:   0,
+			EndTime:     time.Now().Unix(),
 			RecordCount: 0,
 		}
 	}
