@@ -523,6 +523,13 @@ const (
 	UserTierIDStandard = "standard-tier"
 )
 
+// Quota API routes for Code Assist
+const (
+	getQuotaRoute          = ":getQuota"
+	getQuotaUsageRoute     = ":getQuotaUsage"
+	getQuotaHistoryRoute   = ":getQuotaHistory"
+)
+
 // Constants for client metadata
 const (
 	IDETypeUnspecified  = "IDE_UNSPECIFIED"
@@ -811,4 +818,134 @@ func (c *Candidate) GetSafetyRating(category HarmCategory) *SafetyRating {
 		}
 	}
 	return nil
+}
+
+// ============================================================================
+// Quota/Usage API Types for Code Assist
+// ============================================================================
+
+// GetQuotaRequest represents a request to get quota information
+type GetQuotaRequest struct {
+	Model   string `json:"model,omitempty"`   // Optional: filter by model
+	Project string `json:"project,omitempty"` // Optional: filter by project
+}
+
+// QuotaLimit represents a quota limit for a specific type
+type QuotaLimit struct {
+	// Type is the type of quota
+	Type string `json:"type"`
+
+	// Limit is the maximum allowed value
+	Limit int64 `json:"limit"`
+
+	// Usage is the current usage
+	Usage int64 `json:"usage"`
+
+	// Remaining is the remaining quota (Limit - Usage)
+	Remaining int64 `json:"remaining"`
+
+	// Period is the time period for this quota (e.g., "day", "minute")
+	Period string `json:"period,omitempty"`
+
+	// ResetTime is when this quota will reset (RFC3339 timestamp)
+	ResetTime string `json:"resetTime,omitempty"`
+}
+
+// GetQuotaResponse represents a response from the getQuota endpoint
+type GetQuotaResponse struct {
+	// Project is the Google Cloud project ID
+	Project string `json:"project"`
+
+	// Tier is the user's current tier
+	Tier string `json:"tier"`
+
+	// Quotas is a list of quota limits
+	Quotas []QuotaLimit `json:"quotas,omitempty"`
+
+	// CustomData contains provider-specific quota information
+	CustomData map[string]interface{} `json:"customData,omitempty"`
+}
+
+// GetQuotaUsageRequest represents a request to get quota usage history
+type GetQuotaUsageRequest struct {
+	StartTime string `json:"startTime,omitempty"` // RFC3339 timestamp
+	EndTime   string `json:"endTime,omitempty"`   // RFC3339 timestamp
+	Model     string `json:"model,omitempty"`     // Optional: filter by model
+}
+
+// UsageRecord represents a single usage record
+type UsageRecord struct {
+	// Timestamp is when the usage occurred (RFC3339 timestamp)
+	Timestamp string `json:"timestamp"`
+
+	// Model is the model used
+	Model string `json:"model"`
+
+	// InputTokens is the number of input tokens used
+	InputTokens int64 `json:"inputTokens,omitempty"`
+
+	// OutputTokens is the number of output tokens used
+	OutputTokens int64 `json:"outputTokens,omitempty"`
+
+	// TotalTokens is the total number of tokens used
+	TotalTokens int64 `json:"totalTokens,omitempty"`
+
+	// RequestCount is the number of requests (1 for each record)
+	RequestCount int64 `json:"requestCount"`
+
+	// Operation is the type of operation (e.g., "generateContent")
+	Operation string `json:"operation,omitempty"`
+}
+
+// GetQuotaUsageResponse represents a response from the getQuotaUsage endpoint
+type GetQuotaUsageResponse struct {
+	// Records is a list of usage records
+	Records []UsageRecord `json:"records,omitempty"`
+
+	// Summary aggregates the usage across all records
+	Summary UsageSummary `json:"summary,omitempty"`
+
+	// NextPageToken is a token for pagination
+	NextPageToken string `json:"nextPageToken,omitempty"`
+}
+
+// UsageSummary represents aggregated usage statistics
+type UsageSummary struct {
+	// TotalInputTokens is the total input tokens used
+	TotalInputTokens int64 `json:"totalInputTokens"`
+
+	// TotalOutputTokens is the total output tokens used
+	TotalOutputTokens int64 `json:"totalOutputTokens"`
+
+	// TotalTokens is the total tokens used
+	TotalTokens int64 `json:"totalTokens"`
+
+	// TotalRequests is the total number of requests
+	TotalRequests int64 `json:"totalRequests"`
+
+	// StartTime is the start of the summary period (RFC3339 timestamp)
+	StartTime string `json:"startTime"`
+
+	// EndTime is the end of the summary period (RFC3339 timestamp)
+	EndTime string `json:"endTime"`
+}
+
+// GetQuotaHistoryRequest represents a request to get quota usage history
+type GetQuotaHistoryRequest struct {
+	StartTime string `json:"startTime,omitempty"` // RFC3339 timestamp
+	EndTime   string `json:"endTime,omitempty"`   // RFC3339 timestamp
+	Model     string `json:"model,omitempty"`     // Optional: filter by model
+	Limit     int32  `json:"limit,omitempty"`     // Maximum number of records to return
+}
+
+// GetQuotaHistoryResponse represents a response from the getQuotaHistory endpoint
+type GetQuotaHistoryResponse struct {
+	// Records is a list of usage records ordered by timestamp
+	Records []UsageRecord `json:"records,omitempty"`
+
+	// Summary aggregates the usage across all records
+	Summary UsageSummary `json:"summary"`
+
+	// NextPageToken is a token for pagination
+	NextPageToken string `json:"nextPageToken,omitempty"`
 }

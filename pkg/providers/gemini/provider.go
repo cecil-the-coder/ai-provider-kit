@@ -4,8 +4,10 @@ package gemini
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/cecil-the-coder/ai-provider-kit/internal/common"
 	"github.com/cecil-the-coder/ai-provider-kit/internal/common/auth"
@@ -211,4 +213,339 @@ func (p *GeminiProvider) InvokeServerTool(
 // RefreshAllOAuthTokens using shared helper
 func (p *GeminiProvider) RefreshAllOAuthTokens(ctx context.Context) error {
 	return p.authHelper.RefreshAllOAuthTokens(ctx)
+}
+
+// ============================================================================
+// QuotaProvider Interface Implementation
+// ============================================================================
+
+// GetQuotaInfo returns the current quota information for the provider.
+// This method is part of the types.QuotaProvider interface and fetches real-time
+// quota information from the provider's API when using the Code Assist backend.
+//
+// When using the Code Assist backend with OAuth authentication, this method
+// fetches quota information from the Code Assist API. For other backends
+// (Gemini API, Vertex AI), quota information is not available via API and
+// the method returns an appropriate error indicating that quota reporting
+// is not supported for those backends.
+//
+// Parameters:
+//   - ctx: Context for the request
+//   - model: The model identifier (empty for provider-wide quota)
+//
+// Returns:
+//   - QuotaInfo: Current quota information including limits, usage, and reset times
+//   - error: Error if quota information cannot be retrieved or if not supported
+func (p *GeminiProvider) GetQuotaInfo(ctx context.Context, model string) (*types.QuotaInfo, error) {
+	// Only Code Assist backend supports quota reporting
+	if p.backendRouter.GetBackend() != BackendCodeAssist {
+		return nil, types.NewInvalidRequestError(
+			types.ProviderTypeGemini,
+			"quota reporting is only supported for Code Assist backend with OAuth authentication",
+		).WithOperation("get_quota_info")
+	}
+
+	// Check if Code Assist client is available
+	if p.codeAssist == nil {
+		return nil, types.NewInvalidRequestError(
+			types.ProviderTypeGemini,
+			"Code Assist client not available - ensure OAuth credentials are configured",
+		).WithOperation("get_quota_info")
+	}
+
+	// Get project ID
+	projectID := p.getProjectID()
+	if projectID == "" {
+		return nil, types.NewInvalidRequestError(
+			types.ProviderTypeGemini,
+			"project ID is required for quota reporting - set GOOGLE_CLOUD_PROJECT environment variable or configure in provider config",
+		).WithOperation("get_quota_info")
+	}
+
+	// Build quota request with optional model filter
+	req := GetQuotaRequest{
+		Project: projectID,
+		Model:   model,
+	}
+
+	// Call Code Assist API
+	resp, err := p.codeAssist.GetQuota(ctx, projectID, req)
+	if err != nil {
+		return nil, err
+	}
+
+	// Convert GetQuotaResponse to types.QuotaInfo directly
+	quotaInfo := p.convertToQuotaInfo(resp, model)
+
+	return quotaInfo, nil
+}
+
+// convertToQuotaInfo converts a GetQuotaResponse to types.QuotaInfo format.
+// This is called internally by GetQuotaInfo.
+func (p *GeminiProvider) convertToQuotaInfo(resp *GetQuotaResponse, model string) *types.QuotaInfo {
+	if resp == nil {
+		return nil
+	}
+
+	info := &types.QuotaInfo{
+		Provider:              "gemini",
+		ProviderType:          types.ProviderTypeGemini,
+		Model:                 model,
+		Timestamp:             time.Now(),
+		Quotas:                make(map[types.QuotaType]*types.QuotaUsage),
+		CustomUsage:           make(map[string]interface{}),
+		Metadata:              make(map[string]interface{}),
+	}
+
+	// Set project and tier in metadata
+	info.Metadata["project"] = resp.Project
+	info.Metadata["tier"] = resp.Tier
+
+	// Copy custom data
+	for k, v := range resp.CustomData {
+		info.CustomUsage[k] = v
+	}
+
+	// Process quota limits
+	for _, q := range resp.Quotas {
+		var qt types.QuotaType
+		var qp types.QuotaPeriod
+
+		// Map quota types
+		switch {
+		case q.Type == "requests" || q.Type == "api_requests":
+			qt = types.QuotaTypeRequests
+		case q.Type == "tokens" || q.Type == "total_tokens":
+			qt = types.QuotaTypeTokens
+		case q.Type == "input_tokens":
+			qt = types.QuotaTypeInputTokens
+		case q.Type == "output_tokens":
+			qt = types.QuotaTypeOutputTokens
+		case q.Type == "daily_tokens" || q.Type == "daily_requests":
+			qt = types.QuotaTypeDaily
+		default:
+			qt = types.QuotaTypeCustom
+		}
+
+		// Map quota periods
+		switch q.Period {
+		case "minute", "1m":
+			qp = types.QuotaPeriodMinute
+		case "hour", "1h":
+			qp = types.QuotaPeriodHour
+		case "day", "1d", "daily":
+			qp = types.QuotaPeriodDay
+		case "week", "1w":
+			qp = types.QuotaPeriodWeek
+		case "month", "1M":
+			qp = types.QuotaPeriodMonth
+		default:
+			qp = types.QuotaPeriodCustom
+		}
+
+		// Parse reset time
+		var resetAt time.Time
+		if q.ResetTime != "" {
+			resetAt, _ = time.Parse(time.RFC3339, q.ResetTime)
+		}
+
+		// Calculate remaining percent
+		var remainingPercent float64
+		if q.Limit > 0 {
+			remainingPercent = float64(q.Remaining) / float64(q.Limit) * 100
+		}
+
+		// Determine period start time
+		var periodStartedAt time.Time
+		if !resetAt.IsZero() && qp == types.QuotaPeriodDay {
+			periodStartedAt = resetAt.AddDate(0, 0, -1)
+		} else if !resetAt.IsZero() && qp == types.QuotaPeriodMonth {
+			periodStartedAt = resetAt.AddDate(0, -1, 0)
+		} else if !resetAt.IsZero() && qp == types.QuotaPeriodHour {
+			periodStartedAt = resetAt.Add(-time.Hour)
+		} else if !resetAt.IsZero() && qp == types.QuotaPeriodMinute {
+			periodStartedAt = resetAt.Add(-time.Minute)
+		}
+
+		info.Quotas[qt] = &types.QuotaUsage{
+			Type:             qt,
+			Period:           qp,
+			Used:             int(q.Usage),
+			Limit:            int(q.Limit),
+			Remaining:        int(q.Remaining),
+			RemainingPercent: remainingPercent,
+			ResetAt:          resetAt,
+			PeriodStartedAt:  periodStartedAt,
+		}
+	}
+
+	return info
+}
+
+// GetQuotaHistory returns historical quota usage for the provider.
+// This method is part of the types.QuotaProvider interface and fetches historical
+// usage data from the provider's API when using the Code Assist backend.
+//
+// When using the Code Assist backend with OAuth authentication, this method
+// fetches historical usage records from the Code Assist API. For other backends
+// (Gemini API, Vertex AI), historical usage is not available via API and
+// the method returns an appropriate error.
+//
+// Parameters:
+//   - ctx: Context for the request
+//   - model: The model identifier (empty for all models)
+//   - startTime: Start of the time range for historical data
+//   - endTime: End of the time range for historical data
+//
+// Returns:
+//   - QuotaHistory: Historical quota usage records and aggregates
+//   - error: Error if history cannot be retrieved or if not supported
+func (p *GeminiProvider) GetQuotaHistory(ctx context.Context, model string, startTime, endTime time.Time) (*types.QuotaHistory, error) {
+	// Only Code Assist backend supports quota history
+	if p.backendRouter.GetBackend() != BackendCodeAssist {
+		return nil, types.NewInvalidRequestError(
+			types.ProviderTypeGemini,
+			"quota history is only supported for Code Assist backend with OAuth authentication",
+		).WithOperation("get_quota_history")
+	}
+
+	// Check if Code Assist client is available
+	if p.codeAssist == nil {
+		return nil, types.NewInvalidRequestError(
+			types.ProviderTypeGemini,
+			"Code Assist client not available - ensure OAuth credentials are configured",
+		).WithOperation("get_quota_history")
+	}
+
+	// Get project ID
+	projectID := p.getProjectID()
+	if projectID == "" {
+		return nil, types.NewInvalidRequestError(
+			types.ProviderTypeGemini,
+			"project ID is required for quota history - set GOOGLE_CLOUD_PROJECT environment variable or configure in provider config",
+		).WithOperation("get_quota_history")
+	}
+
+	// Build quota history request
+	req := GetQuotaHistoryRequest{
+		StartTime: startTime.Format(time.RFC3339),
+		EndTime:   endTime.Format(time.RFC3339),
+		Model:     model,
+	}
+
+	// Call Code Assist API
+	resp, err := p.codeAssist.GetQuotaHistory(ctx, projectID, req)
+	if err != nil {
+		return nil, err
+	}
+
+	// Convert GetQuotaHistoryResponse to types.QuotaHistory directly
+	quotaHistory := p.convertToQuotaHistory(resp, projectID, model)
+
+	return quotaHistory, nil
+}
+
+// convertToQuotaHistory converts a GetQuotaHistoryResponse to types.QuotaHistory format.
+// This is called internally by GetQuotaHistory.
+func (p *GeminiProvider) convertToQuotaHistory(resp *GetQuotaHistoryResponse, projectID string, model string) *types.QuotaHistory {
+	if resp == nil {
+		return nil
+	}
+
+	history := &types.QuotaHistory{
+		Provider:   "gemini",
+		Model:      model,
+		Records:    make([]*types.QuotaRecord, 0, len(resp.Records)),
+		TotalUsage: make(map[types.QuotaType]int),
+	}
+
+	// Parse time range from summary
+	if resp.Summary.StartTime != "" {
+		startTime, _ := time.Parse(time.RFC3339, resp.Summary.StartTime)
+		history.StartTime = startTime
+	} else {
+		history.StartTime = time.Now().AddDate(0, -1, 0)
+	}
+
+	if resp.Summary.EndTime != "" {
+		endTime, _ := time.Parse(time.RFC3339, resp.Summary.EndTime)
+		history.EndTime = endTime
+	} else {
+		history.EndTime = time.Now()
+	}
+
+	// Convert records
+	for _, record := range resp.Records {
+		timestamp, _ := time.Parse(time.RFC3339, record.Timestamp)
+
+		usage := map[types.QuotaType]int{}
+		if record.InputTokens > 0 {
+			usage[types.QuotaTypeInputTokens] = int(record.InputTokens)
+		}
+		if record.OutputTokens > 0 {
+			usage[types.QuotaTypeOutputTokens] = int(record.OutputTokens)
+		}
+		if record.TotalTokens > 0 {
+			usage[types.QuotaTypeTokens] = int(record.TotalTokens)
+		}
+		if record.RequestCount > 0 {
+			usage[types.QuotaTypeRequests] = int(record.RequestCount)
+		}
+
+		// Record the model actually used in the record
+		recordModel := record.Model
+		if model != "" && recordModel == "" {
+			recordModel = model
+		}
+
+		history.Records = append(history.Records, &types.QuotaRecord{
+			ID:        fmt.Sprintf("gr_%d", timestamp.UnixNano()),
+			Provider:  "gemini",
+			Model:     recordModel,
+			Timestamp: timestamp,
+			Operation: record.Operation,
+			Usage:     usage,
+		})
+
+		// Accumulate total usage
+		for k, v := range usage {
+			history.TotalUsage[k] += v
+		}
+	}
+
+	return history
+}
+
+// SupportsQuotaReporting returns true if the provider supports real-time quota reporting.
+//
+// For the Gemini provider, quota reporting is only supported when:
+// 1. Using the Code Assist backend (BackendCodeAssist)
+// 2. OAuth authentication is configured
+// 3. A Code Assist client is available
+//
+// The Gemini API and Vertex AI backends do not expose quota information
+// through their APIs.
+func (p *GeminiProvider) SupportsQuotaReporting() bool {
+	// Only Code Assist backend supports quota reporting
+	if p.backendRouter.GetBackend() != BackendCodeAssist {
+		return false
+	}
+
+	// Check if Code Assist client is available and has OAuth token
+	return p.codeAssist != nil && p.codeAssist.SupportsQuotaReporting()
+}
+
+// SupportsQuotaHistory returns true if the provider supports retrieving historical
+// quota usage data.
+//
+// Has the same requirements as SupportsQuotaReporting: only supported for
+// the Code Assist backend with OAuth authentication.
+func (p *GeminiProvider) SupportsQuotaHistory() bool {
+	// Only Code Assist backend supports quota history
+	if p.backendRouter.GetBackend() != BackendCodeAssist {
+		return false
+	}
+
+	// Check if Code Assist client is available and has OAuth token
+	return p.codeAssist != nil && p.codeAssist.SupportsQuotaHistory()
 }
