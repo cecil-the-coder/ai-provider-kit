@@ -19,6 +19,8 @@ type LoadBalanceProvider struct {
 	counter          uint64
 	metricsCollector types.MetricsCollector
 	mu               sync.RWMutex
+	// activeRequests tracks the number of active requests per provider for fill-first strategy
+	activeRequests []uint64
 }
 
 type Config struct {
@@ -38,6 +40,7 @@ const (
 	StrategyRoundRobin Strategy = "round_robin"
 	StrategyRandom     Strategy = "random"
 	StrategyWeighted   Strategy = "weighted"
+	StrategyFillFirst  Strategy = "fill_first"
 )
 
 func NewLoadBalanceProvider(name string, config *Config) *LoadBalanceProvider {
@@ -48,7 +51,11 @@ func NewLoadBalanceProvider(name string, config *Config) *LoadBalanceProvider {
 }
 
 func (lb *LoadBalanceProvider) SetProviders(providers []types.Provider) {
+	lb.mu.Lock()
+	defer lb.mu.Unlock()
 	lb.providers = providers
+	// Reset active requests tracking when providers are reset
+	lb.activeRequests = make([]uint64, len(providers))
 }
 
 func (lb *LoadBalanceProvider) Name() string             { return lb.name }
@@ -102,6 +109,10 @@ func (lb *LoadBalanceProvider) GenerateChatCompletion(ctx context.Context, opts 
 				})
 			}
 			lastErr = fmt.Errorf("selected provider does not support chat")
+			// Decrement active request count for fill-first strategy
+			if lb.config.Strategy == StrategyFillFirst {
+				lb.decrementActiveRequest(providerIdx)
+			}
 			// Try next provider if failover is enabled
 			if !lb.config.EnableFailover {
 				return nil, lastErr
@@ -132,6 +143,10 @@ func (lb *LoadBalanceProvider) GenerateChatCompletion(ctx context.Context, opts 
 					},
 				})
 			}
+			// Decrement active request count for fill-first strategy
+			if lb.config.Strategy == StrategyFillFirst {
+				lb.decrementActiveRequest(providerIdx)
+			}
 			// Try next provider if failover is enabled
 			if !lb.config.EnableFailover {
 				return nil, lastErr
@@ -161,6 +176,8 @@ func (lb *LoadBalanceProvider) GenerateChatCompletion(ctx context.Context, opts 
 
 		return &loadBalanceStream{
 			StreamWrapper: common.NewStreamWrapper(stream, "loadbalance_provider", provider.Name()),
+			lb:            lb,
+			providerIdx:   providerIdx,
 		}, nil
 	}
 
@@ -182,6 +199,19 @@ func (lb *LoadBalanceProvider) GenerateChatCompletion(ctx context.Context, opts 
 
 type loadBalanceStream struct {
 	*common.StreamWrapper
+	lb           *LoadBalanceProvider
+	providerIdx  int
+	decremented atomic.Bool
+}
+
+func (s *loadBalanceStream) Close() error {
+	// Decrement active request count on close for fill-first strategy
+	if s.lb != nil && s.lb.config != nil && s.lb.config.Strategy == StrategyFillFirst {
+		if s.decremented.CompareAndSwap(false, true) {
+			s.lb.decrementActiveRequest(s.providerIdx)
+		}
+	}
+	return s.StreamWrapper.Close()
 }
 
 // selectProviderExcluding selects a provider using the configured strategy,
@@ -195,6 +225,8 @@ func (lb *LoadBalanceProvider) selectProviderExcluding(excludedIndices map[int]b
 	switch lb.config.Strategy {
 	case StrategyRandom:
 		return lb.selectRandomProviderExcluding(excludedIndices)
+	case StrategyFillFirst:
+		return lb.selectFillFirstProviderExcluding(excludedIndices)
 	default: // Round robin (and Weighted, which falls back to round-robin)
 		return lb.selectRoundRobinProviderExcluding(excludedIndices)
 	}
@@ -242,6 +274,57 @@ func (lb *LoadBalanceProvider) selectRoundRobinProviderExcluding(excludedIndices
 	return nil, -1, fmt.Errorf("no available providers after exclusions")
 }
 
+// selectFillFirstProviderExcluding selects the provider with the lowest number of active requests,
+// excluding specified indices. If multiple providers have the same load, it selects the first
+// among them for deterministic behavior. This strategy helps distribute load by filling
+// underutilized providers first.
+func (lb *LoadBalanceProvider) selectFillFirstProviderExcluding(excludedIndices map[int]bool) (types.Provider, int, error) {
+	lb.mu.Lock()
+	defer lb.mu.Unlock()
+
+	// Ensure activeRequests slice is properly sized
+	if len(lb.activeRequests) != len(lb.providers) {
+		lb.activeRequests = make([]uint64, len(lb.providers))
+	}
+
+	// Find the provider with the lowest active request count that is not excluded
+	var minActiveRequests uint64 = ^uint64(0) // Max uint64
+	var selectedIdx int = -1
+
+	for i := range lb.providers {
+		if excludedIndices[i] {
+			continue
+		}
+
+		if lb.activeRequests[i] < minActiveRequests {
+			minActiveRequests = lb.activeRequests[i]
+			selectedIdx = i
+		}
+	}
+
+	if selectedIdx == -1 {
+		return nil, -1, fmt.Errorf("no available providers after exclusions")
+	}
+
+	// Increment active request count for selected provider
+	lb.activeRequests[selectedIdx]++
+
+	return lb.providers[selectedIdx], selectedIdx, nil
+}
+
 func randomInt(max int) int {
 	return int(time.Now().UnixNano() % int64(max))
+}
+
+// decrementActiveRequest decrements the active request count for a specific provider.
+// This is called when a stream is closed.
+func (lb *LoadBalanceProvider) decrementActiveRequest(idx int) {
+	lb.mu.Lock()
+	defer lb.mu.Unlock()
+
+	if idx >= 0 && idx < len(lb.activeRequests) {
+		if lb.activeRequests[idx] > 0 {
+			lb.activeRequests[idx]--
+		}
+	}
 }

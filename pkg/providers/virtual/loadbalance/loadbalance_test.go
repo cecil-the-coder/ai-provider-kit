@@ -1396,6 +1396,352 @@ func (m *mockChatProviderWithTracking) GetMetrics() types.ProviderMetrics {
 }
 
 // ============================================================================
+// Test Cases - Fill-First Strategy
+// ============================================================================
+
+func TestFillFirstStrategy_SelectsLowestLoadProvider(t *testing.T) {
+	lb := NewLoadBalanceProvider("test", &Config{
+		Strategy: StrategyFillFirst,
+	})
+
+	provider1 := &mockChatProvider{name: "provider1", response: "1"}
+	provider2 := &mockChatProvider{name: "provider2", response: "2"}
+	provider3 := &mockChatProvider{name: "provider3", response: "3"}
+
+	lb.SetProviders([]types.Provider{provider1, provider2, provider3})
+
+	ctx := context.Background()
+	opts := types.GenerateOptions{Prompt: "test"}
+
+	// Make 6 requests - fill first strategy distributes based on active load
+	// To demonstrate proper distribution, we'll keep streams open in batches
+	var selectedProviders []string
+	var streams []types.ChatCompletionStream
+
+	// First batch: 3 requests - each provider gets one
+	for i := 0; i < 3; i++ {
+		stream, err := lb.GenerateChatCompletion(ctx, opts)
+		if err != nil {
+			t.Fatalf("unexpected error on iteration %d: %v", i, err)
+		}
+		chunk, _ := stream.Next()
+		selectedProviders = append(selectedProviders, chunk.Content)
+		streams = append(streams, stream)
+	}
+
+	// Second batch: 3 requests - should use providers with lowest active counts
+	// (they all have equal counts, so first provider among them)
+	// For fill-first with deterministic tie-breaking, this will cycle through providers
+	// when all have equal counts
+	// Actually, with the current implementation (always picking first among equal),
+	// and still having all streams open, all providers have count 1, so the first
+	// provider (provider1) will be selected 3 times more.
+	//
+	// This test demonstrates that fill-first works correctly when streams are
+	// kept open - it fills providers based on actual active load.
+	// For sequential closed-stream requests, the strategy behaves differently.
+
+	// Close all streams from the first batch
+	for _, stream := range streams {
+		_ = stream.Close()
+	}
+
+	// Now for sequential closed requests, providers will have equal load (all 0),
+	// so provider1 will be selected each time
+	for i := 0; i < 3; i++ {
+		stream, err := lb.GenerateChatCompletion(ctx, opts)
+		if err != nil {
+			t.Fatalf("unexpected error on iteration %d: %v", i, err)
+		}
+		chunk, _ := stream.Next()
+		selectedProviders = append(selectedProviders, chunk.Content)
+		_ = stream.Close()
+	}
+
+	// First 3 should each have been selected once (when streams were open)
+	// Next 3 should all be provider1 (sequential, all equal load)
+	count := make(map[string]int)
+	for _, provider := range selectedProviders {
+		count[provider]++
+	}
+
+	// First 3: one each -> count["1"], count["2"], count["3"] each = 1
+	// Next 3: all provider1 -> count["1"] = 4
+	if count["1"] != 4 {
+		t.Errorf("expected provider1 to be selected 4 times, got %d", count["1"])
+	}
+	if count["2"] != 1 {
+		t.Errorf("expected provider2 to be selected 1 time, got %d", count["2"])
+	}
+	if count["3"] != 1 {
+		t.Errorf("expected provider3 to be selected 1 time, got %d", count["3"])
+	}
+
+	// Verify active request counts are all 0 after closing
+	lb.mu.RLock()
+	for i, count := range lb.activeRequests {
+		if count != 0 {
+			t.Errorf("expected provider %d activeRequests to be 0 after closing streams, got %d", i, count)
+		}
+	}
+	lb.mu.RUnlock()
+}
+
+func TestFillFirstStrategy_WithUnclosedStreams(t *testing.T) {
+	lb := NewLoadBalanceProvider("test", &Config{
+		Strategy: StrategyFillFirst,
+	})
+
+	provider1 := &mockChatProvider{name: "provider1", response: "1"}
+	provider2 := &mockChatProvider{name: "provider2", response: "2"}
+	provider3 := &mockChatProvider{name: "provider3", response: "3"}
+
+	lb.SetProviders([]types.Provider{provider1, provider2, provider3})
+
+	ctx := context.Background()
+	opts := types.GenerateOptions{Prompt: "test"}
+
+	// Create 3 streams without closing them
+	var streams []types.ChatCompletionStream
+	selectedProviders := make(map[string]int)
+	for i := 0; i < 3; i++ {
+		stream, err := lb.GenerateChatCompletion(ctx, opts)
+		if err != nil {
+			t.Fatalf("unexpected error on iteration %d: %v", i, err)
+		}
+
+		chunk, _ := stream.Next()
+		selectedProviders[chunk.Content]++
+		streams = append(streams, stream)
+	}
+
+	// Each provider should have been selected exactly once
+	if selectedProviders["1"] != 1 {
+		t.Errorf("expected provider1 to be selected 1 time, got %d", selectedProviders["1"])
+	}
+	if selectedProviders["2"] != 1 {
+		t.Errorf("expected provider2 to be selected 1 time, got %d", selectedProviders["2"])
+	}
+	if selectedProviders["3"] != 1 {
+		t.Errorf("expected provider3 to be selected 1 time, got %d", selectedProviders["3"])
+	}
+
+	// Verify active request counts - each should be 1
+	lb.mu.RLock()
+	for i, count := range lb.activeRequests {
+		if count != 1 {
+			t.Errorf("expected provider %d activeRequests to be 1, got %d", i, count)
+		}
+	}
+	lb.mu.RUnlock()
+
+	// Now get more streams - they should cycle through providers again
+	// since active counts are all equal
+	for i := 0; i < 3; i++ {
+		stream, err := lb.GenerateChatCompletion(ctx, opts)
+		if err != nil {
+			t.Fatalf("unexpected error on second round iteration %d: %v", i, err)
+		}
+
+		chunk, _ := stream.Next()
+		selectedProviders[chunk.Content]++
+		streams = append(streams, stream)
+	}
+
+	// Each provider should now have 2 active requests
+	lb.mu.RLock()
+	for i, count := range lb.activeRequests {
+		if count != 2 {
+			t.Errorf("expected provider %d activeRequests to be 2, got %d", i, count)
+		}
+	}
+	lb.mu.RUnlock()
+
+	// Close all streams
+	for _, stream := range streams {
+		_ = stream.Close()
+	}
+
+	// Verify all active request counts are back to 0
+	lb.mu.RLock()
+	for i, count := range lb.activeRequests {
+		if count != 0 {
+			t.Errorf("expected provider %d activeRequests to be 0 after closing all streams, got %d", i, count)
+		}
+	}
+	lb.mu.RUnlock()
+}
+
+func TestFillFirstStrategy_WithFailover(t *testing.T) {
+	lb := NewLoadBalanceProvider("test", &Config{
+		Strategy:       StrategyFillFirst,
+		EnableFailover: true,
+	})
+
+	// First provider fails
+	provider1 := &mockChatProvider{name: "provider1", err: errors.New("provider1 failed")}
+	provider2 := &mockChatProvider{name: "provider2", response: "2"}
+	provider3 := &mockChatProvider{name: "provider3", response: "3"}
+
+	lb.SetProviders([]types.Provider{provider1, provider2, provider3})
+
+	ctx := context.Background()
+	opts := types.GenerateOptions{Prompt: "test"}
+
+	// Make request - should skip provider1 and use provider2
+	stream, err := lb.GenerateChatCompletion(ctx, opts)
+	if err != nil {
+		t.Fatalf("expected success after failover, got error: %v", err)
+	}
+
+	chunk, _ := stream.Next()
+	content := chunk.Content
+	_ = stream.Close()
+
+	// Should have used provider2 since provider1 failed
+	if content != "2" {
+		t.Errorf("expected content from provider2, got '%s'", content)
+	}
+
+	// Verify active request counts
+	lb.mu.RLock()
+	if lb.activeRequests[0] != 0 {
+		t.Errorf("expected provider1 activeRequests to be 0 (failed), got %d", lb.activeRequests[0])
+	}
+	if lb.activeRequests[1] != 0 {
+		t.Errorf("expected provider2 activeRequests to be 0 after close, got %d", lb.activeRequests[1])
+	}
+	if lb.activeRequests[2] != 0 {
+		t.Errorf("expected provider3 activeRequests to be 0, got %d", lb.activeRequests[2])
+	}
+	lb.mu.RUnlock()
+}
+
+func TestFillFirstStrategy_ConcurrentAccess(t *testing.T) {
+	lb := NewLoadBalanceProvider("test", &Config{
+		Strategy: StrategyFillFirst,
+	})
+
+	providers := []types.Provider{
+		&mockChatProvider{name: "provider1", response: "a"},
+		&mockChatProvider{name: "provider2", response: "b"},
+		&mockChatProvider{name: "provider3", response: "c"},
+	}
+
+	lb.SetProviders(providers)
+
+	ctx := context.Background()
+	opts := types.GenerateOptions{Prompt: "test"}
+
+	var wg sync.WaitGroup
+	numGoroutines := 100
+	errChan := make(chan error, numGoroutines)
+
+	for i := 0; i < numGoroutines; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			stream, err := lb.GenerateChatCompletion(ctx, opts)
+			if err != nil {
+				errChan <- err
+				return
+			}
+			_ = stream.Close()
+		}()
+	}
+
+	wg.Wait()
+	close(errChan)
+
+	for err := range errChan {
+		t.Errorf("unexpected error in concurrent access: %v", err)
+	}
+
+	// Verify all active counts are back to 0
+	lb.mu.RLock()
+	for i, count := range lb.activeRequests {
+		if count != 0 {
+			t.Errorf("expected provider %d activeRequests to be 0 after all streams closed, got %d", i, count)
+		}
+	}
+	lb.mu.RUnlock()
+}
+
+func TestFillFirstStrategy_SingleProvider(t *testing.T) {
+	lb := NewLoadBalanceProvider("test", &Config{
+		Strategy: StrategyFillFirst,
+	})
+
+	provider := &mockChatProvider{name: "provider1", response: "X"}
+	lb.SetProviders([]types.Provider{provider})
+
+	ctx := context.Background()
+	opts := types.GenerateOptions{Prompt: "test"}
+
+	// Call multiple times - should always use the same provider
+	for i := 0; i < 5; i++ {
+		stream, err := lb.GenerateChatCompletion(ctx, opts)
+		if err != nil {
+			t.Fatalf("unexpected error on iteration %d: %v", i, err)
+		}
+
+		chunk, _ := stream.Next()
+		if chunk.Content != "X" {
+			t.Errorf("expected 'X', got '%s'", chunk.Content)
+		}
+		_ = stream.Close()
+	}
+
+	// Verify active request count is 0 after the last close
+	lb.mu.RLock()
+	if lb.activeRequests[0] != 0 {
+		t.Errorf("expected activeRequests to be 0 after closing streams, got %d", lb.activeRequests[0])
+	}
+	lb.mu.RUnlock()
+}
+
+func TestFillFirstStrategy_WithPartialFailuresAndSuccesses(t *testing.T) {
+	lb := NewLoadBalanceProvider("test", &Config{
+		Strategy:       StrategyFillFirst,
+		EnableFailover: true,
+	})
+
+	// Provider1 and provider2 will fail, provider3 will succeed
+	provider1 := &mockChatProvider{name: "provider1", err: errors.New("provider1 failed")}
+	provider2 := &mockChatProvider{name: "provider2", err: errors.New("provider2 failed")}
+	provider3 := &mockChatProvider{name: "provider3", response: "3"}
+
+	lb.SetProviders([]types.Provider{provider1, provider2, provider3})
+
+	ctx := context.Background()
+	opts := types.GenerateOptions{Prompt: "test"}
+
+	stream, err := lb.GenerateChatCompletion(ctx, opts)
+	if err != nil {
+		t.Fatalf("expected success after failover through all providers, got error: %v", err)
+	}
+
+	chunk, _ := stream.Next()
+	if chunk.Content != "3" {
+		t.Errorf("expected content from provider3, got '%s'", chunk.Content)
+	}
+	_ = stream.Close()
+
+	// Verify providers 1 and 2 failed (count is 0)
+	lb.mu.RLock()
+	if lb.activeRequests[0] != 0 {
+		t.Errorf("expected provider1 activeRequests to be 0, got %d", lb.activeRequests[0])
+	}
+	if lb.activeRequests[1] != 0 {
+		t.Errorf("expected provider2 activeRequests to be 0, got %d", lb.activeRequests[1])
+	}
+	if lb.activeRequests[2] != 0 {
+		t.Errorf("expected provider3 activeRequests to be 0 after close, got %d", lb.activeRequests[2])
+	}
+	lb.mu.RUnlock()
+}
+
+// ============================================================================
 // Benchmark Tests
 // ============================================================================
 
