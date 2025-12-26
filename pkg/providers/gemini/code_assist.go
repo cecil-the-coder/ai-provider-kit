@@ -273,6 +273,66 @@ func (c *CodeAssistClient) GetQuota(ctx context.Context, projectID string, req G
 	return &quotaResp, nil
 }
 
+// doQuotaRequest performs a generic POST request to the quota API.
+// It handles common request/response processing including error handling.
+func doQuotaRequest[T any](c *CodeAssistClient, ctx context.Context, projectID, route, operation string, reqBody any) (*T, error) {
+	url := fmt.Sprintf("%s/projects/%s%s", c.baseURL, projectID, route)
+
+	jsonBody, err := json.Marshal(reqBody)
+	if err != nil {
+		return nil, types.NewInvalidRequestError(types.ProviderTypeGemini, "failed to marshal request").
+			WithOperation(operation).
+			WithOriginalErr(err)
+	}
+
+	httpReq, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonBody))
+	if err != nil {
+		return nil, types.NewNetworkError(types.ProviderTypeGemini, "failed to create request").
+			WithOperation(operation).
+			WithOriginalErr(err)
+	}
+
+	// Set headers
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("User-Agent", telemetry.GetUserAgent())
+	httpReq.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.oauthToken))
+
+	// Make the request
+	resp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		return nil, types.NewNetworkError(types.ProviderTypeGemini, "request failed").
+			WithOperation(operation).
+			WithOriginalErr(err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	// Read response body
+	responseBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, types.NewNetworkError(types.ProviderTypeGemini, "failed to read response body").
+			WithOperation(operation).
+			WithOriginalErr(err)
+	}
+
+	// Check status code - accept 200 OK and 404 (data not available)
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNotFound {
+		errCode := types.ClassifyHTTPError(resp.StatusCode)
+		return nil, types.NewProviderError(types.ProviderTypeGemini, errCode, string(responseBody)).
+			WithOperation(operation).
+			WithStatusCode(resp.StatusCode)
+	}
+
+	// Parse response
+	var result T
+	if err := json.Unmarshal(responseBody, &result); err != nil {
+		return nil, types.NewServerError(types.ProviderTypeGemini, 0, "failed to parse response").
+			WithOperation(operation).
+			WithOriginalErr(err)
+	}
+
+	return &result, nil
+}
+
 // GetQuotaUsage retrieves usage statistics for a time period.
 //
 // Endpoint: POST /v1internal/projects/{project}:getQuotaUsage
@@ -286,55 +346,13 @@ func (c *CodeAssistClient) GetQuota(ctx context.Context, projectID string, req G
 //   - GetQuotaUsageResponse: Usage statistics and records
 //   - error: Any error that occurred during the request
 func (c *CodeAssistClient) GetQuotaUsage(ctx context.Context, projectID string, req GetQuotaUsageRequest) (*GetQuotaUsageResponse, error) {
-	// Build URL: POST /v1internal/projects/{project}:getQuotaUsage
-	url := fmt.Sprintf("%s/projects/%s%s", c.baseURL, projectID, getQuotaUsageRoute)
-
-	jsonBody, err := json.Marshal(req)
+	resp, err := doQuotaRequest[GetQuotaUsageResponse](c, ctx, projectID, getQuotaUsageRoute, "get_quota_usage", req)
 	if err != nil {
-		return nil, types.NewInvalidRequestError(types.ProviderTypeGemini, "failed to marshal request").
-			WithOperation("get_quota_usage").
-			WithOriginalErr(err)
-	}
-
-	httpReq, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonBody))
-	if err != nil {
-		return nil, types.NewNetworkError(types.ProviderTypeGemini, "failed to create request").
-			WithOperation("get_quota_usage").
-			WithOriginalErr(err)
-	}
-
-	// Set headers
-	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("User-Agent", telemetry.GetUserAgent())
-	httpReq.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.oauthToken))
-
-	// Make the request
-	resp, err := c.httpClient.Do(httpReq)
-	if err != nil {
-		return nil, types.NewNetworkError(types.ProviderTypeGemini, "request failed").
-			WithOperation("get_quota_usage").
-			WithOriginalErr(err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	// Read response body
-	responseBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, types.NewNetworkError(types.ProviderTypeGemini, "failed to read response body").
-			WithOperation("get_quota_usage").
-			WithOriginalErr(err)
-	}
-
-	// Check status code - accept 200 OK and 404 (usage not available)
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNotFound {
-		errCode := types.ClassifyHTTPError(resp.StatusCode)
-		return nil, types.NewProviderError(types.ProviderTypeGemini, errCode, string(responseBody)).
-			WithOperation("get_quota_usage").
-			WithStatusCode(resp.StatusCode)
+		return nil, err
 	}
 
 	// For 404, return empty response as usage may not be available yet
-	if resp.StatusCode == http.StatusNotFound {
+	if resp.Records == nil && resp.Summary.StartTime == "" {
 		return &GetQuotaUsageResponse{
 			Records: []UsageRecord{},
 			Summary: UsageSummary{
@@ -343,16 +361,7 @@ func (c *CodeAssistClient) GetQuotaUsage(ctx context.Context, projectID string, 
 			},
 		}, nil
 	}
-
-	// Parse response
-	var usageResp GetQuotaUsageResponse
-	if err := json.Unmarshal(responseBody, &usageResp); err != nil {
-		return nil, types.NewServerError(types.ProviderTypeGemini, 0, "failed to parse response").
-			WithOperation("get_quota_usage").
-			WithOriginalErr(err)
-	}
-
-	return &usageResp, nil
+	return resp, nil
 }
 
 // GetQuotaHistory retrieves historical usage records.
@@ -368,55 +377,13 @@ func (c *CodeAssistClient) GetQuotaUsage(ctx context.Context, projectID string, 
 //   - GetQuotaHistoryResponse: Historical usage records
 //   - error: Any error that occurred during the request
 func (c *CodeAssistClient) GetQuotaHistory(ctx context.Context, projectID string, req GetQuotaHistoryRequest) (*GetQuotaHistoryResponse, error) {
-	// Build URL: POST /v1internal/projects/{project}:getQuotaHistory
-	url := fmt.Sprintf("%s/projects/%s%s", c.baseURL, projectID, getQuotaHistoryRoute)
-
-	jsonBody, err := json.Marshal(req)
+	resp, err := doQuotaRequest[GetQuotaHistoryResponse](c, ctx, projectID, getQuotaHistoryRoute, "get_quota_history", req)
 	if err != nil {
-		return nil, types.NewInvalidRequestError(types.ProviderTypeGemini, "failed to marshal request").
-			WithOperation("get_quota_history").
-			WithOriginalErr(err)
-	}
-
-	httpReq, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonBody))
-	if err != nil {
-		return nil, types.NewNetworkError(types.ProviderTypeGemini, "failed to create request").
-			WithOperation("get_quota_history").
-			WithOriginalErr(err)
-	}
-
-	// Set headers
-	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("User-Agent", telemetry.GetUserAgent())
-	httpReq.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.oauthToken))
-
-	// Make the request
-	resp, err := c.httpClient.Do(httpReq)
-	if err != nil {
-		return nil, types.NewNetworkError(types.ProviderTypeGemini, "request failed").
-			WithOperation("get_quota_history").
-			WithOriginalErr(err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	// Read response body
-	responseBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, types.NewNetworkError(types.ProviderTypeGemini, "failed to read response body").
-			WithOperation("get_quota_history").
-			WithOriginalErr(err)
-	}
-
-	// Check status code - accept 200 OK and 404 (history not available)
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNotFound {
-		errCode := types.ClassifyHTTPError(resp.StatusCode)
-		return nil, types.NewProviderError(types.ProviderTypeGemini, errCode, string(responseBody)).
-			WithOperation("get_quota_history").
-			WithStatusCode(resp.StatusCode)
+		return nil, err
 	}
 
 	// For 404, return empty response as history may not be available yet
-	if resp.StatusCode == http.StatusNotFound {
+	if resp.Records == nil && resp.Summary.StartTime == "" {
 		return &GetQuotaHistoryResponse{
 			Records: []UsageRecord{},
 			Summary: UsageSummary{
@@ -425,16 +392,59 @@ func (c *CodeAssistClient) GetQuotaHistory(ctx context.Context, projectID string
 			},
 		}, nil
 	}
+	return resp, nil
+}
 
-	// Parse response
-	var historyResp GetQuotaHistoryResponse
-	if err := json.Unmarshal(responseBody, &historyResp); err != nil {
-		return nil, types.NewServerError(types.ProviderTypeGemini, 0, "failed to parse response").
-			WithOperation("get_quota_history").
-			WithOriginalErr(err)
+// mapQuotaType converts a string quota type to a quota.QuotaType.
+func mapQuotaType(qt string) quota.QuotaType {
+	switch {
+	case qt == "requests" || qt == "api_requests":
+		return quota.QuotaTypeRequests
+	case qt == "tokens" || qt == "total_tokens":
+		return quota.QuotaTypeTokens
+	case qt == "input_tokens":
+		return quota.QuotaTypeInputTokens
+	case qt == "output_tokens":
+		return quota.QuotaTypeOutputTokens
+	case qt == "daily_tokens" || qt == "daily_requests":
+		return quota.QuotaTypeDaily
+	default:
+		return quota.QuotaTypeCustom
 	}
+}
 
-	return &historyResp, nil
+// mapQuotaPeriod converts a string quota period to a quota.QuotaPeriod.
+func mapQuotaPeriod(qp string) quota.QuotaPeriod {
+	switch qp {
+	case "minute", "1m":
+		return quota.QuotaPeriodMinute
+	case "hour", "1h":
+		return quota.QuotaPeriodHour
+	case "day", "1d", "daily":
+		return quota.QuotaPeriodDay
+	case "week", "1w":
+		return quota.QuotaPeriodWeek
+	case "month", "1M":
+		return quota.QuotaPeriodMonth
+	default:
+		return quota.QuotaPeriodCustom
+	}
+}
+
+// calculatePeriodStartTime calculates when the current quota period started based on reset time.
+func calculatePeriodStartTime(resetAt time.Time, qp quota.QuotaPeriod) time.Time {
+	switch qp {
+	case quota.QuotaPeriodDay:
+		return resetAt.AddDate(0, 0, -1)
+	case quota.QuotaPeriodMonth:
+		return resetAt.AddDate(0, -1, 0)
+	case quota.QuotaPeriodHour:
+		return resetAt.Add(-time.Hour)
+	case quota.QuotaPeriodMinute:
+		return resetAt.Add(-time.Minute)
+	default:
+		return time.Time{}
+	}
 }
 
 // ConvertToQuotaInfo converts a GetQuotaResponse to the package-level QuotaInfo.
@@ -465,45 +475,12 @@ func (c *CodeAssistClient) ConvertToQuotaInfo(resp *GetQuotaResponse, model stri
 
 	// Process quota limits
 	for _, q := range resp.Quotas {
-		var qt quota.QuotaType
-		var qp quota.QuotaPeriod
-
-		// Map quota types
-		switch {
-		case q.Type == "requests" || q.Type == "api_requests":
-			qt = quota.QuotaTypeRequests
-		case q.Type == "tokens" || q.Type == "total_tokens":
-			qt = quota.QuotaTypeTokens
-		case q.Type == "input_tokens":
-			qt = quota.QuotaTypeInputTokens
-		case q.Type == "output_tokens":
-			qt = quota.QuotaTypeOutputTokens
-		case q.Type == "daily_tokens" || q.Type == "daily_requests":
-			qt = quota.QuotaTypeDaily
-		default:
-			qt = quota.QuotaTypeCustom
-		}
-
-		// Map quota periods
-		switch q.Period {
-		case "minute", "1m":
-			qp = quota.QuotaPeriodMinute
-		case "hour", "1h":
-			qp = quota.QuotaPeriodHour
-		case "day", "1d", "daily":
-			qp = quota.QuotaPeriodDay
-		case "week", "1w":
-			qp = quota.QuotaPeriodWeek
-		case "month", "1M":
-			qp = quota.QuotaPeriodMonth
-		default:
-			qp = quota.QuotaPeriodCustom
-		}
+		qt := mapQuotaType(q.Type)
+		qp := mapQuotaPeriod(q.Period)
 
 		// Parse reset time
 		var resetAt time.Time
 		if q.ResetTime != "" {
-			// Parse as RFC3339 timestamp
 			resetAt, _ = time.Parse(time.RFC3339, q.ResetTime)
 		}
 
@@ -511,21 +488,6 @@ func (c *CodeAssistClient) ConvertToQuotaInfo(resp *GetQuotaResponse, model stri
 		remainingPercent := 0.0
 		if q.Limit > 0 {
 			remainingPercent = float64(q.Remaining) / float64(q.Limit) * 100
-		}
-
-		// Determine period start time
-		var periodStartedAt time.Time
-		if !resetAt.IsZero() {
-			switch qp {
-			case quota.QuotaPeriodDay:
-				periodStartedAt = resetAt.AddDate(0, 0, -1)
-			case quota.QuotaPeriodMonth:
-				periodStartedAt = resetAt.AddDate(0, -1, 0)
-			case quota.QuotaPeriodHour:
-				periodStartedAt = resetAt.Add(-time.Hour)
-			case quota.QuotaPeriodMinute:
-				periodStartedAt = resetAt.Add(-time.Minute)
-			}
 		}
 
 		info.Quotas[qt] = &quota.QuotaUsage{
@@ -536,7 +498,7 @@ func (c *CodeAssistClient) ConvertToQuotaInfo(resp *GetQuotaResponse, model stri
 			Remaining:        int(q.Remaining),
 			RemainingPercent: remainingPercent,
 			ResetAt:          resetAt,
-			PeriodStartedAt:  periodStartedAt,
+			PeriodStartedAt:  calculatePeriodStartTime(resetAt, qp),
 		}
 	}
 
@@ -544,6 +506,7 @@ func (c *CodeAssistClient) ConvertToQuotaInfo(resp *GetQuotaResponse, model stri
 }
 
 // ConvertToQuotaHistory converts a GetQuotaHistoryResponse to the package-level QuotaHistory.
+// nolint:dupl // Similar logic to provider.convertToQuotaHistory but uses quota package
 func (c *CodeAssistClient) ConvertToQuotaHistory(resp *GetQuotaHistoryResponse, projectID string, model string) *quota.QuotaHistory {
 	if resp == nil {
 		return nil

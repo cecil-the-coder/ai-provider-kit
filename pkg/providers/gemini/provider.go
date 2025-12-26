@@ -280,6 +280,58 @@ func (p *GeminiProvider) GetQuotaInfo(ctx context.Context, model string) (*types
 	return quotaInfo, nil
 }
 
+// mapTypesQuotaType converts a string quota type to a types.QuotaType.
+func mapTypesQuotaType(qt string) types.QuotaType {
+	switch {
+	case qt == "requests" || qt == "api_requests":
+		return types.QuotaTypeRequests
+	case qt == "tokens" || qt == "total_tokens":
+		return types.QuotaTypeTokens
+	case qt == "input_tokens":
+		return types.QuotaTypeInputTokens
+	case qt == "output_tokens":
+		return types.QuotaTypeOutputTokens
+	case qt == "daily_tokens" || qt == "daily_requests":
+		return types.QuotaTypeDaily
+	default:
+		return types.QuotaTypeCustom
+	}
+}
+
+// mapTypesQuotaPeriod converts a string quota period to a types.QuotaPeriod.
+func mapTypesQuotaPeriod(qp string) types.QuotaPeriod {
+	switch qp {
+	case "minute", "1m":
+		return types.QuotaPeriodMinute
+	case "hour", "1h":
+		return types.QuotaPeriodHour
+	case "day", "1d", "daily":
+		return types.QuotaPeriodDay
+	case "week", "1w":
+		return types.QuotaPeriodWeek
+	case "month", "1M":
+		return types.QuotaPeriodMonth
+	default:
+		return types.QuotaPeriodCustom
+	}
+}
+
+// calculateTypesPeriodStartTime calculates when the current quota period started based on reset time.
+func calculateTypesPeriodStartTime(resetAt time.Time, qp types.QuotaPeriod) time.Time {
+	switch qp {
+	case types.QuotaPeriodDay:
+		return resetAt.AddDate(0, 0, -1)
+	case types.QuotaPeriodMonth:
+		return resetAt.AddDate(0, -1, 0)
+	case types.QuotaPeriodHour:
+		return resetAt.Add(-time.Hour)
+	case types.QuotaPeriodMinute:
+		return resetAt.Add(-time.Minute)
+	default:
+		return time.Time{}
+	}
+}
+
 // convertToQuotaInfo converts a GetQuotaResponse to types.QuotaInfo format.
 // This is called internally by GetQuotaInfo.
 func (p *GeminiProvider) convertToQuotaInfo(resp *GetQuotaResponse, model string) *types.QuotaInfo {
@@ -308,40 +360,8 @@ func (p *GeminiProvider) convertToQuotaInfo(resp *GetQuotaResponse, model string
 
 	// Process quota limits
 	for _, q := range resp.Quotas {
-		var qt types.QuotaType
-		var qp types.QuotaPeriod
-
-		// Map quota types
-		switch {
-		case q.Type == "requests" || q.Type == "api_requests":
-			qt = types.QuotaTypeRequests
-		case q.Type == "tokens" || q.Type == "total_tokens":
-			qt = types.QuotaTypeTokens
-		case q.Type == "input_tokens":
-			qt = types.QuotaTypeInputTokens
-		case q.Type == "output_tokens":
-			qt = types.QuotaTypeOutputTokens
-		case q.Type == "daily_tokens" || q.Type == "daily_requests":
-			qt = types.QuotaTypeDaily
-		default:
-			qt = types.QuotaTypeCustom
-		}
-
-		// Map quota periods
-		switch q.Period {
-		case "minute", "1m":
-			qp = types.QuotaPeriodMinute
-		case "hour", "1h":
-			qp = types.QuotaPeriodHour
-		case "day", "1d", "daily":
-			qp = types.QuotaPeriodDay
-		case "week", "1w":
-			qp = types.QuotaPeriodWeek
-		case "month", "1M":
-			qp = types.QuotaPeriodMonth
-		default:
-			qp = types.QuotaPeriodCustom
-		}
+		qt := mapTypesQuotaType(q.Type)
+		qp := mapTypesQuotaPeriod(q.Period)
 
 		// Parse reset time
 		var resetAt time.Time
@@ -355,21 +375,6 @@ func (p *GeminiProvider) convertToQuotaInfo(resp *GetQuotaResponse, model string
 			remainingPercent = float64(q.Remaining) / float64(q.Limit) * 100
 		}
 
-		// Determine period start time
-		var periodStartedAt time.Time
-		if !resetAt.IsZero() {
-			switch qp {
-			case types.QuotaPeriodDay:
-				periodStartedAt = resetAt.AddDate(0, 0, -1)
-			case types.QuotaPeriodMonth:
-				periodStartedAt = resetAt.AddDate(0, -1, 0)
-			case types.QuotaPeriodHour:
-				periodStartedAt = resetAt.Add(-time.Hour)
-			case types.QuotaPeriodMinute:
-				periodStartedAt = resetAt.Add(-time.Minute)
-			}
-		}
-
 		info.Quotas[qt] = &types.QuotaUsage{
 			Type:             qt,
 			Period:           qp,
@@ -378,7 +383,7 @@ func (p *GeminiProvider) convertToQuotaInfo(resp *GetQuotaResponse, model string
 			Remaining:        int(q.Remaining),
 			RemainingPercent: remainingPercent,
 			ResetAt:          resetAt,
-			PeriodStartedAt:  periodStartedAt,
+			PeriodStartedAt:  calculateTypesPeriodStartTime(resetAt, qp),
 		}
 	}
 
@@ -450,6 +455,7 @@ func (p *GeminiProvider) GetQuotaHistory(ctx context.Context, model string, star
 
 // convertToQuotaHistory converts a GetQuotaHistoryResponse to types.QuotaHistory format.
 // This is called internally by GetQuotaHistory.
+// nolint:dupl // Similar logic to code_assist.ConvertToQuotaHistory but uses types package
 func (p *GeminiProvider) convertToQuotaHistory(resp *GetQuotaHistoryResponse, projectID string, model string) *types.QuotaHistory {
 	if resp == nil {
 		return nil
