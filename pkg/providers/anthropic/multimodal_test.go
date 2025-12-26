@@ -2,6 +2,7 @@ package anthropic
 
 import (
 	"encoding/json"
+	"regexp"
 	"testing"
 
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
@@ -115,8 +116,9 @@ func TestConvertContentPartToAnthropic(t *testing.T) {
 				if resultMap["type"] != "tool_use" {
 					t.Errorf("Expected type 'tool_use', got '%v'", resultMap["type"])
 				}
-				if resultMap["id"] != "tool_123" {
-					t.Errorf("Expected ID 'tool_123', got '%v'", resultMap["id"])
+				// Note: "tool_123" is transformed to "srvtoolu_123" for OAuth compatibility
+				if resultMap["id"] != "srvtoolu_123" {
+					t.Errorf("Expected ID 'srvtoolu_123', got '%v'", resultMap["id"])
 				}
 				if resultMap["name"] != "get_weather" {
 					t.Errorf("Expected name 'get_weather', got '%v'", resultMap["name"])
@@ -180,8 +182,9 @@ func TestConvertContentPartToAnthropic(t *testing.T) {
 				if block.Type != "tool_result" {
 					t.Errorf("Expected type 'tool_result', got '%s'", block.Type)
 				}
-				if block.ToolUseID != "tool_123" {
-					t.Errorf("Expected tool_use_id 'tool_123', got '%s'", block.ToolUseID)
+				// Note: "tool_123" is transformed to "srvtoolu_123" for OAuth compatibility
+				if block.ToolUseID != "srvtoolu_123" {
+					t.Errorf("Expected tool_use_id 'srvtoolu_123', got '%s'", block.ToolUseID)
 				}
 			},
 		},
@@ -324,8 +327,9 @@ func TestConvertToAnthropicContentMultimodal(t *testing.T) {
 				if content[0].Type != "tool_result" {
 					t.Errorf("Expected type 'tool_result', got '%s'", content[0].Type)
 				}
-				if content[0].ToolUseID != "call_123" {
-					t.Errorf("Expected tool_use_id 'call_123', got '%s'", content[0].ToolUseID)
+				// Note: "call_123" is transformed to "srvtoolu_123" for OAuth compatibility
+				if content[0].ToolUseID != "srvtoolu_123" {
+					t.Errorf("Expected tool_use_id 'srvtoolu_123', got '%s'", content[0].ToolUseID)
 				}
 			},
 		},
@@ -519,6 +523,96 @@ func TestConvertAnthropicContentToToolCalls(t *testing.T) {
 						t.Errorf("Tool call %d: invalid JSON arguments: %v", i, err)
 					}
 				}
+			}
+		})
+	}
+}
+
+func TestTransformToOAuthToolID(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "srvtoolu_ prefix passes through unchanged",
+			input:    "srvtoolu_123",
+			expected: "srvtoolu_123",
+		},
+		{
+			name:     "toolu_ prefix passes through unchanged",
+			input:    "toolu_abc123",
+			expected: "toolu_abc123",
+		},
+		{
+			name:     "call_ prefix transformed to srvtoolu_",
+			input:    "call_123",
+			expected: "srvtoolu_123",
+		},
+		{
+			name:     "tool_ prefix transformed to srvtoolu_",
+			input:    "tool_xyz",
+			expected: "srvtoolu_xyz",
+		},
+		{
+			name:     "empty string returns empty",
+			input:    "",
+			expected: "",
+		},
+		{
+			name:     "alphanumeric ID without prefix gets srvtoolu_ prefix",
+			input:    "abc123",
+			expected: "srvtoolu_abc123",
+		},
+		{
+			name:     "complex ID with special chars gets hash-based transformation",
+			input:    "call-123_special.chars",
+			expected: "srvtoolu_NmSFwLkHapb40zwy", // hash-based, stable
+		},
+		{
+			name:     "srvtoolu_ with complex chars passes pattern check",
+			input:    "srvtoolu_AZaz09_",
+			expected: "srvtoolu_AZaz09_",
+		},
+		{
+			name:     "toolu_ with dashes and underscores passes pattern check",
+			input:    "toolu_abc-123_xyz",
+			expected: "toolu_abc-123_xyz",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := transformToOAuthToolID(tt.input)
+			if result != tt.expected {
+				t.Errorf("Expected '%s', got '%s'", tt.expected, result)
+			}
+		})
+	}
+}
+
+// Verify transformed IDs match the OAuth pattern
+func TestTransformToOAuthToolIDMatchesPattern(t *testing.T) {
+	testIDs := []string{
+		"call_123",
+		"tool_abc",
+		"my-tool-id",
+		"call_xyz_123",
+		"random.id",
+		"tool-123",
+	}
+
+	for _, id := range testIDs {
+		t.Run(id, func(t *testing.T) {
+			result := transformToOAuthToolID(id)
+			// Verify the result matches srvtoolu_ pattern: ^srvtoolu_[a-zA-Z0-9_]+$
+			if result == "" {
+				t.Error("Expected non-empty result for non-empty input")
+				return
+			}
+			oauthPattern := regexp.MustCompile(`^srvtoolu_[a-zA-Z0-9_]+$`)
+			if !oauthPattern.MatchString(result) {
+				t.Errorf("ID '%s' transformed to '%s' which doesn't match OAuth pattern", id, result)
 			}
 		})
 	}

@@ -711,6 +711,7 @@ func TestConvertToAnthropicContentWithTextAndToolCalls(t *testing.T) {
 	toolUseBlock, ok := blocks[1].(map[string]interface{})
 	require.True(t, ok)
 	assert.Equal(t, "tool_use", toolUseBlock["type"])
-	assert.Equal(t, "tool_1", toolUseBlock["id"])
+	// Note: "tool_1" is transformed to "srvtoolu_1" for OAuth compatibility
+	assert.Equal(t, "srvtoolu_1", toolUseBlock["id"])
 	assert.Equal(t, "test_function", toolUseBlock["name"])
 }
