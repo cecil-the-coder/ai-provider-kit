@@ -281,6 +281,154 @@ type AuthMethodDetector interface {
 	IsAPIKeyConfigured() bool
 }
 
+// QuotaProvider defines methods for quota management and reporting.
+// This optional interface is for providers that support quota information reporting
+// and management. Providers that implement this interface can provide real-time
+// quota information and historical usage data.
+//
+// The QuotaProvider interface provides a provider-agnostic way to query and manage
+// quotas across different AI providers. It allows applications to:
+// - Check current quota status before making requests
+// - Get historical usage patterns for analysis
+// - Implement intelligent request routing based on quota availability
+// - Set up quotas and limits where supported by the provider
+//
+// This interface integrates with the quota package which provides:
+// - A unified quota management system
+// - Integration with existing rate limit tracking
+// - Historical usage tracking
+// - Provider-agnostic quota APIs
+type QuotaProvider interface {
+	// GetQuotaInfo returns the current quota information for the provider
+	// This method should fetch real-time quota information from the provider's API
+	// or return cached quota information if real-time data is not available.
+	//
+	// Parameters:
+	//   - ctx: Context for the request (can include auth credentials)
+	//   - model: The model identifier (empty for provider-wide quota)
+	//
+	// Returns:
+	//   - QuotaInfo: Current quota information including limits, usage, and reset times
+	//   - error: Error if quota information cannot be retrieved
+	GetQuotaInfo(ctx context.Context, model string) (*QuotaInfo, error)
+
+	// GetQuotaHistory returns historical quota usage for the provider
+	// This allows applications to analyze usage patterns over time and
+	// implement quota-aware features like tiered access or smart routing.
+	//
+	// Parameters:
+	//   - ctx: Context for the request
+	//   - model: The model identifier (empty for all models)
+	//   - startTime: Start of the time range for historical data
+	//   - endTime: End of the time range for historical data
+	//
+	// Returns:
+	//   - QuotaHistory: Historical quota usage records and aggregates
+	//   - error: Error if history cannot be retrieved
+	GetQuotaHistory(ctx context.Context, model string, startTime, endTime time.Time) (*QuotaHistory, error)
+
+	// SupportsQuotaReporting returns true if the provider supports real-time quota reporting
+	// through the GetQuotaInfo method. If this returns false, quota information is only
+	// updated through rate limit headers after requests are made.
+	SupportsQuotaReporting() bool
+
+	// SupportsQuotaHistory returns true if the provider supports retrieving historical
+	// quota usage data through the GetQuotaHistory method.
+	SupportsQuotaHistory() bool
+}
+
+// QuotaInfo represents quota information for a provider or specific model.
+// This type is defined in the quota package but re-exported here for convenience.
+// See github.com/cecil-the-coder/ai-provider-kit/pkg/quota for the full definition.
+type QuotaInfo struct {
+	Provider              string                      `json:"provider"`
+	ProviderType          ProviderType                `json:"provider_type"`
+	Model                 string                      `json:"model"`
+	Timestamp             time.Time                   `json:"timestamp"`
+	Quotas                map[QuotaType]*QuotaUsage   `json:"quotas"`
+	ProviderQuotaConfigs  map[QuotaType]*QuotaConfig  `json:"provider_quota_configs,omitempty"`
+	CustomUsage           map[string]interface{}       `json:"custom_usage,omitempty"`
+	Metadata              map[string]interface{}       `json:"metadata,omitempty"`
+}
+
+// QuotaType represents the type of quota being measured.
+// Common types include requests, tokens, daily limits, and custom provider-specific quotas.
+type QuotaType string
+
+const (
+	// QuotaTypeRequests represents request-based quotas
+	QuotaTypeRequests QuotaType = "requests"
+	// QuotaTypeTokens represents token-based quotas (total)
+	QuotaTypeTokens QuotaType = "tokens"
+	// QuotaTypeInputTokens represents input token quotas
+	QuotaTypeInputTokens QuotaType = "input_tokens"
+	// QuotaTypeOutputTokens represents output token quotas
+	QuotaTypeOutputTokens QuotaType = "output_tokens"
+	// QuotaTypeDaily represents daily quotas
+	QuotaTypeDaily QuotaType = "daily"
+	// QuotaTypeCustom represents provider-specific custom quotas
+	QuotaTypeCustom QuotaType = "custom"
+)
+
+// QuotaPeriod represents the time period for a quota limit.
+type QuotaPeriod string
+
+const (
+	// QuotaPeriodMinute represents a per-minute quota
+	QuotaPeriodMinute QuotaPeriod = "minute"
+	// QuotaPeriodHour represents an hourly quota
+	QuotaPeriodHour QuotaPeriod = "hour"
+	// QuotaPeriodDay represents a daily quota
+	QuotaPeriodDay QuotaPeriod = "day"
+	// QuotaPeriodWeek represents a weekly quota
+	QuotaPeriodWeek QuotaPeriod = "week"
+	// QuotaPeriodMonth represents a monthly quota
+	QuotaPeriodMonth QuotaPeriod = "month"
+	// QuotaPeriodCustom represents a custom time period
+	QuotaPeriodCustom QuotaPeriod = "custom"
+)
+
+// QuotaUsage represents current usage for a specific quota.
+type QuotaUsage struct {
+	Type             QuotaType    `json:"type"`
+	Period           QuotaPeriod   `json:"period"`
+	Used             int          `json:"used"`
+	Limit            int          `json:"limit"`
+	Remaining        int          `json:"remaining"`
+	RemainingPercent float64      `json:"remaining_percent"`
+	ResetAt          time.Time    `json:"reset_at"`
+	PeriodStartedAt  time.Time    `json:"period_started_at"`
+}
+
+// QuotaConfig represents a quota configuration for setting limits.
+type QuotaConfig struct {
+	Type       QuotaType            `json:"type"`
+	Period     QuotaPeriod          `json:"period"`
+	Limit      int                  `json:"limit"`
+	ResetAt    time.Time            `json:"reset_at"`
+	CustomData map[string]interface{} `json:"custom_data,omitempty"`
+}
+
+// QuotaHistory represents historical quota usage data.
+type QuotaHistory struct {
+	Provider   string                       `json:"provider"`
+	Model      string                       `json:"model,omitempty"`
+	Records    []*QuotaRecord               `json:"records"`
+	TotalUsage map[QuotaType]int            `json:"total_usage"`
+	StartTime  time.Time                    `json:"start_time"`
+	EndTime    time.Time                    `json:"end_time"`
+}
+
+// QuotaRecord represents a single quota usage event record.
+type QuotaRecord struct {
+	ID        string              `json:"id"`
+	Provider  string              `json:"provider"`
+	Model     string              `json:"model"`
+	Timestamp time.Time           `json:"timestamp"`
+	Operation string              `json:"operation"`
+	Usage     map[QuotaType]int   `json:"usage"`
+}
+
 // ============================================================================
 // Composite Provider Interface
 // ============================================================================

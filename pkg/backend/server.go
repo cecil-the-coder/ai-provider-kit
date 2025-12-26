@@ -11,25 +11,28 @@ import (
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/backend/handlers"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/backend/middleware"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/backendtypes"
+	"github.com/cecil-the-coder/ai-provider-kit/pkg/quota"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 )
 
 // Server represents the backend HTTP server that ties all components together
 type Server struct {
-	config     backendtypes.BackendConfig
-	httpServer *http.Server
-	providers  map[string]types.Provider
-	extensions extensions.ExtensionRegistry
-	mux        *http.ServeMux
+	config        backendtypes.BackendConfig
+	httpServer    *http.Server
+	providers     map[string]types.Provider
+	extensions    extensions.ExtensionRegistry
+	mux           *http.ServeMux
+	quotaManager  *quota.Manager
 }
 
 // NewServer creates a new backend server with the given configuration and providers
 func NewServer(config backendtypes.BackendConfig, providers map[string]types.Provider) *Server {
 	s := &Server{
-		config:     config,
-		providers:  providers,
-		extensions: extensions.NewRegistry(),
-		mux:        http.NewServeMux(),
+		config:        config,
+		providers:     providers,
+		extensions:    extensions.NewRegistry(),
+		mux:           http.NewServeMux(),
+		quotaManager:  quota.NewManager(),
 	}
 
 	// Initialize extensions if configured
@@ -58,6 +61,7 @@ func (s *Server) setupRoutes() {
 	// Create handlers
 	healthHandler := handlers.NewHealthHandler(s.providers, s.config.Server.Version)
 	providerHandler := handlers.NewProviderHandler(s.providers)
+	quotaHandler := handlers.NewQuotaHandler(s.providers, s.quotaManager)
 
 	// Determine default provider (first one in the map if not specified)
 	defaultProvider := ""
@@ -75,6 +79,15 @@ func (s *Server) setupRoutes() {
 	// Provider management endpoints
 	s.mux.HandleFunc("/api/providers", providerHandler.ListProviders)
 	s.mux.HandleFunc("/api/providers/", s.routeProviderRequests(providerHandler))
+
+	// Quota management endpoints
+	s.mux.HandleFunc("/api/quota", s.routeQuotaRequests(quotaHandler))
+	s.mux.HandleFunc("/api/quota/all", quotaHandler.GetAllQuotas)
+	s.mux.HandleFunc("/api/quota/history", quotaHandler.GetQuotaHistory)
+	s.mux.HandleFunc("/api/quota/summary", quotaHandler.GetQuotaSummary)
+	s.mux.HandleFunc("/api/quota/health", quotaHandler.GetQuotaHealth)
+	s.mux.HandleFunc("/api/quota/record", quotaHandler.RecordUsage)
+	s.mux.HandleFunc("/api/quota/provider/", quotaHandler.GetProviderQuotas)
 
 	// Generation endpoints
 	s.mux.HandleFunc("/api/generate", generateHandler.Generate)
@@ -108,6 +121,23 @@ func (s *Server) routeProviderRequests(h *handlers.ProviderHandler) http.Handler
 		default:
 			handlers.SendError(w, r, "METHOD_NOT_ALLOWED",
 				"Only GET, PUT, or POST methods are allowed",
+				http.StatusMethodNotAllowed)
+		}
+	}
+}
+
+// routeQuotaRequests routes quota-specific requests to the appropriate handler method
+func (s *Server) routeQuotaRequests(h *handlers.QuotaHandler) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// Handle GET (get quota) and DELETE (clear quota) requests
+		switch r.Method {
+		case http.MethodGet:
+			h.GetQuota(w, r)
+		case http.MethodDelete:
+			h.ClearQuota(w, r)
+		default:
+			handlers.SendError(w, r, "METHOD_NOT_ALLOWED",
+				"Only GET or DELETE methods are allowed",
 				http.StatusMethodNotAllowed)
 		}
 	}
@@ -215,6 +245,11 @@ func (s *Server) GetProviders() map[string]types.Provider {
 // GetConfig returns the server configuration
 func (s *Server) GetConfig() backendtypes.BackendConfig {
 	return s.config
+}
+
+// GetQuotaManager returns the quota manager for quota tracking and management
+func (s *Server) GetQuotaManager() *quota.Manager {
+	return s.quotaManager
 }
 
 // ListenAndServeWithGracefulShutdown starts the server and handles graceful shutdown
