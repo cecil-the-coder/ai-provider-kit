@@ -241,16 +241,62 @@ func NewHighConcurrencyHTTPClient(config HTTPClientConfig) *HTTPClient {
 	return NewHTTPClient(config)
 }
 
+// applyRequestInterceptor applies the request interceptor if configured.
+func (c *HTTPClient) applyRequestInterceptor(req *http.Request) error {
+	if c.config.RequestInterceptor != nil {
+		if err := c.config.RequestInterceptor.Intercept(req); err != nil {
+			return fmt.Errorf("request interceptor failed: %w", err)
+		}
+	}
+	return nil
+}
+
+// captureRequestBody reads and closes the request body, returning the bytes.
+func (c *HTTPClient) captureRequestBody(req *http.Request) ([]byte, error) {
+	if req.Body == nil {
+		return nil, nil
+	}
+	bodyBytes, err := io.ReadAll(req.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read request body: %w", err)
+	}
+	_ = req.Body.Close() //nolint:errcheck // Best effort close
+	return bodyBytes, nil
+}
+
+// waitForRetry waits for the retry delay or context cancellation.
+// Returns an error if the context is cancelled.
+func (c *HTTPClient) waitForRetry(ctx context.Context, attempts int) error {
+	delay := c.retryHandler.calculateDelay(attempts)
+	select {
+	case <-time.After(delay):
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+// applyResponseInterceptor applies the response interceptor if configured.
+// Returns an error if the interceptor fails.
+func (c *HTTPClient) applyResponseInterceptor(resp *http.Response) error {
+	if c.config.ResponseInterceptor != nil {
+		if interceptErr := c.config.ResponseInterceptor.Intercept(resp); interceptErr != nil {
+			return fmt.Errorf("response interceptor failed: %w", interceptErr)
+		}
+	}
+	return nil
+}
+
 // Do executes an HTTP request with retry logic and metrics
+//
+//nolint:gocyclo // Complexity is acceptable for the main request orchestration method
 func (c *HTTPClient) Do(ctx context.Context, req *http.Request) (*http.Response, error) {
 	startTime := time.Now()
 	atomic.AddInt64(&c.requestCount, 1)
 
 	// Apply request interceptor
-	if c.config.RequestInterceptor != nil {
-		if err := c.config.RequestInterceptor.Intercept(req); err != nil {
-			return nil, fmt.Errorf("request interceptor failed: %w", err)
-		}
+	if err := c.applyRequestInterceptor(req); err != nil {
+		return nil, err
 	}
 
 	// Set default headers
@@ -259,18 +305,12 @@ func (c *HTTPClient) Do(ctx context.Context, req *http.Request) (*http.Response,
 	}
 
 	// Capture the request body once so we can reuse it on retries
-	var bodyBytes []byte
-	if req.Body != nil {
-		var err error
-		bodyBytes, err = io.ReadAll(req.Body)
-		if err != nil {
-			return nil, fmt.Errorf("failed to read request body: %w", err)
-		}
-		_ = req.Body.Close() //nolint:errcheck // Best effort close
+	bodyBytes, err := c.captureRequestBody(req)
+	if err != nil {
+		return nil, err
 	}
 
 	var resp *http.Response
-	var err error
 	var attempts int
 
 	// Set up connection trace if enabled
@@ -284,13 +324,8 @@ func (c *HTTPClient) Do(ctx context.Context, req *http.Request) (*http.Response,
 
 	for attempts = 0; attempts <= c.config.MaxRetries; attempts++ {
 		if attempts > 0 {
-			// Calculate delay and wait
-			delay := c.retryHandler.calculateDelay(attempts)
-			select {
-			case <-time.After(delay):
-				// Continue with retry
-			case <-ctx.Done():
-				return nil, ctx.Err()
+			if waitErr := c.waitForRetry(ctx, attempts); waitErr != nil {
+				return nil, waitErr
 			}
 			atomic.AddInt64(&c.metrics.RetryCount, 1)
 		}
@@ -314,11 +349,9 @@ func (c *HTTPClient) Do(ctx context.Context, req *http.Request) (*http.Response,
 		}
 
 		// Apply response interceptor
-		if c.config.ResponseInterceptor != nil {
-			if interceptErr := c.config.ResponseInterceptor.Intercept(resp); interceptErr != nil {
-				_ = resp.Body.Close() //nolint:errcheck // Best effort close
-				return nil, fmt.Errorf("response interceptor failed: %w", interceptErr)
-			}
+		if interceptErr := c.applyResponseInterceptor(resp); interceptErr != nil {
+			_ = resp.Body.Close() //nolint:errcheck // Best effort close
+			return nil, interceptErr
 		}
 
 		// Check if we should retry based on status code
