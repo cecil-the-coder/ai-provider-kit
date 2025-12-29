@@ -11,8 +11,8 @@ import (
 
 	"github.com/cecil-the-coder/ai-provider-kit/internal/common"
 	"github.com/cecil-the-coder/ai-provider-kit/internal/common/auth"
-	pkghttp "github.com/cecil-the-coder/ai-provider-kit/internal/http"
 	"github.com/cecil-the-coder/ai-provider-kit/internal/common/models"
+	pkghttp "github.com/cecil-the-coder/ai-provider-kit/internal/http"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/base"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 )

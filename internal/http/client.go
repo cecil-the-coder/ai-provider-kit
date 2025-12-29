@@ -3,6 +3,7 @@
 package http
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -257,6 +258,17 @@ func (c *HTTPClient) Do(ctx context.Context, req *http.Request) (*http.Response,
 		req.Header.Set(key, value)
 	}
 
+	// Capture the request body once so we can reuse it on retries
+	var bodyBytes []byte
+	if req.Body != nil {
+		var err error
+		bodyBytes, err = io.ReadAll(req.Body)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read request body: %w", err)
+		}
+		_ = req.Body.Close() //nolint:errcheck // Best effort close
+	}
+
 	var resp *http.Response
 	var err error
 	var attempts int
@@ -283,8 +295,8 @@ func (c *HTTPClient) Do(ctx context.Context, req *http.Request) (*http.Response,
 			atomic.AddInt64(&c.metrics.RetryCount, 1)
 		}
 
-		// Create new request for retry (to avoid body reuse issues)
-		retryReq := c.cloneRequest(tracedReq)
+		// Create new request for retry with fresh body
+		retryReq := c.cloneRequestWithBody(tracedReq, bodyBytes)
 		retryReq = retryReq.WithContext(ctx)
 
 		// Make the request
@@ -360,10 +372,24 @@ func (c *HTTPClient) DoJSON(ctx context.Context, method, url string, body interf
 	return c.Do(ctx, jsonReq)
 }
 
-// cloneRequest creates a copy of the request for retry
+// cloneRequest creates a copy of the request for retry (deprecated, use cloneRequestWithBody)
 func (c *HTTPClient) cloneRequest(orig *http.Request) *http.Request {
 	// This is a simplified clone - in production you'd want to handle body copying properly
 	cloned := orig.Clone(orig.Context())
+	return cloned
+}
+
+// cloneRequestWithBody creates a copy of the request with a fresh body for retry
+func (c *HTTPClient) cloneRequestWithBody(orig *http.Request, bodyBytes []byte) *http.Request {
+	cloned := orig.Clone(orig.Context())
+	if len(bodyBytes) > 0 {
+		cloned.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+		cloned.ContentLength = int64(len(bodyBytes))
+		// GetBody allows the http.Client to replay the request body if needed
+		cloned.GetBody = func() (io.ReadCloser, error) {
+			return io.NopCloser(bytes.NewReader(bodyBytes)), nil
+		}
+	}
 	return cloned
 }
 
