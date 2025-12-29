@@ -388,7 +388,7 @@ func (p *OpenAIProvider) fetchSubscription(ctx context.Context, apiKey string) (
 	req.Header.Set("Authorization", "Bearer "+apiKey)
 	req.Header.Set("User-Agent", telemetry.GetUserAgent())
 
-	resp, err := p.client.Do(req)
+	resp, err := p.httpClient.Do(ctx, req)
 	if err != nil {
 		return nil, fmt.Errorf("request failed: %w", err)
 	}
@@ -444,7 +444,7 @@ func (p *OpenAIProvider) fetchUsageRaw(ctx context.Context, apiKey, startDate, e
 	req.Header.Set("Authorization", "Bearer "+apiKey)
 	req.Header.Set("User-Agent", telemetry.GetUserAgent())
 
-	resp, err := p.client.Do(req)
+	resp, err := p.httpClient.Do(ctx, req)
 	if err != nil {
 		return nil, fmt.Errorf("request failed: %w", err)
 	}

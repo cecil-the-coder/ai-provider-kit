@@ -112,7 +112,7 @@ func (p *OpenRouterProvider) makeAPICallWithKey(ctx context.Context, requestData
 	req.Header.Set("HTTP-Referer", p.siteURL)
 	req.Header.Set("X-Title", p.siteName)
 
-	resp, err := p.client.Do(req)
+	resp, err := p.httpClient.Do(ctx, req)
 	if err != nil {
 		return nil, fmt.Errorf("request failed: %w", err)
 	}
@@ -165,7 +165,7 @@ func (p *OpenRouterProvider) makeStreamingAPICallWithKey(ctx context.Context, re
 	req.Header.Set("HTTP-Referer", p.siteURL)
 	req.Header.Set("X-Title", p.siteName)
 
-	resp, err := p.client.Do(req)
+	resp, err := p.httpClient.Do(ctx, req)
 	if err != nil {
 		return nil, fmt.Errorf("request failed: %w", err)
 	}

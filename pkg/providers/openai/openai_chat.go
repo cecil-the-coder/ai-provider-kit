@@ -305,8 +305,8 @@ func (p *OpenAIProvider) makeAPICallInternal(ctx context.Context, requestData Op
 		"Authorization": "Bearer ***",
 	}, requestData)
 
-	// Make the request
-	resp, err := p.client.Do(req)
+	// Make the request using the pooled client with retry logic
+	resp, err := p.httpClient.Do(ctx, req)
 	if err != nil {
 		return types.ChatMessage{}, nil, types.NewNetworkError(types.ProviderTypeOpenAI, "request failed").
 			WithOperation("makeAPICall").

@@ -345,7 +345,7 @@ func (p *AnthropicProvider) makeAPICallWithKey(ctx context.Context, requestData 
 	}, requestData)
 
 	// Make the request
-	resp, err := p.client.Do(req)
+	resp, err := p.httpClient.Do(ctx, req)
 	if err != nil {
 		return nil, nil, fmt.Errorf("request failed: %w", err)
 	}
@@ -449,7 +449,7 @@ func (p *AnthropicProvider) makeAPICallWithOAuthMessage(ctx context.Context, req
 		"anthropic-beta":    "oauth-2025-04-20,claude-code-20250219,interleaved-thinking-2025-05-14,fine-grained-tool-streaming-2025-05-14",
 	}, requestData)
 
-	resp, err := p.client.Do(req)
+	resp, err := p.httpClient.Do(ctx, req)
 	if err != nil {
 		return types.ChatMessage{}, nil, fmt.Errorf("request failed: %w", err)
 	}

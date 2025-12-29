@@ -420,7 +420,7 @@ func (p *QwenProvider) makeAPICall(ctx context.Context, url string, request Qwen
 	}, request)
 
 	startTime := time.Now()
-	resp, err := p.client.Do(req)
+	resp, err := p.httpClient.Do(ctx, req)
 	if err != nil {
 		return nil, types.NewNetworkError(types.ProviderTypeQwen, "request failed").
 			WithOperation("chat_completion").

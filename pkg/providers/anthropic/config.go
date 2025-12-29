@@ -80,6 +80,7 @@ func NewAnthropicProvider(config types.ProviderConfig) *AnthropicProvider {
 		BaseProvider:      base.NewBaseProvider("anthropic", result.MergedConfig, result.HTTPClient, log.Default()),
 		authHelper:        result.AuthHelper,
 		client:            result.HTTPClient,
+		httpClient:        result.PooledClient,
 		displayName:       anthropicConfig.DisplayName,
 		config:            anthropicConfig,
 		modelCache:        models.NewModelCache(6 * time.Hour), // 6 hour cache for Anthropic
@@ -218,7 +219,7 @@ func (p *AnthropicProvider) fetchModelsHelper(ctx context.Context, authType stri
 	p.authHelper.SetProviderSpecificHeaders(req)
 	req.Header.Set("User-Agent", telemetry.GetUserAgent())
 
-	resp, err := p.client.Do(req)
+	resp, err := p.httpClient.Do(ctx, req)
 	if err != nil {
 		return "", nil, fmt.Errorf("failed to fetch models: %w", err)
 	}

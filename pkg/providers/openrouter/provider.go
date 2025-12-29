@@ -15,6 +15,7 @@ import (
 
 	"github.com/cecil-the-coder/ai-provider-kit/internal/clientpool"
 	"github.com/cecil-the-coder/ai-provider-kit/internal/common"
+	pkghttp "github.com/cecil-the-coder/ai-provider-kit/internal/http"
 	"github.com/cecil-the-coder/ai-provider-kit/internal/common/auth"
 	commonconfig "github.com/cecil-the-coder/ai-provider-kit/internal/common/config"
 	"github.com/cecil-the-coder/ai-provider-kit/internal/common/models"
@@ -28,6 +29,7 @@ type OpenRouterProvider struct {
 	*base.BaseProvider
 	config            ProviderConfig
 	client            *http.Client
+	httpClient        *pkghttp.HTTPClient
 	authHelper        *auth.AuthHelper
 	modelSelector     *ModelSelector
 	lastUsedModel     string
@@ -135,6 +137,7 @@ func NewOpenRouterProvider(config types.ProviderConfig) *OpenRouterProvider {
 		BaseProvider:      base.NewBaseProvider("openrouter", config, client, log.Default()),
 		config:            providerConfig,
 		client:            client,
+		httpClient:        httpClient,
 		authHelper:        authHelper,
 		modelSelector:     NewModelSelector(modelList, modelStrategy),
 		apiKey:            apiKey,
@@ -217,7 +220,7 @@ func (p *OpenRouterProvider) fetchModelsFromAPI(ctx context.Context) ([]types.Mo
 	req.Header.Set("HTTP-Referer", p.siteURL)
 	req.Header.Set("X-Title", p.siteName)
 
-	resp, err := p.client.Do(req)
+	resp, err := p.httpClient.Do(ctx, req)
 	if err != nil {
 		return nil, types.NewNetworkError(types.ProviderTypeOpenRouter, "failed to fetch models").
 			WithOperation("fetch_models").
@@ -681,7 +684,7 @@ func (p *OpenRouterProvider) GetRateLimits(ctx context.Context) (*OpenRouterRate
 	req.Header.Set("HTTP-Referer", p.siteURL)
 	req.Header.Set("X-Title", p.siteName)
 
-	resp, err := p.client.Do(req)
+	resp, err := p.httpClient.Do(ctx, req)
 	if err != nil {
 		return nil, types.NewNetworkError(types.ProviderTypeOpenRouter, "request failed").
 			WithOperation("get_rate_limits").

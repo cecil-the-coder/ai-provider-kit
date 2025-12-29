@@ -108,11 +108,13 @@ func NewCopilotProvider(config types.ProviderConfig) *CopilotProvider {
 	if mergedConfig.Timeout > 0 {
 		timeout = mergedConfig.Timeout
 	}
-	httpClient := clientpool.GetClientWithTimeout(baseURL, timeout).Client()
+	pooledClient := clientpool.GetClientWithTimeout(baseURL, timeout)
+	httpClient := pooledClient.Client()
 
 	// Create provider
 	provider := &CopilotProvider{
 		BaseProvider:      base.NewBaseProvider("copilot", mergedConfig, httpClient, log.Default()),
+		httpClient:        pooledClient,
 		client:            httpClient,
 		config:            copilotConfig,
 		displayName:       copilotConfig.DisplayName,
@@ -277,7 +279,7 @@ func (p *CopilotProvider) requestDeviceCode(ctx context.Context) (*GitHubDeviceC
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 
-	resp, err := p.client.Do(req)
+	resp, err := p.httpClient.Do(ctx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -343,7 +345,7 @@ func (p *CopilotProvider) checkAccessToken(ctx context.Context, deviceCode strin
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 
-	resp, err := p.client.Do(req)
+	resp, err := p.httpClient.Do(ctx, req)
 	if err != nil {
 		return "", err
 	}
@@ -392,7 +394,7 @@ func (p *CopilotProvider) exchangeToken(ctx context.Context) error {
 	req.Header.Set("user-agent", UserAgent)
 	req.Header.Set("x-github-api-version", GitHubAPIVersion)
 
-	resp, err := p.client.Do(req)
+	resp, err := p.httpClient.Do(ctx, req)
 	if err != nil {
 		return err
 	}
@@ -446,7 +448,7 @@ func (p *CopilotProvider) fetchModelsFromAPI(ctx context.Context) ([]types.Model
 
 	p.setCopilotHeaders(req, token)
 
-	resp, err := p.client.Do(req)
+	resp, err := p.httpClient.Do(ctx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -541,7 +543,7 @@ func (p *CopilotProvider) performConnectivityTest(ctx context.Context) error {
 
 	p.setCopilotHeaders(req, token)
 
-	resp, err := p.client.Do(req)
+	resp, err := p.httpClient.Do(ctx, req)
 	if err != nil {
 		return types.NewNetworkError(types.ProviderTypeCopilot, "connectivity test failed").
 			WithOperation("test_connectivity").

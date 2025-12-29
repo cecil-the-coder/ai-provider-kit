@@ -55,7 +55,7 @@ func (p *GeminiProvider) ValidateToken(ctx context.Context) (*types.TokenInfo, e
 
 	req.Header.Set("User-Agent", telemetry.GetUserAgent())
 
-	resp, err := p.client.Do(req)
+	resp, err := p.httpClient.Do(ctx, req)
 	if err != nil {
 		return nil, types.NewNetworkError(types.ProviderTypeGemini, "failed to validate token").
 			WithOperation("validate_token").

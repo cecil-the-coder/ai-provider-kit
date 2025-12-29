@@ -330,7 +330,7 @@ func (p *GeminiProvider) executeStandardAPIRequest(ctx context.Context, model st
 	}, requestBody)
 
 	// Make the request
-	resp, err := p.client.Do(req)
+	resp, err := p.httpClient.Do(ctx, req)
 	if err != nil {
 		return nil, types.NewNetworkError(types.ProviderTypeGemini, "request failed").
 			WithOperation("chat_completion").
@@ -427,7 +427,7 @@ func (p *GeminiProvider) makeStandardAPICallWithOAuth(ctx context.Context, model
 	}, requestBody)
 
 	// Make the request
-	resp, err := p.client.Do(req)
+	resp, err := p.httpClient.Do(ctx, req)
 	if err != nil {
 		return nil, types.NewNetworkError(types.ProviderTypeGemini, "request failed").
 			WithOperation("chat_completion").

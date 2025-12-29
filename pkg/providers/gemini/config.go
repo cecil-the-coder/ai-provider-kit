@@ -112,6 +112,7 @@ func NewGeminiProvider(config types.ProviderConfig) *GeminiProvider {
 		BaseProvider:    base.NewBaseProvider("gemini", result.MergedConfig, result.HTTPClient, log.Default()),
 		authHelper:      result.AuthHelper,
 		client:          result.HTTPClient,
+		httpClient:      result.PooledClient,
 		config:          geminiConfig,
 		displayName:     geminiConfig.DisplayName,
 		rateLimitHelper: common.NewRateLimitHelper(ratelimit.NewGeminiParser()),

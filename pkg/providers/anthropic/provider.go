@@ -11,6 +11,7 @@ import (
 
 	"github.com/cecil-the-coder/ai-provider-kit/internal/common"
 	"github.com/cecil-the-coder/ai-provider-kit/internal/common/auth"
+	pkghttp "github.com/cecil-the-coder/ai-provider-kit/internal/http"
 	"github.com/cecil-the-coder/ai-provider-kit/internal/common/models"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/base"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
@@ -21,6 +22,7 @@ type AnthropicProvider struct {
 	*base.BaseProvider
 	authHelper        *auth.AuthHelper
 	client            *http.Client
+	httpClient        *pkghttp.HTTPClient // Pooled HTTP client with retry logic
 	lastUsage         *types.Usage
 	displayName       string
 	config            AnthropicConfig

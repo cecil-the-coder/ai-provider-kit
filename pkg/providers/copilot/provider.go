@@ -12,6 +12,7 @@ import (
 	"github.com/cecil-the-coder/ai-provider-kit/internal/common"
 	"github.com/cecil-the-coder/ai-provider-kit/internal/common/auth"
 	"github.com/cecil-the-coder/ai-provider-kit/internal/common/models"
+	pkghttp "github.com/cecil-the-coder/ai-provider-kit/internal/http"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/providers/base"
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 )
@@ -20,6 +21,7 @@ import (
 type CopilotProvider struct {
 	*base.BaseProvider
 	authHelper        *auth.AuthHelper
+	httpClient        *pkghttp.HTTPClient
 	client            *http.Client
 	config            CopilotConfig
 	displayName       string

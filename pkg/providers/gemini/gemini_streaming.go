@@ -278,7 +278,7 @@ func (p *GeminiProvider) makeStreamingStandardAPICallWithOAuth(ctx context.Conte
 	req.Header.Set("User-Agent", telemetry.GetUserAgent())
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", accessToken))
 
-	resp, err := p.client.Do(req)
+	resp, err := p.httpClient.Do(ctx, req)
 	if err != nil {
 		return nil, types.NewNetworkError(types.ProviderTypeGemini, "request failed").
 			WithOperation("chat_completion_stream").
@@ -431,7 +431,7 @@ func (p *GeminiProvider) makeStreamingAPICallWithAPIKey(ctx context.Context, opt
 		req.Header.Set("X-Goog-Api-Key", apiKey)
 	}
 
-	resp, err := p.client.Do(req)
+	resp, err := p.httpClient.Do(ctx, req)
 	if err != nil {
 		return nil, types.NewNetworkError(types.ProviderTypeGemini, "request failed").
 			WithOperation("chat_completion_stream").

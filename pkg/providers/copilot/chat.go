@@ -192,7 +192,7 @@ func (p *CopilotProvider) makeAPICall(ctx context.Context, requestData *ChatComp
 		"copilot-integration-id": CopilotIntegrationID,
 	}, requestData)
 
-	resp, err := p.client.Do(req)
+	resp, err := p.httpClient.Do(ctx, req)
 	if err != nil {
 		return nil, fmt.Errorf("request failed: %w", err)
 	}
@@ -248,7 +248,7 @@ func (p *CopilotProvider) makeStreamingAPICall(ctx context.Context, requestData 
 		req.Header.Set("copilot-vision-request", "true")
 	}
 
-	resp, err := p.client.Do(req)
+	resp, err := p.httpClient.Do(ctx, req)
 	if err != nil {
 		return nil, fmt.Errorf("request failed: %w", err)
 	}

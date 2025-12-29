@@ -324,7 +324,7 @@ func (p *AnthropicProvider) StreamBatchResults(ctx context.Context, batchID stri
 	req.Header.Set("User-Agent", telemetry.GetUserAgent())
 
 	// Make the request
-	resp, err := p.client.Do(req)
+	resp, err := p.httpClient.Do(ctx, req)
 	if err != nil {
 		return types.NewNetworkError(types.ProviderTypeAnthropic, "request failed").
 			WithOperation("StreamBatchResults").
@@ -413,7 +413,7 @@ func (p *AnthropicProvider) makeBatchAPICallWithAuth(ctx context.Context, reques
 	req.Header.Set("User-Agent", telemetry.GetUserAgent())
 
 	// Make the request
-	resp, err := p.client.Do(req)
+	resp, err := p.httpClient.Do(ctx, req)
 	if err != nil {
 		return "", nil, fmt.Errorf("request failed: %w", err)
 	}
@@ -455,7 +455,7 @@ func (p *AnthropicProvider) makeBatchGetRequest(ctx context.Context, url, creden
 	p.authHelper.SetProviderSpecificHeaders(req)
 	req.Header.Set("User-Agent", telemetry.GetUserAgent())
 
-	resp, err := p.client.Do(req)
+	resp, err := p.httpClient.Do(ctx, req)
 	if err != nil {
 		return "", nil, fmt.Errorf("request failed: %w", err)
 	}
@@ -506,7 +506,7 @@ func (p *AnthropicProvider) makeBatchPostRequest(ctx context.Context, url string
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("User-Agent", telemetry.GetUserAgent())
 
-	resp, err := p.client.Do(req)
+	resp, err := p.httpClient.Do(ctx, req)
 	if err != nil {
 		return "", nil, fmt.Errorf("request failed: %w", err)
 	}

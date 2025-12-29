@@ -131,7 +131,7 @@ func (p *GeminiProvider) makeOnboardingRequest(ctx context.Context, method, endp
 	req.Header.Set("User-Agent", telemetry.GetUserAgent())
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", cred.AccessToken))
 
-	return p.client.Do(req)
+	return p.httpClient.Do(ctx, req)
 }
 
 // getOnboardTier chooses the default tier from the loadCodeAssist response or

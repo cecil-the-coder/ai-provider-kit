@@ -136,7 +136,7 @@ func (p *OpenAIProvider) fetchModelsFromAPI(ctx context.Context) ([]types.Model,
 	p.authHelper.SetAuthHeaders(req, keys[0], "api_key")
 	req.Header.Set("User-Agent", telemetry.GetUserAgent())
 
-	resp, err := p.client.Do(req)
+	resp, err := p.httpClient.Do(ctx, req)
 	if err != nil {
 		return nil, types.NewNetworkError(types.ProviderTypeOpenAI, "failed to fetch models").
 			WithOperation("fetchModelsFromAPI").
