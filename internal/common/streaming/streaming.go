@@ -439,6 +439,239 @@ func parseAnthropicUsage(streamResp map[string]interface{}) types.Usage {
 	return usage
 }
 
+// handleContentBlockStart handles the start of a content block (text, tool_use, or thinking)
+func (p *AnthropicStreamParser) handleContentBlockStart(streamResp map[string]interface{}) (types.ChatCompletionChunk, bool, error) {
+	contentBlock, ok := streamResp["content_block"].(map[string]interface{})
+	if !ok {
+		return types.ChatCompletionChunk{}, false, nil
+	}
+
+	blockType, _ := contentBlock["type"].(string)
+
+	switch blockType {
+	case "tool_use":
+		return p.handleToolUseStart(streamResp, contentBlock)
+	case "thinking":
+		return p.handleThinkingStart(streamResp)
+	default:
+		return types.ChatCompletionChunk{}, false, nil
+	}
+}
+
+// handleToolUseStart handles the start of a tool_use content block
+func (p *AnthropicStreamParser) handleToolUseStart(streamResp, contentBlock map[string]interface{}) (types.ChatCompletionChunk, bool, error) {
+	// Extract tool call metadata
+	toolID, _ := contentBlock["id"].(string)
+	toolName, _ := contentBlock["name"].(string)
+
+	// Store for subsequent deltas
+	p.currentToolCallID = toolID
+	p.currentToolName = toolName
+
+	// Update content index
+	if index, ok := streamResp["index"].(float64); ok {
+		p.currentContentIndex = int(index)
+	}
+
+	// Return chunk with tool call start
+	return types.ChatCompletionChunk{
+		Choices: []types.ChatChoice{
+			{
+				Index: 0,
+				Delta: types.ChatMessage{
+					ToolCalls: []types.ToolCall{
+						{
+							ID:   toolID,
+							Type: "function",
+							Function: types.ToolCallFunction{
+								Name: toolName,
+							},
+						},
+					},
+				},
+			},
+		},
+		Done: false,
+	}, false, nil
+}
+
+// handleThinkingStart handles the start of a thinking content block
+func (p *AnthropicStreamParser) handleThinkingStart(streamResp map[string]interface{}) (types.ChatCompletionChunk, bool, error) {
+	// Mark that we're in a thinking block for subsequent deltas
+	p.inThinkingBlock = true
+	// Update content index
+	if index, ok := streamResp["index"].(float64); ok {
+		p.currentContentIndex = int(index)
+	}
+	// Return empty chunk to signal thinking block started
+	// The actual thinking content comes in thinking_delta events
+	return types.ChatCompletionChunk{
+		Metadata: map[string]interface{}{
+			"thinking_block_start": true,
+			"content_index":        p.currentContentIndex,
+		},
+		Done: false,
+	}, false, nil
+}
+
+// handleContentBlockDelta handles deltas for content blocks (text, tool arguments, or thinking)
+func (p *AnthropicStreamParser) handleContentBlockDelta(streamResp map[string]interface{}) (types.ChatCompletionChunk, bool, error) {
+	delta, ok := streamResp["delta"].(map[string]interface{})
+	if !ok {
+		return types.ChatCompletionChunk{}, false, nil
+	}
+
+	deltaType, _ := delta["type"].(string)
+
+	switch deltaType {
+	case "text_delta":
+		return p.handleTextDelta(delta)
+	case "thinking_delta":
+		return p.handleThinkingDelta(streamResp, delta)
+	case "input_json_delta":
+		return p.handleInputJSONDelta(delta)
+	default:
+		return types.ChatCompletionChunk{}, false, nil
+	}
+}
+
+// handleTextDelta handles text_delta events
+func (p *AnthropicStreamParser) handleTextDelta(delta map[string]interface{}) (types.ChatCompletionChunk, bool, error) {
+	if text, ok := delta["text"].(string); ok {
+		return types.ChatCompletionChunk{
+			Content: text,
+			Done:    false,
+		}, false, nil
+	}
+	return types.ChatCompletionChunk{}, false, nil
+}
+
+// handleThinkingDelta handles thinking_delta events
+func (p *AnthropicStreamParser) handleThinkingDelta(streamResp, delta map[string]interface{}) (types.ChatCompletionChunk, bool, error) {
+	thinking, ok := delta["thinking"].(string)
+	if !ok {
+		return types.ChatCompletionChunk{}, false, nil
+	}
+
+	// Get content index from the event
+	contentIndex := p.currentContentIndex
+	if index, ok := streamResp["index"].(float64); ok {
+		contentIndex = int(index)
+	}
+	return types.ChatCompletionChunk{
+		ReasoningContent: thinking,
+		Metadata: map[string]interface{}{
+			"thinking_delta": true,
+			"content_index":  contentIndex,
+			"is_anthropic":   true, // Mark as genuine Anthropic thinking
+		},
+		Done: false,
+	}, false, nil
+}
+
+// handleInputJSONDelta handles input_json_delta events for tool call arguments
+func (p *AnthropicStreamParser) handleInputJSONDelta(delta map[string]interface{}) (types.ChatCompletionChunk, bool, error) {
+	partialJSON, ok := delta["partial_json"].(string)
+	if !ok {
+		return types.ChatCompletionChunk{}, false, nil
+	}
+
+	return types.ChatCompletionChunk{
+		Choices: []types.ChatChoice{
+			{
+				Index: 0,
+				Delta: types.ChatMessage{
+					ToolCalls: []types.ToolCall{
+						{
+							ID:   p.currentToolCallID,
+							Type: "function",
+							Function: types.ToolCallFunction{
+								Name:      p.currentToolName,
+								Arguments: partialJSON,
+							},
+						},
+					},
+				},
+			},
+		},
+		Done: false,
+	}, false, nil
+}
+
+// handleContentBlockStop handles the end of a content block (text, tool_use, or thinking)
+func (p *AnthropicStreamParser) handleContentBlockStop(streamResp map[string]interface{}) (types.ChatCompletionChunk, bool, error) {
+	// Reset thinking block state
+	if p.inThinkingBlock {
+		p.inThinkingBlock = false
+		// Get content index from the event
+		contentIndex := p.currentContentIndex
+		if index, ok := streamResp["index"].(float64); ok {
+			contentIndex = int(index)
+		}
+		return types.ChatCompletionChunk{
+			Metadata: map[string]interface{}{
+				"thinking_block_stop": true,
+				"content_index":       contentIndex,
+			},
+			Done: false,
+		}, false, nil
+	}
+	// For non-thinking blocks, just return empty chunk
+	return types.ChatCompletionChunk{}, false, nil
+}
+
+// handleMessageDelta handles message-level deltas (e.g., stop_reason)
+func (p *AnthropicStreamParser) handleMessageDelta(streamResp map[string]interface{}) (types.ChatCompletionChunk, bool, error) {
+	delta, ok := streamResp["delta"].(map[string]interface{})
+	if !ok {
+		return types.ChatCompletionChunk{}, false, nil
+	}
+
+	stopReason, ok := delta["stop_reason"].(string)
+	if !ok {
+		return types.ChatCompletionChunk{}, false, nil
+	}
+
+	// Map Anthropic stop reasons to OpenAI finish reasons
+	finishReason := mapAnthropicStopReason(stopReason)
+
+	return types.ChatCompletionChunk{
+		Choices: []types.ChatChoice{
+			{
+				Index:        0,
+				FinishReason: finishReason,
+			},
+		},
+		Done: false,
+	}, false, nil
+}
+
+// handleMessageStop handles the message_stop event indicating message is complete
+func (p *AnthropicStreamParser) handleMessageStop(streamResp map[string]interface{}) (types.ChatCompletionChunk, bool, error) {
+	return types.ChatCompletionChunk{
+		Done:  true,
+		Usage: parseAnthropicUsage(streamResp),
+	}, true, nil
+}
+
+// handleError handles error events from the Anthropic stream
+func (p *AnthropicStreamParser) handleError(streamResp map[string]interface{}) (types.ChatCompletionChunk, bool, error) {
+	errorData, ok := streamResp["error"].(map[string]interface{})
+	if !ok {
+		return types.ChatCompletionChunk{}, false, nil
+	}
+
+	message, ok := errorData["message"].(string)
+	if !ok {
+		return types.ChatCompletionChunk{}, false, nil
+	}
+
+	return types.ChatCompletionChunk{
+		Error: message,
+		Done:  true,
+	}, true, fmt.Errorf("anthropic streaming error: %s", message)
+}
+
 // ParseLine parses a line from an Anthropic stream
 func (p *AnthropicStreamParser) ParseLine(data string) (types.ChatCompletionChunk, bool, error) {
 	var streamResp map[string]interface{}
@@ -451,186 +684,20 @@ func (p *AnthropicStreamParser) ParseLine(data string) (types.ChatCompletionChun
 
 	switch eventType {
 	case "content_block_start":
-		// Handle the start of a content block (text, tool_use, or thinking)
-		if contentBlock, ok := streamResp["content_block"].(map[string]interface{}); ok {
-			blockType, _ := contentBlock["type"].(string)
-
-			switch blockType {
-			case "tool_use":
-				// Extract tool call metadata
-				toolID, _ := contentBlock["id"].(string)
-				toolName, _ := contentBlock["name"].(string)
-
-				// Store for subsequent deltas
-				p.currentToolCallID = toolID
-				p.currentToolName = toolName
-
-				// Update content index
-				if index, ok := streamResp["index"].(float64); ok {
-					p.currentContentIndex = int(index)
-				}
-
-				// Return chunk with tool call start
-				return types.ChatCompletionChunk{
-					Choices: []types.ChatChoice{
-						{
-							Index: 0,
-							Delta: types.ChatMessage{
-								ToolCalls: []types.ToolCall{
-									{
-										ID:   toolID,
-										Type: "function",
-										Function: types.ToolCallFunction{
-											Name: toolName,
-										},
-									},
-								},
-							},
-						},
-					},
-					Done: false,
-				}, false, nil
-
-			case "thinking":
-				// Mark that we're in a thinking block for subsequent deltas
-				p.inThinkingBlock = true
-				// Update content index
-				if index, ok := streamResp["index"].(float64); ok {
-					p.currentContentIndex = int(index)
-				}
-				// Return empty chunk to signal thinking block started
-				// The actual thinking content comes in thinking_delta events
-				return types.ChatCompletionChunk{
-					Metadata: map[string]interface{}{
-						"thinking_block_start": true,
-						"content_index":        p.currentContentIndex,
-					},
-					Done: false,
-				}, false, nil
-			}
-		}
-
+		return p.handleContentBlockStart(streamResp)
 	case "content_block_delta":
-		// Handle deltas for content blocks (text, tool arguments, or thinking)
-		if delta, ok := streamResp["delta"].(map[string]interface{}); ok {
-			deltaType, _ := delta["type"].(string)
-
-			switch deltaType {
-			case "text_delta":
-				// Extract text content
-				if text, ok := delta["text"].(string); ok {
-					return types.ChatCompletionChunk{
-						Content: text,
-						Done:    false,
-					}, false, nil
-				}
-
-			case "thinking_delta":
-				// Extract thinking content from Anthropic's extended thinking feature
-				if thinking, ok := delta["thinking"].(string); ok {
-					// Get content index from the event
-					contentIndex := p.currentContentIndex
-					if index, ok := streamResp["index"].(float64); ok {
-						contentIndex = int(index)
-					}
-					return types.ChatCompletionChunk{
-						ReasoningContent: thinking,
-						Metadata: map[string]interface{}{
-							"thinking_delta": true,
-							"content_index":  contentIndex,
-							"is_anthropic":   true, // Mark as genuine Anthropic thinking
-						},
-						Done: false,
-					}, false, nil
-				}
-
-			case "input_json_delta":
-				// Extract tool call arguments
-				if partialJSON, ok := delta["partial_json"].(string); ok {
-					return types.ChatCompletionChunk{
-						Choices: []types.ChatChoice{
-							{
-								Index: 0,
-								Delta: types.ChatMessage{
-									ToolCalls: []types.ToolCall{
-										{
-											ID:   p.currentToolCallID,
-											Type: "function",
-											Function: types.ToolCallFunction{
-												Name:      p.currentToolName,
-												Arguments: partialJSON,
-											},
-										},
-									},
-								},
-							},
-						},
-						Done: false,
-					}, false, nil
-				}
-			}
-		}
-
+		return p.handleContentBlockDelta(streamResp)
 	case "content_block_stop":
-		// Handle end of a content block (text, tool_use, or thinking)
-		// Reset thinking block state
-		if p.inThinkingBlock {
-			p.inThinkingBlock = false
-			// Get content index from the event
-			contentIndex := p.currentContentIndex
-			if index, ok := streamResp["index"].(float64); ok {
-				contentIndex = int(index)
-			}
-			return types.ChatCompletionChunk{
-				Metadata: map[string]interface{}{
-					"thinking_block_stop": true,
-					"content_index":       contentIndex,
-				},
-				Done: false,
-			}, false, nil
-		}
-		// For non-thinking blocks, just return empty chunk
-		return types.ChatCompletionChunk{}, false, nil
-
+		return p.handleContentBlockStop(streamResp)
 	case "message_delta":
-		// Handle message-level deltas (e.g., stop_reason)
-		if delta, ok := streamResp["delta"].(map[string]interface{}); ok {
-			if stopReason, ok := delta["stop_reason"].(string); ok {
-				// Map Anthropic stop reasons to OpenAI finish reasons
-				finishReason := mapAnthropicStopReason(stopReason)
-
-				return types.ChatCompletionChunk{
-					Choices: []types.ChatChoice{
-						{
-							Index:        0,
-							FinishReason: finishReason,
-						},
-					},
-					Done: false,
-				}, false, nil
-			}
-		}
-
+		return p.handleMessageDelta(streamResp)
 	case "message_stop":
-		// Message is complete
-		return types.ChatCompletionChunk{
-			Done:  true,
-			Usage: parseAnthropicUsage(streamResp),
-		}, true, nil
-
+		return p.handleMessageStop(streamResp)
 	case "error":
-		// Handle error events
-		if error, ok := streamResp["error"].(map[string]interface{}); ok {
-			if message, ok := error["message"].(string); ok {
-				return types.ChatCompletionChunk{
-					Error: message,
-					Done:  true,
-				}, true, fmt.Errorf("anthropic streaming error: %s", message)
-			}
-		}
+		return p.handleError(streamResp)
+	default:
+		return types.ChatCompletionChunk{}, false, nil
 	}
-
-	return types.ChatCompletionChunk{}, false, nil
 }
 
 // MockStream provides a mock implementation of ChatCompletionStream for testing

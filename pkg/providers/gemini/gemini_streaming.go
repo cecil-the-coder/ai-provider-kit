@@ -383,73 +383,12 @@ func (p *GeminiProvider) executeStreamingOAuthRequest(ctx context.Context, optio
 	}, nil
 }
 
-// makeStreamingAPICallWithAPIKey makes a streaming API call with API key
-func (p *GeminiProvider) makeStreamingAPICallWithAPIKey(ctx context.Context, options types.GenerateOptions, model string, apiKey string) (types.ChatCompletionStream, error) {
-	// Client-side rate limiting (Gemini doesn't provide proactive headers)
-	waitCtx, cancel := context.WithTimeout(ctx, time.Second*10)
-	defer cancel()
-
-	p.rateLimitMutex.RLock()
-	limiter := p.clientSideLimiter
-	p.rateLimitMutex.RUnlock()
-
-	if err := limiter.Wait(waitCtx); err != nil {
-		return nil, types.NewNetworkError(types.ProviderTypeGemini, "rate limit wait exceeded").
-			WithOperation("chat_completion_stream").
-			WithOriginalErr(err)
-	}
-
-	// Prepare request contents
-	var contents []Content
-
-	// Handle messages if provided
-	if len(options.Messages) > 0 {
-		contents = make([]Content, len(options.Messages))
-		for i, msg := range options.Messages {
-			// Use GetContentParts() helper for unified access
-			contentParts := msg.GetContentParts()
-			var parts []Part
-
-			if len(contentParts) > 0 {
-				// Convert multimodal content parts
-				parts = convertContentPartsToGeminiParts(contentParts)
-			} else {
-				// Fallback to string content (should not happen with GetContentParts)
-				parts = []Part{{Text: msg.Content}}
-			}
-
-			contents[i] = Content{
-				Role:  msg.Role,
-				Parts: parts,
-			}
-		}
-	} else if options.Prompt != "" {
-		// Convert prompt to user message
-		contents = append(contents, Content{
-			Role: "user",
-			Parts: []Part{
-				{Text: options.Prompt},
-			},
-		})
-	}
-
-	requestBody := GenerateContentRequest{
-		Contents: contents,
-		GenerationConfig: &GenerationConfig{
-			Temperature:     0.7,
-			TopP:            0.95,
-			TopK:            40,
-			MaxOutputTokens: 8192,
-		},
-	}
-
-	// Add tools if provided
-	if len(options.Tools) > 0 {
-		tools, err := convertToGeminiTools(options.Tools)
-		if err != nil {
-			return nil, err
-		}
-		requestBody.Tools = tools
+// prepareStreamingRequestBody prepares and marshals the request body for streaming API calls.
+func (p *GeminiProvider) prepareStreamingRequestBody(options types.GenerateOptions, model string) ([]byte, error) {
+	// Prepare standard request (reuse existing logic)
+	requestBody, err := p.prepareStandardRequest(options)
+	if err != nil {
+		return nil, err
 	}
 
 	// Check if using Code Assist backend - wrap request if needed
@@ -478,36 +417,12 @@ func (p *GeminiProvider) makeStreamingAPICallWithAPIKey(ctx context.Context, opt
 			WithOriginalErr(err)
 	}
 
-	// Use backend router to build the URL
-	url := p.backendRouter.BuildRequestURL(model, "streamGenerateContent", apiKey)
-	// Add SSE parameter
-	if !strings.Contains(url, "?") {
-		url += "?alt=sse"
-	} else {
-		url += "&alt=sse"
-	}
-	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonBody))
-	if err != nil {
-		return nil, types.NewInvalidRequestError(types.ProviderTypeGemini, "failed to create request").
-			WithOperation("chat_completion_stream").
-			WithOriginalErr(err)
-	}
+	return jsonBody, nil
+}
 
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("User-Agent", telemetry.GetUserAgent())
-
-	// Add X-Goog-Api-Key header if auth_method is "header"
-	if p.backendRouter.ShouldUseHeaderAuth() && apiKey != "" {
-		req.Header.Set("X-Goog-Api-Key", apiKey)
-	}
-
-	resp, err := p.httpClient.Do(ctx, req)
-	if err != nil {
-		return nil, types.NewNetworkError(types.ProviderTypeGemini, "request failed").
-			WithOperation("chat_completion_stream").
-			WithOriginalErr(err)
-	}
-
+// handleStreamingResponse processes the HTTP response for streaming API calls.
+// Returns the stream on success, or an error if the response indicates a failure.
+func (p *GeminiProvider) handleStreamingResponse(resp *http.Response, model string) (types.ChatCompletionStream, error) {
 	// Check for 429 status and parse retry-after
 	if resp.StatusCode == 429 {
 		body, _ := io.ReadAll(resp.Body)
@@ -538,6 +453,63 @@ func (p *GeminiProvider) makeStreamingAPICallWithAPIKey(ctx context.Context, opt
 		reader:   bufio.NewReader(resp.Body),
 		done:     false,
 	}, nil
+}
+
+// makeStreamingAPICallWithAPIKey makes a streaming API call with API key
+func (p *GeminiProvider) makeStreamingAPICallWithAPIKey(ctx context.Context, options types.GenerateOptions, model string, apiKey string) (types.ChatCompletionStream, error) {
+	// Apply rate limiting
+	if err := p.applyRateLimiting(ctx); err != nil {
+		return nil, types.NewNetworkError(types.ProviderTypeGemini, "rate limit wait exceeded").
+			WithOperation("chat_completion_stream").
+			WithOriginalErr(err)
+	}
+
+	// Prepare request body
+	jsonBody, err := p.prepareStreamingRequestBody(options, model)
+	if err != nil {
+		return nil, err
+	}
+
+	// Build streaming URL with SSE parameter
+	url := p.buildStreamingURL(model, apiKey)
+
+	// Create HTTP request
+	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonBody))
+	if err != nil {
+		return nil, types.NewInvalidRequestError(types.ProviderTypeGemini, "failed to create request").
+			WithOperation("chat_completion_stream").
+			WithOriginalErr(err)
+	}
+
+	// Set headers
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", telemetry.GetUserAgent())
+
+	// Add X-Goog-Api-Key header if auth_method is "header"
+	if p.backendRouter.ShouldUseHeaderAuth() && apiKey != "" {
+		req.Header.Set("X-Goog-Api-Key", apiKey)
+	}
+
+	// Execute request
+	resp, err := p.httpClient.Do(ctx, req)
+	if err != nil {
+		return nil, types.NewNetworkError(types.ProviderTypeGemini, "request failed").
+			WithOperation("chat_completion_stream").
+			WithOriginalErr(err)
+	}
+
+	return p.handleStreamingResponse(resp, model)
+}
+
+// buildStreamingURL builds the URL for streaming requests with SSE parameter.
+func (p *GeminiProvider) buildStreamingURL(model string, apiKey string) string {
+	url := p.backendRouter.BuildRequestURL(model, "streamGenerateContent", apiKey)
+	if !strings.Contains(url, "?") {
+		url += "?alt=sse"
+	} else {
+		url += "&alt=sse"
+	}
+	return url
 }
 
 // UpdateRateLimitTier adjusts client-side rate limits based on API tier.

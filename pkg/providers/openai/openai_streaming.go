@@ -29,6 +29,7 @@ func (p *OpenAIProvider) makeStreamingAPICall(ctx context.Context, requestData O
 // makeStreamingAPICallInternal is the internal implementation without GLM retry wrapper using shared executor
 func (p *OpenAIProvider) makeStreamingAPICallInternal(ctx context.Context, requestData OpenAIRequest, apiKey string) (types.ChatCompletionStream, error) {
 	requestData.Stream = true
+	requestData.StreamOptions = &StreamOptions{IncludeUsage: true}
 	url := p.baseURL + "/chat/completions"
 
 	// Use shared streaming executor

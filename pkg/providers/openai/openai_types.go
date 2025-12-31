@@ -11,6 +11,7 @@ type OpenAIRequest struct {
 	MaxTokens         int                    `json:"max_tokens,omitempty"`
 	Temperature       float64                `json:"temperature,omitempty"`
 	Stream            bool                   `json:"stream,omitempty"`
+	StreamOptions     *StreamOptions         `json:"stream_options,omitempty"`
 	TopP              float64                `json:"top_p,omitempty"`
 	Tools             []OpenAITool           `json:"tools,omitempty"`
 	ToolChoice        interface{}            `json:"tool_choice,omitempty"`
@@ -20,6 +21,11 @@ type OpenAIRequest struct {
 	ParallelToolCalls *bool                  `json:"parallel_tool_calls,omitempty"`
 	Thinking          map[string]interface{} `json:"thinking,omitempty"`         // For GLM-4.6, DeepSeek thinking mode
 	ReasoningEffort   string                 `json:"reasoning_effort,omitempty"` // For OpenAI o1/o3 models
+}
+
+// StreamOptions controls streaming behavior
+type StreamOptions struct {
+	IncludeUsage bool `json:"include_usage,omitempty"`
 }
 
 // OpenAITool represents a tool in the OpenAI API
