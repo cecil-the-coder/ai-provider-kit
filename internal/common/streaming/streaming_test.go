@@ -559,6 +559,81 @@ func TestAnthropicStreamParser(t *testing.T) {
 	}
 }
 
+func TestAnthropicStreamParser_ThinkingBlocks(t *testing.T) {
+	parser := NewAnthropicStreamParser()
+
+	// Test thinking block start
+	t.Run("thinking block start", func(t *testing.T) {
+		data := `{"type": "content_block_start", "index": 0, "content_block": {"type": "thinking"}}`
+		chunk, isDone, err := parser.ParseLine(data)
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+		if isDone {
+			t.Error("expected isDone=false")
+		}
+		if chunk.Metadata == nil {
+			t.Fatal("expected metadata to be set")
+		}
+		if _, ok := chunk.Metadata["thinking_block_start"]; !ok {
+			t.Error("expected thinking_block_start in metadata")
+		}
+		if chunk.Metadata["content_index"] != 0 {
+			t.Errorf("expected content_index=0, got %v", chunk.Metadata["content_index"])
+		}
+	})
+
+	// Test thinking delta
+	t.Run("thinking delta", func(t *testing.T) {
+		data := `{"type": "content_block_delta", "index": 0, "delta": {"type": "thinking_delta", "thinking": "Let me analyze this..."}}`
+		chunk, isDone, err := parser.ParseLine(data)
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+		if isDone {
+			t.Error("expected isDone=false")
+		}
+		if chunk.ReasoningContent != "Let me analyze this..." {
+			t.Errorf("expected ReasoningContent='Let me analyze this...', got %q", chunk.ReasoningContent)
+		}
+		if chunk.Metadata == nil {
+			t.Fatal("expected metadata to be set")
+		}
+		if _, ok := chunk.Metadata["thinking_delta"]; !ok {
+			t.Error("expected thinking_delta in metadata")
+		}
+		if isAnthropic, ok := chunk.Metadata["is_anthropic"].(bool); !ok || !isAnthropic {
+			t.Error("expected is_anthropic=true in metadata")
+		}
+	})
+
+	// Test content block stop for thinking
+	t.Run("thinking block stop", func(t *testing.T) {
+		// First, start a thinking block to set the state
+		parser.inThinkingBlock = true
+		parser.currentContentIndex = 0
+
+		data := `{"type": "content_block_stop", "index": 0}`
+		chunk, isDone, err := parser.ParseLine(data)
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+		if isDone {
+			t.Error("expected isDone=false")
+		}
+		if chunk.Metadata == nil {
+			t.Fatal("expected metadata to be set")
+		}
+		if _, ok := chunk.Metadata["thinking_block_stop"]; !ok {
+			t.Error("expected thinking_block_stop in metadata")
+		}
+		// Verify state was reset
+		if parser.inThinkingBlock {
+			t.Error("expected inThinkingBlock to be reset to false")
+		}
+	})
+}
+
 func TestContextAwareStream(t *testing.T) {
 	chunks := []types.ChatCompletionChunk{
 		{Content: "test"},

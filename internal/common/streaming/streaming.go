@@ -401,6 +401,8 @@ type AnthropicStreamParser struct {
 	currentToolCallID   string
 	currentToolName     string
 	currentContentIndex int
+	// State tracking for thinking blocks
+	inThinkingBlock bool
 }
 
 // NewAnthropicStreamParser creates a new Anthropic stream parser
@@ -449,11 +451,12 @@ func (p *AnthropicStreamParser) ParseLine(data string) (types.ChatCompletionChun
 
 	switch eventType {
 	case "content_block_start":
-		// Handle the start of a content block (text or tool_use)
+		// Handle the start of a content block (text, tool_use, or thinking)
 		if contentBlock, ok := streamResp["content_block"].(map[string]interface{}); ok {
 			blockType, _ := contentBlock["type"].(string)
 
-			if blockType == "tool_use" {
+			switch blockType {
+			case "tool_use":
 				// Extract tool call metadata
 				toolID, _ := contentBlock["id"].(string)
 				toolName, _ := contentBlock["name"].(string)
@@ -487,11 +490,28 @@ func (p *AnthropicStreamParser) ParseLine(data string) (types.ChatCompletionChun
 					},
 					Done: false,
 				}, false, nil
+
+			case "thinking":
+				// Mark that we're in a thinking block for subsequent deltas
+				p.inThinkingBlock = true
+				// Update content index
+				if index, ok := streamResp["index"].(float64); ok {
+					p.currentContentIndex = int(index)
+				}
+				// Return empty chunk to signal thinking block started
+				// The actual thinking content comes in thinking_delta events
+				return types.ChatCompletionChunk{
+					Metadata: map[string]interface{}{
+						"thinking_block_start": true,
+						"content_index":        p.currentContentIndex,
+					},
+					Done: false,
+				}, false, nil
 			}
 		}
 
 	case "content_block_delta":
-		// Handle deltas for content blocks (text or tool arguments)
+		// Handle deltas for content blocks (text, tool arguments, or thinking)
 		if delta, ok := streamResp["delta"].(map[string]interface{}); ok {
 			deltaType, _ := delta["type"].(string)
 
@@ -502,6 +522,25 @@ func (p *AnthropicStreamParser) ParseLine(data string) (types.ChatCompletionChun
 					return types.ChatCompletionChunk{
 						Content: text,
 						Done:    false,
+					}, false, nil
+				}
+
+			case "thinking_delta":
+				// Extract thinking content from Anthropic's extended thinking feature
+				if thinking, ok := delta["thinking"].(string); ok {
+					// Get content index from the event
+					contentIndex := p.currentContentIndex
+					if index, ok := streamResp["index"].(float64); ok {
+						contentIndex = int(index)
+					}
+					return types.ChatCompletionChunk{
+						ReasoningContent: thinking,
+						Metadata: map[string]interface{}{
+							"thinking_delta": true,
+							"content_index":  contentIndex,
+							"is_anthropic":   true, // Mark as genuine Anthropic thinking
+						},
+						Done: false,
 					}, false, nil
 				}
 
@@ -531,6 +570,27 @@ func (p *AnthropicStreamParser) ParseLine(data string) (types.ChatCompletionChun
 				}
 			}
 		}
+
+	case "content_block_stop":
+		// Handle end of a content block (text, tool_use, or thinking)
+		// Reset thinking block state
+		if p.inThinkingBlock {
+			p.inThinkingBlock = false
+			// Get content index from the event
+			contentIndex := p.currentContentIndex
+			if index, ok := streamResp["index"].(float64); ok {
+				contentIndex = int(index)
+			}
+			return types.ChatCompletionChunk{
+				Metadata: map[string]interface{}{
+					"thinking_block_stop": true,
+					"content_index":       contentIndex,
+				},
+				Done: false,
+			}, false, nil
+		}
+		// For non-thinking blocks, just return empty chunk
+		return types.ChatCompletionChunk{}, false, nil
 
 	case "message_delta":
 		// Handle message-level deltas (e.g., stop_reason)
