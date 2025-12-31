@@ -2,10 +2,367 @@ package gemini
 
 import (
 	"encoding/json"
+	"reflect"
 	"testing"
 
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 )
+
+func TestCleanSchemaForGemini(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    map[string]interface{}
+		expected map[string]interface{}
+	}{
+		{
+			name: "removes $ref",
+			input: map[string]interface{}{
+				"type": "object",
+				"$ref": "#/definitions/User",
+			},
+			expected: map[string]interface{}{
+				"type": "object",
+			},
+		},
+		{
+			name: "removes $defs",
+			input: map[string]interface{}{
+				"type": "object",
+				"$defs": map[string]interface{}{
+					"User": map[string]interface{}{
+						"type": "object",
+					},
+				},
+			},
+			expected: map[string]interface{}{
+				"type": "object",
+			},
+		},
+		{
+			name: "removes $schema and $id",
+			input: map[string]interface{}{
+				"$schema": "https://json-schema.org/draft/2020-12/schema",
+				"$id":     "https://example.com/schema",
+				"type":    "object",
+			},
+			expected: map[string]interface{}{
+				"type": "object",
+			},
+		},
+		{
+			name: "removes const, default, examples",
+			input: map[string]interface{}{
+				"type":     "string",
+				"const":    "fixed_value",
+				"default":  "default_value",
+				"examples": []interface{}{"example1", "example2"},
+			},
+			expected: map[string]interface{}{
+				"type": "string",
+			},
+		},
+		{
+			name: "removes nested title inside properties",
+			input: map[string]interface{}{
+				"type":  "object",
+				"title": "TopLevelTitle",
+				"properties": map[string]interface{}{
+					"name": map[string]interface{}{
+						"type":        "string",
+						"title":       "NestedTitle",
+						"description": "The name",
+					},
+				},
+			},
+			expected: map[string]interface{}{
+				"type":  "object",
+				"title": "TopLevelTitle",
+				"properties": map[string]interface{}{
+					"name": map[string]interface{}{
+						"type":        "string",
+						"description": "The name",
+					},
+				},
+			},
+		},
+		{
+			name: "recursively cleans nested properties",
+			input: map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"user": map[string]interface{}{
+						"type":    "object",
+						"default": map[string]interface{}{},
+						"properties": map[string]interface{}{
+							"email": map[string]interface{}{
+								"type":    "string",
+								"title":   "Email Title",
+								"default": "user@example.com",
+							},
+						},
+					},
+				},
+			},
+			expected: map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"user": map[string]interface{}{
+						"type": "object",
+						"properties": map[string]interface{}{
+							"email": map[string]interface{}{
+								"type": "string",
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "cleans items in arrays",
+			input: map[string]interface{}{
+				"type": "array",
+				"items": map[string]interface{}{
+					"type":    "string",
+					"default": "item",
+					"title":   "ItemTitle",
+				},
+			},
+			expected: map[string]interface{}{
+				"type": "array",
+				"items": map[string]interface{}{
+					"type":  "string",
+					"title": "ItemTitle",
+				},
+			},
+		},
+		{
+			name: "cleans anyOf schemas",
+			input: map[string]interface{}{
+				"anyOf": []interface{}{
+					map[string]interface{}{
+						"type":    "string",
+						"default": "str",
+					},
+					map[string]interface{}{
+						"type":    "number",
+						"default": 0,
+					},
+				},
+			},
+			expected: map[string]interface{}{
+				"anyOf": []interface{}{
+					map[string]interface{}{
+						"type": "string",
+					},
+					map[string]interface{}{
+						"type": "number",
+					},
+				},
+			},
+		},
+		{
+			name: "cleans allOf schemas",
+			input: map[string]interface{}{
+				"allOf": []interface{}{
+					map[string]interface{}{
+						"type":    "object",
+						"$ref":    "#/defs/Base",
+						"default": map[string]interface{}{},
+					},
+				},
+			},
+			expected: map[string]interface{}{
+				"allOf": []interface{}{
+					map[string]interface{}{
+						"type": "object",
+					},
+				},
+			},
+		},
+		{
+			name: "cleans oneOf schemas",
+			input: map[string]interface{}{
+				"oneOf": []interface{}{
+					map[string]interface{}{
+						"type":     "string",
+						"const":    "option1",
+						"examples": []interface{}{"ex1"},
+					},
+					map[string]interface{}{
+						"type":  "string",
+						"const": "option2",
+					},
+				},
+			},
+			expected: map[string]interface{}{
+				"oneOf": []interface{}{
+					map[string]interface{}{
+						"type": "string",
+					},
+					map[string]interface{}{
+						"type": "string",
+					},
+				},
+			},
+		},
+		{
+			name: "cleans additionalProperties",
+			input: map[string]interface{}{
+				"type": "object",
+				"additionalProperties": map[string]interface{}{
+					"type":    "string",
+					"default": "value",
+					"title":   "AdditionalTitle",
+				},
+			},
+			expected: map[string]interface{}{
+				"type": "object",
+				"additionalProperties": map[string]interface{}{
+					"type":  "string",
+					"title": "AdditionalTitle",
+				},
+			},
+		},
+		{
+			name: "preserves supported keywords",
+			input: map[string]interface{}{
+				"type":        "object",
+				"description": "A test object",
+				"properties": map[string]interface{}{
+					"count": map[string]interface{}{
+						"type":        "integer",
+						"description": "The count",
+						"minimum":     0,
+						"maximum":     100,
+					},
+					"status": map[string]interface{}{
+						"type": "string",
+						"enum": []interface{}{"active", "inactive"},
+					},
+				},
+				"required": []interface{}{"count"},
+			},
+			expected: map[string]interface{}{
+				"type":        "object",
+				"description": "A test object",
+				"properties": map[string]interface{}{
+					"count": map[string]interface{}{
+						"type":        "integer",
+						"description": "The count",
+						"minimum":     0,
+						"maximum":     100,
+					},
+					"status": map[string]interface{}{
+						"type": "string",
+						"enum": []interface{}{"active", "inactive"},
+					},
+				},
+				"required": []interface{}{"count"},
+			},
+		},
+		{
+			name:     "handles nil schema",
+			input:    nil,
+			expected: nil,
+		},
+		{
+			name:     "handles empty schema",
+			input:    map[string]interface{}{},
+			expected: map[string]interface{}{},
+		},
+		{
+			name: "complex nested schema with multiple unsupported keywords",
+			input: map[string]interface{}{
+				"$schema": "https://json-schema.org/draft/2020-12/schema",
+				"$id":     "https://example.com/user",
+				"type":    "object",
+				"title":   "User Schema",
+				"$defs": map[string]interface{}{
+					"Address": map[string]interface{}{
+						"type": "object",
+					},
+				},
+				"properties": map[string]interface{}{
+					"name": map[string]interface{}{
+						"type":     "string",
+						"title":    "Name Title",
+						"default":  "John Doe",
+						"examples": []interface{}{"Jane", "Bob"},
+					},
+					"address": map[string]interface{}{
+						"$ref": "#/$defs/Address",
+						"type": "object",
+						"properties": map[string]interface{}{
+							"city": map[string]interface{}{
+								"type":    "string",
+								"title":   "City Title",
+								"const":   "NYC",
+								"default": "New York",
+							},
+						},
+					},
+				},
+			},
+			expected: map[string]interface{}{
+				"type":  "object",
+				"title": "User Schema",
+				"properties": map[string]interface{}{
+					"name": map[string]interface{}{
+						"type": "string",
+					},
+					"address": map[string]interface{}{
+						"type": "object",
+						"properties": map[string]interface{}{
+							"city": map[string]interface{}{
+								"type": "string",
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := CleanSchemaForGemini(tt.input)
+
+			if !reflect.DeepEqual(result, tt.expected) {
+				resultJSON, _ := json.MarshalIndent(result, "", "  ")
+				expectedJSON, _ := json.MarshalIndent(tt.expected, "", "  ")
+				t.Errorf("CleanSchemaForGemini() =\n%s\nwant:\n%s", resultJSON, expectedJSON)
+			}
+		})
+	}
+}
+
+func TestCleanSchemaForGemini_DoesNotMutateOriginal(t *testing.T) {
+	original := map[string]interface{}{
+		"type":    "object",
+		"default": "test",
+		"properties": map[string]interface{}{
+			"name": map[string]interface{}{
+				"type":    "string",
+				"default": "John",
+				"title":   "Name",
+			},
+		},
+	}
+
+	// Make a deep copy for comparison
+	originalJSON, _ := json.Marshal(original)
+
+	// Clean the schema
+	_ = CleanSchemaForGemini(original)
+
+	// Verify original was not mutated
+	afterJSON, _ := json.Marshal(original)
+
+	if string(originalJSON) != string(afterJSON) {
+		t.Errorf("CleanSchemaForGemini mutated the original schema.\nBefore: %s\nAfter: %s",
+			string(originalJSON), string(afterJSON))
+	}
+}
 
 func TestConvertToGeminiTools(t *testing.T) {
 	tests := []struct {
@@ -573,5 +930,85 @@ func TestRoundTripConversion(t *testing.T) {
 
 	if string(originalJSON) != string(convertedJSON) {
 		t.Errorf("Arguments after round trip = %s, want %s", string(convertedJSON), string(originalJSON))
+	}
+}
+
+func TestConvertToGeminiTools_AutomaticallyCleansSchemasWithUnsupportedKeywords(t *testing.T) {
+	// Test that convertToGeminiTools automatically cleans schemas with unsupported keywords
+	toolsWithUnsupportedKeywords := []types.Tool{
+		{
+			Name:        "create_user",
+			Description: "Create a new user",
+			InputSchema: map[string]interface{}{
+				"$schema": "https://json-schema.org/draft/2020-12/schema",
+				"$id":     "https://example.com/user",
+				"type":    "object",
+				"$defs": map[string]interface{}{
+					"Email": map[string]interface{}{
+						"type": "string",
+					},
+				},
+				"properties": map[string]interface{}{
+					"name": map[string]interface{}{
+						"type":        "string",
+						"title":       "User Name",
+						"description": "The user's full name",
+						"default":     "John Doe",
+						"examples":    []interface{}{"Jane Smith", "Bob Wilson"},
+					},
+					"email": map[string]interface{}{
+						"$ref":        "#/$defs/Email",
+						"type":        "string",
+						"description": "The user's email address",
+						"const":       "test@example.com",
+					},
+				},
+				"required": []interface{}{"name", "email"},
+			},
+		},
+	}
+
+	result := convertToGeminiTools(toolsWithUnsupportedKeywords)
+
+	// Verify conversion succeeded
+	if len(result) != 1 {
+		t.Fatalf("Expected 1 GeminiTool, got %d", len(result))
+	}
+
+	if len(result[0].FunctionDeclarations) != 1 {
+		t.Fatalf("Expected 1 function declaration, got %d", len(result[0].FunctionDeclarations))
+	}
+
+	decl := result[0].FunctionDeclarations[0]
+
+	// Verify basic conversion
+	if decl.Name != "create_user" {
+		t.Errorf("Name = %s, want create_user", decl.Name)
+	}
+
+	if decl.Description != "Create a new user" {
+		t.Errorf("Description = %s, want 'Create a new user'", decl.Description)
+	}
+
+	// Verify properties exist and descriptions are preserved
+	nameProp, ok := decl.Parameters.Properties["name"]
+	if !ok {
+		t.Fatal("Expected 'name' property to exist")
+	}
+	if nameProp.Description != "The user's full name" {
+		t.Errorf("name description = %s, want 'The user's full name'", nameProp.Description)
+	}
+
+	emailProp, ok := decl.Parameters.Properties["email"]
+	if !ok {
+		t.Fatal("Expected 'email' property to exist")
+	}
+	if emailProp.Description != "The user's email address" {
+		t.Errorf("email description = %s, want 'The user's email address'", emailProp.Description)
+	}
+
+	// Verify required fields are preserved
+	if len(decl.Parameters.Required) != 2 {
+		t.Errorf("Expected 2 required fields, got %d", len(decl.Parameters.Required))
 	}
 }

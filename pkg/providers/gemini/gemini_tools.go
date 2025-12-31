@@ -8,7 +8,114 @@ import (
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 )
 
-// convertToGeminiTools converts universal tools to Gemini's function_declarations format
+// unsupportedSchemaKeywords contains JSON Schema keywords that Gemini does not support.
+// These will be removed from schemas before sending to the Gemini API.
+var unsupportedSchemaKeywords = map[string]bool{
+	"$ref":     true,
+	"$defs":    true,
+	"$schema":  true,
+	"$id":      true,
+	"const":    true,
+	"default":  true,
+	"examples": true,
+}
+
+// CleanSchemaForGemini removes unsupported JSON Schema keywords from a schema
+// before sending it to the Gemini API. It returns a cleaned copy without
+// mutating the original schema.
+//
+// The following keywords are removed:
+//   - $ref, $defs, $schema, $id (JSON Schema references/metadata)
+//   - const, default, examples (value constraints)
+//   - title fields nested inside properties (not supported by Gemini)
+//
+// The function recursively processes nested objects, arrays, and composition
+// keywords (anyOf, allOf, oneOf).
+func CleanSchemaForGemini(schema map[string]interface{}) map[string]interface{} {
+	return cleanSchemaRecursive(schema, false)
+}
+
+// cleanSchemaRecursive is the internal recursive implementation that tracks
+// whether we're inside a properties block (where title should be removed).
+func cleanSchemaRecursive(schema map[string]interface{}, insideProperties bool) map[string]interface{} {
+	if schema == nil {
+		return nil
+	}
+
+	cleaned := make(map[string]interface{})
+
+	for key, value := range schema {
+		// Skip unsupported keywords
+		if unsupportedSchemaKeywords[key] {
+			continue
+		}
+
+		// Skip title when inside properties (nested title not supported)
+		if key == "title" && insideProperties {
+			continue
+		}
+
+		// Handle nested structures
+		switch key {
+		case "properties":
+			if props, ok := value.(map[string]interface{}); ok {
+				cleanedProps := make(map[string]interface{})
+				for propName, propValue := range props {
+					if propMap, ok := propValue.(map[string]interface{}); ok {
+						cleanedProps[propName] = cleanSchemaRecursive(propMap, true)
+					} else {
+						cleanedProps[propName] = propValue
+					}
+				}
+				cleaned[key] = cleanedProps
+			} else {
+				cleaned[key] = value
+			}
+
+		case "items":
+			if itemsMap, ok := value.(map[string]interface{}); ok {
+				cleaned[key] = cleanSchemaRecursive(itemsMap, insideProperties)
+			} else {
+				cleaned[key] = value
+			}
+
+		case "anyOf", "allOf", "oneOf":
+			if arr, ok := value.([]interface{}); ok {
+				cleanedArr := make([]interface{}, 0, len(arr))
+				for _, item := range arr {
+					if itemMap, ok := item.(map[string]interface{}); ok {
+						cleanedArr = append(cleanedArr, cleanSchemaRecursive(itemMap, insideProperties))
+					} else {
+						cleanedArr = append(cleanedArr, item)
+					}
+				}
+				cleaned[key] = cleanedArr
+			} else {
+				cleaned[key] = value
+			}
+
+		case "additionalProperties":
+			if addPropsMap, ok := value.(map[string]interface{}); ok {
+				cleaned[key] = cleanSchemaRecursive(addPropsMap, insideProperties)
+			} else {
+				cleaned[key] = value
+			}
+
+		default:
+			// For other values, check if they're nested objects that might contain schemas
+			if nestedMap, ok := value.(map[string]interface{}); ok {
+				cleaned[key] = cleanSchemaRecursive(nestedMap, insideProperties)
+			} else {
+				cleaned[key] = value
+			}
+		}
+	}
+
+	return cleaned
+}
+
+// convertToGeminiTools converts universal tools to Gemini's function_declarations format.
+// It automatically cleans the input schemas to remove unsupported JSON Schema keywords.
 func convertToGeminiTools(tools []types.Tool) []GeminiTool {
 	if len(tools) == 0 {
 		return nil
@@ -16,10 +123,12 @@ func convertToGeminiTools(tools []types.Tool) []GeminiTool {
 
 	declarations := make([]GeminiFunctionDeclaration, len(tools))
 	for i, tool := range tools {
+		// Clean the schema before conversion to remove unsupported keywords
+		cleanedSchema := CleanSchemaForGemini(tool.InputSchema)
 		declarations[i] = GeminiFunctionDeclaration{
 			Name:        tool.Name,
 			Description: tool.Description,
-			Parameters:  convertToGeminiSchema(tool.InputSchema),
+			Parameters:  convertToGeminiSchema(cleanedSchema),
 		}
 	}
 

@@ -515,6 +515,7 @@ func (p *GeminiProvider) parseStandardGeminiResponse(responseBody []byte, _ stri
 			PromptTokens:     apiResp.UsageMetadata.PromptTokenCount,
 			CompletionTokens: apiResp.UsageMetadata.CandidatesTokenCount,
 			TotalTokens:      apiResp.UsageMetadata.TotalTokenCount,
+			ReasoningTokens:  apiResp.UsageMetadata.ThoughtsTokenCount, // Map Gemini thinking tokens to reasoning tokens
 		}
 	}
 
@@ -569,6 +570,7 @@ func (p *GeminiProvider) parseStandardGeminiResponseMessage(responseBody []byte,
 			PromptTokens:     apiResp.UsageMetadata.PromptTokenCount,
 			CompletionTokens: apiResp.UsageMetadata.CandidatesTokenCount,
 			TotalTokens:      apiResp.UsageMetadata.TotalTokenCount,
+			ReasoningTokens:  apiResp.UsageMetadata.ThoughtsTokenCount, // Map Gemini thinking tokens to reasoning tokens
 		}
 	}
 

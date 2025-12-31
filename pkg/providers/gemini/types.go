@@ -5,6 +5,7 @@ package gemini
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 )
@@ -221,6 +222,30 @@ type FunctionResponse struct {
 	Response map[string]interface{} `json:"response"`
 }
 
+// ThinkingLevel represents the level of thinking/reasoning for Gemini models
+type ThinkingLevel string
+
+const (
+	// ThinkingLevelLow is a low level of thinking/reasoning
+	ThinkingLevelLow ThinkingLevel = "low"
+	// ThinkingLevelMedium is a medium level of thinking/reasoning
+	ThinkingLevelMedium ThinkingLevel = "medium"
+	// ThinkingLevelHigh is a high level of thinking/reasoning
+	ThinkingLevelHigh ThinkingLevel = "high"
+)
+
+// ThinkingConfig represents configuration for Gemini's extended reasoning/thinking features
+// For Gemini 2.5 models, use ThinkingBudget (numeric token budget)
+// For Gemini 3 models, use ThinkingLevel (string: "low"/"medium"/"high")
+type ThinkingConfig struct {
+	// ThinkingLevel is used by Gemini 3 models ("low", "medium", "high")
+	ThinkingLevel ThinkingLevel `json:"thinkingLevel,omitempty"`
+	// ThinkingBudget is used by Gemini 2.5 models (numeric token budget)
+	ThinkingBudget int `json:"thinkingBudget,omitempty"`
+	// IncludeThoughts determines whether to include reasoning content in the response
+	IncludeThoughts bool `json:"includeThoughts,omitempty"`
+}
+
 // GenerationConfig represents generation configuration
 type GenerationConfig struct {
 	Temperature      float64                `json:"temperature,omitempty"`
@@ -229,6 +254,7 @@ type GenerationConfig struct {
 	MaxOutputTokens  int                    `json:"maxOutputTokens,omitempty"`
 	ResponseMimeType string                 `json:"responseMimeType,omitempty"` // For structured outputs
 	ResponseSchema   map[string]interface{} `json:"responseSchema,omitempty"`   // For structured outputs JSON schema
+	ThinkingConfig   *ThinkingConfig        `json:"thinkingConfig,omitempty"`   // Extended reasoning/thinking configuration
 }
 
 // GenerateContentResponse represents a response from generate content
@@ -249,6 +275,7 @@ type UsageMetadata struct {
 	PromptTokenCount     int `json:"promptTokenCount"`
 	CandidatesTokenCount int `json:"candidatesTokenCount"`
 	TotalTokenCount      int `json:"totalTokenCount"`
+	ThoughtsTokenCount   int `json:"thoughtsTokenCount,omitempty"` // Token count for thinking/reasoning content
 }
 
 // Safety Settings Types
@@ -948,4 +975,194 @@ type GetQuotaHistoryResponse struct {
 
 	// NextPageToken is a token for pagination
 	NextPageToken string `json:"nextPageToken,omitempty"`
+}
+
+// ============================================================================
+// Thinking Config Helper Functions
+// ============================================================================
+
+// ModelFamily represents the family/generation of a Gemini model
+type ModelFamily string
+
+const (
+	// ModelFamilyGemini25Pro is the Gemini 2.5 Pro model family
+	ModelFamilyGemini25Pro ModelFamily = "gemini-2.5-pro"
+	// ModelFamilyGemini25Flash is the Gemini 2.5 Flash model family
+	ModelFamilyGemini25Flash ModelFamily = "gemini-2.5-flash"
+	// ModelFamilyGemini3 is the Gemini 3 model family
+	ModelFamilyGemini3 ModelFamily = "gemini-3"
+	// ModelFamilyUnknown is for unrecognized model families
+	ModelFamilyUnknown ModelFamily = "unknown"
+)
+
+// thinkingBudgetDefaults defines default thinking budgets by model family and tier
+// These values are based on recommended defaults from the Gemini API documentation
+var thinkingBudgetDefaults = map[ModelFamily]map[ThinkingLevel]int{
+	ModelFamilyGemini25Pro: {
+		ThinkingLevelLow:    8192,
+		ThinkingLevelMedium: 16384,
+		ThinkingLevelHigh:   32768,
+	},
+	ModelFamilyGemini25Flash: {
+		ThinkingLevelLow:    6144,
+		ThinkingLevelMedium: 12288,
+		ThinkingLevelHigh:   24576,
+	},
+}
+
+// GetModelFamily determines the model family from a model name
+func GetModelFamily(modelName string) ModelFamily {
+	// Check for Gemini 3 models first (most specific)
+	if strings.HasPrefix(modelName, "gemini-3") {
+		return ModelFamilyGemini3
+	}
+
+	// Check for Gemini 2.5 Pro models
+	if strings.HasPrefix(modelName, "gemini-2.5-pro") {
+		return ModelFamilyGemini25Pro
+	}
+
+	// Check for Gemini 2.5 Flash models (including flash-lite variants)
+	if strings.HasPrefix(modelName, "gemini-2.5-flash") {
+		return ModelFamilyGemini25Flash
+	}
+
+	return ModelFamilyUnknown
+}
+
+// ParseThinkingTierFromModel extracts the thinking tier suffix from a model name.
+// For example, "gemini-2.5-pro-high" returns ThinkingLevelHigh, "gemini-2.5-flash-preview"
+// Supported suffixes: -low, -medium, -high
+// Returns empty string if no tier suffix is found.
+func ParseThinkingTierFromModel(modelName string) ThinkingLevel {
+	// Check for tier suffixes at the end of the model name
+	if strings.HasSuffix(modelName, "-low") {
+		return ThinkingLevelLow
+	}
+	if strings.HasSuffix(modelName, "-medium") {
+		return ThinkingLevelMedium
+	}
+	if strings.HasSuffix(modelName, "-high") {
+		return ThinkingLevelHigh
+	}
+	return ""
+}
+
+// StripThinkingTierFromModel removes the thinking tier suffix from a model name.
+// For example, "gemini-2.5-pro-high" returns "gemini-2.5-pro"
+// If no tier suffix is found, returns the original model name.
+func StripThinkingTierFromModel(modelName string) string {
+	suffixes := []string{"-low", "-medium", "-high"}
+	for _, suffix := range suffixes {
+		if strings.HasSuffix(modelName, suffix) {
+			return strings.TrimSuffix(modelName, suffix)
+		}
+	}
+	return modelName
+}
+
+// GetThinkingBudgetForModel returns the appropriate thinking budget for a given model and tier.
+// For Gemini 2.5 models, this returns a numeric token budget.
+// For Gemini 3 models, this returns 0 as they use thinkingLevel string instead.
+func GetThinkingBudgetForModel(modelName string, tier ThinkingLevel) int {
+	family := GetModelFamily(modelName)
+
+	// Gemini 3 uses thinkingLevel string, not numeric budget
+	if family == ModelFamilyGemini3 {
+		return 0
+	}
+
+	// Look up budget in defaults
+	familyDefaults, ok := thinkingBudgetDefaults[family]
+	if !ok {
+		return 0
+	}
+
+	budget, ok := familyDefaults[tier]
+	if !ok {
+		return 0
+	}
+
+	return budget
+}
+
+// NewThinkingConfigForModel creates a ThinkingConfig appropriate for the given model and tier.
+// For Gemini 2.5 models, it sets ThinkingBudget.
+// For Gemini 3 models, it sets ThinkingLevel.
+// The includeThoughts parameter determines whether reasoning content is included in the response.
+func NewThinkingConfigForModel(modelName string, tier ThinkingLevel, includeThoughts bool) *ThinkingConfig {
+	family := GetModelFamily(modelName)
+
+	config := &ThinkingConfig{
+		IncludeThoughts: includeThoughts,
+	}
+
+	if family == ModelFamilyGemini3 {
+		// Gemini 3 uses string-based thinkingLevel
+		config.ThinkingLevel = tier
+	} else {
+		// Gemini 2.5 uses numeric thinkingBudget
+		config.ThinkingBudget = GetThinkingBudgetForModel(modelName, tier)
+	}
+
+	return config
+}
+
+// SupportsThinking returns true if the model supports extended thinking/reasoning
+func SupportsThinking(modelName string) bool {
+	family := GetModelFamily(modelName)
+	return family == ModelFamilyGemini25Pro ||
+		family == ModelFamilyGemini25Flash ||
+		family == ModelFamilyGemini3
+}
+
+// UsesThinkingLevel returns true if the model uses string-based thinkingLevel (Gemini 3)
+// as opposed to numeric thinkingBudget (Gemini 2.5)
+func UsesThinkingLevel(modelName string) bool {
+	return GetModelFamily(modelName) == ModelFamilyGemini3
+}
+
+// UsesThinkingBudget returns true if the model uses numeric thinkingBudget (Gemini 2.5)
+// as opposed to string-based thinkingLevel (Gemini 3)
+func UsesThinkingBudget(modelName string) bool {
+	family := GetModelFamily(modelName)
+	return family == ModelFamilyGemini25Pro || family == ModelFamilyGemini25Flash
+}
+
+// ValidateThinkingConfig validates a ThinkingConfig for a given model.
+// Returns an error if the configuration is invalid for the model.
+func ValidateThinkingConfig(modelName string, config *ThinkingConfig) error {
+	if config == nil {
+		return nil
+	}
+
+	family := GetModelFamily(modelName)
+
+	// Check if model supports thinking at all
+	if !SupportsThinking(modelName) {
+		return fmt.Errorf("model %s does not support thinking configuration", modelName)
+	}
+
+	// Validate Gemini 3 uses thinkingLevel, not thinkingBudget
+	if family == ModelFamilyGemini3 {
+		if config.ThinkingBudget > 0 {
+			return fmt.Errorf("gemini 3 models use thinkingLevel, not thinkingBudget; use ThinkingLevel instead")
+		}
+		if config.ThinkingLevel != "" && config.ThinkingLevel != ThinkingLevelLow &&
+			config.ThinkingLevel != ThinkingLevelMedium && config.ThinkingLevel != ThinkingLevelHigh {
+			return fmt.Errorf("invalid thinkingLevel %q: must be 'low', 'medium', or 'high'", config.ThinkingLevel)
+		}
+	}
+
+	// Validate Gemini 2.5 uses thinkingBudget, not thinkingLevel
+	if family == ModelFamilyGemini25Pro || family == ModelFamilyGemini25Flash {
+		if config.ThinkingLevel != "" {
+			return fmt.Errorf("gemini 2.5 models use thinkingBudget, not thinkingLevel; use ThinkingBudget instead")
+		}
+		if config.ThinkingBudget < 0 {
+			return fmt.Errorf("thinkingBudget must be non-negative")
+		}
+	}
+
+	return nil
 }

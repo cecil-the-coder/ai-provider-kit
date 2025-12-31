@@ -84,6 +84,7 @@ func (s *GeminiStream) Next() (types.ChatCompletionChunk, error) {
 						PromptTokens:     streamResp.UsageMetadata.PromptTokenCount,
 						CompletionTokens: streamResp.UsageMetadata.CandidatesTokenCount,
 						TotalTokens:      streamResp.UsageMetadata.TotalTokenCount,
+						ReasoningTokens:  streamResp.UsageMetadata.ThoughtsTokenCount, // Map Gemini thinking tokens to reasoning tokens
 					}
 				}
 
