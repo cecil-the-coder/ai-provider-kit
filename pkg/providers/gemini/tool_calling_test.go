@@ -3,6 +3,7 @@ package gemini
 import (
 	"encoding/json"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
@@ -487,7 +488,10 @@ func TestConvertToGeminiTools(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := convertToGeminiTools(tt.tools)
+			result, err := convertToGeminiTools(tt.tools)
+			if err != nil {
+				t.Fatalf("convertToGeminiTools() returned unexpected error: %v", err)
+			}
 
 			// Compare as JSON to handle complex structures
 			expectedJSON, err := json.Marshal(tt.expected)
@@ -876,7 +880,10 @@ func TestRoundTripConversion(t *testing.T) {
 	}
 
 	// Convert to Gemini format
-	geminiTools := convertToGeminiTools(originalTools)
+	geminiTools, err := convertToGeminiTools(originalTools)
+	if err != nil {
+		t.Fatalf("convertToGeminiTools() returned unexpected error: %v", err)
+	}
 
 	// Verify structure
 	if len(geminiTools) != 1 {
@@ -968,7 +975,10 @@ func TestConvertToGeminiTools_AutomaticallyCleansSchemasWithUnsupportedKeywords(
 		},
 	}
 
-	result := convertToGeminiTools(toolsWithUnsupportedKeywords)
+	result, err := convertToGeminiTools(toolsWithUnsupportedKeywords)
+	if err != nil {
+		t.Fatalf("convertToGeminiTools() returned unexpected error: %v", err)
+	}
 
 	// Verify conversion succeeded
 	if len(result) != 1 {
@@ -1010,5 +1020,230 @@ func TestConvertToGeminiTools_AutomaticallyCleansSchemasWithUnsupportedKeywords(
 	// Verify required fields are preserved
 	if len(decl.Parameters.Required) != 2 {
 		t.Errorf("Expected 2 required fields, got %d", len(decl.Parameters.Required))
+	}
+}
+
+func TestValidateGeminiFunctionName(t *testing.T) {
+	tests := []struct {
+		name         string
+		functionName string
+		wantErr      bool
+	}{
+		// Valid names
+		{
+			name:         "valid underscore name",
+			functionName: "get_weather",
+			wantErr:      false,
+		},
+		{
+			name:         "valid camelCase name",
+			functionName: "myTool",
+			wantErr:      false,
+		},
+		{
+			name:         "valid starts with underscore",
+			functionName: "_private",
+			wantErr:      false,
+		},
+		{
+			name:         "valid with colon namespace",
+			functionName: "namespace:action",
+			wantErr:      false,
+		},
+		{
+			name:         "valid with dots",
+			functionName: "my.tool.name",
+			wantErr:      false,
+		},
+		{
+			name:         "valid with dash",
+			functionName: "my-tool",
+			wantErr:      false,
+		},
+		{
+			name:         "valid single letter",
+			functionName: "a",
+			wantErr:      false,
+		},
+		{
+			name:         "valid single underscore",
+			functionName: "_",
+			wantErr:      false,
+		},
+		{
+			name:         "valid complex name",
+			functionName: "_my.complex-tool:v2_action",
+			wantErr:      false,
+		},
+		// Invalid names
+		{
+			name:         "invalid starts with number",
+			functionName: "123start",
+			wantErr:      true,
+		},
+		{
+			name:         "invalid contains space",
+			functionName: "has space",
+			wantErr:      true,
+		},
+		{
+			name:         "invalid contains slash",
+			functionName: "has/slash",
+			wantErr:      true,
+		},
+		{
+			name:         "invalid empty string",
+			functionName: "",
+			wantErr:      true,
+		},
+		{
+			name:         "invalid special character",
+			functionName: "special@char",
+			wantErr:      true,
+		},
+		{
+			name:         "invalid starts with dash",
+			functionName: "-invalid",
+			wantErr:      true,
+		},
+		{
+			name:         "invalid starts with dot",
+			functionName: ".invalid",
+			wantErr:      true,
+		},
+		{
+			name:         "invalid starts with colon",
+			functionName: ":invalid",
+			wantErr:      true,
+		},
+		{
+			name:         "invalid contains asterisk",
+			functionName: "has*star",
+			wantErr:      true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateGeminiFunctionName(tt.functionName)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("ValidateGeminiFunctionName(%q) error = %v, wantErr %v", tt.functionName, err, tt.wantErr)
+			}
+
+			// Verify error message includes the invalid name
+			if err != nil && tt.functionName != "" {
+				if !strings.Contains(err.Error(), tt.functionName) {
+					t.Errorf("ValidateGeminiFunctionName(%q) error message should contain the invalid name, got: %v", tt.functionName, err)
+				}
+			}
+		})
+	}
+}
+
+func TestConvertToGeminiTools_RejectsInvalidFunctionNames(t *testing.T) {
+	tests := []struct {
+		name        string
+		toolName    string
+		wantErr     bool
+		errContains string
+	}{
+		{
+			name:     "valid name accepted",
+			toolName: "get_weather",
+			wantErr:  false,
+		},
+		{
+			name:        "invalid name with space rejected",
+			toolName:    "has space",
+			wantErr:     true,
+			errContains: "has space",
+		},
+		{
+			name:        "invalid name with slash rejected",
+			toolName:    "has/slash",
+			wantErr:     true,
+			errContains: "has/slash",
+		},
+		{
+			name:        "invalid name starting with number rejected",
+			toolName:    "123start",
+			wantErr:     true,
+			errContains: "123start",
+		},
+		{
+			name:        "empty name rejected",
+			toolName:    "",
+			wantErr:     true,
+			errContains: "cannot be empty",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tools := []types.Tool{
+				{
+					Name:        tt.toolName,
+					Description: "Test tool",
+					InputSchema: map[string]interface{}{
+						"type": "object",
+					},
+				},
+			}
+
+			result, err := convertToGeminiTools(tools)
+
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("convertToGeminiTools() expected error for tool name %q, got nil", tt.toolName)
+				} else if !strings.Contains(err.Error(), tt.errContains) {
+					t.Errorf("convertToGeminiTools() error = %v, expected to contain %q", err, tt.errContains)
+				}
+				if result != nil {
+					t.Errorf("convertToGeminiTools() expected nil result on error, got %v", result)
+				}
+			} else {
+				if err != nil {
+					t.Errorf("convertToGeminiTools() unexpected error = %v", err)
+				}
+				if result == nil {
+					t.Error("convertToGeminiTools() expected non-nil result")
+				}
+			}
+		})
+	}
+}
+
+func TestConvertToGeminiTools_RejectsFirstInvalidName(t *testing.T) {
+	// Test that the first invalid name in a list of tools causes the error
+	tools := []types.Tool{
+		{
+			Name:        "valid_tool",
+			Description: "Valid tool",
+			InputSchema: map[string]interface{}{"type": "object"},
+		},
+		{
+			Name:        "invalid/tool",
+			Description: "Invalid tool",
+			InputSchema: map[string]interface{}{"type": "object"},
+		},
+		{
+			Name:        "another_valid",
+			Description: "Another valid tool",
+			InputSchema: map[string]interface{}{"type": "object"},
+		},
+	}
+
+	result, err := convertToGeminiTools(tools)
+
+	if err == nil {
+		t.Error("convertToGeminiTools() expected error for invalid tool name, got nil")
+	}
+
+	if result != nil {
+		t.Errorf("convertToGeminiTools() expected nil result on error, got %v", result)
+	}
+
+	if !strings.Contains(err.Error(), "invalid/tool") {
+		t.Errorf("convertToGeminiTools() error should mention the invalid name 'invalid/tool', got: %v", err)
 	}
 }

@@ -31,6 +31,7 @@ type GeminiProvider struct {
 	clientSideLimiter *rate.Limiter
 	backendRouter     *BackendRouter    // Backend router for Gemini API vs Vertex AI
 	codeAssist        *CodeAssistClient // Code Assist API client (only for BackendCodeAssist)
+	dualQuotaManager  *DualQuotaManager // Dual quota manager for header style fallback (Code Assist only)
 }
 
 // Name returns the display name of the provider
@@ -559,4 +560,59 @@ func (p *GeminiProvider) SupportsQuotaHistory() bool {
 
 	// Check if Code Assist client is available and has OAuth token
 	return p.codeAssist != nil && p.codeAssist.SupportsQuotaHistory()
+}
+
+// ============================================================================
+// Dual Quota Manager Interface
+// ============================================================================
+
+// GetDualQuotaStatus returns the current status of the dual quota manager.
+// This includes information about which header style is active, rate limit states,
+// and whether fallback is enabled.
+//
+// Returns nil if dual quota management is not enabled (non-Code Assist backends).
+func (p *GeminiProvider) GetDualQuotaStatus() map[string]interface{} {
+	if p.dualQuotaManager == nil {
+		return nil
+	}
+	return p.dualQuotaManager.GetStatus()
+}
+
+// SetDualQuotaPreferredStyle sets the preferred header style for Code Assist requests.
+// The preferred style is used first, with fallback to the alternate style on rate limits.
+//
+// This has no effect for non-Code Assist backends.
+func (p *GeminiProvider) SetDualQuotaPreferredStyle(style HeaderStyle) {
+	if p.dualQuotaManager != nil {
+		p.dualQuotaManager.SetPreferredStyle(style)
+	}
+}
+
+// SetDualQuotaFallbackEnabled enables or disables automatic fallback to alternate
+// header styles when rate limited.
+//
+// When enabled (default), the provider automatically tries an alternate header style
+// if the preferred style receives a 429 rate limit error.
+//
+// This has no effect for non-Code Assist backends.
+func (p *GeminiProvider) SetDualQuotaFallbackEnabled(enabled bool) {
+	if p.dualQuotaManager != nil {
+		p.dualQuotaManager.SetFallbackEnabled(enabled)
+	}
+}
+
+// ResetDualQuotaState clears all rate limit tracking state and resets to default.
+// This can be useful after a period of inactivity or when rate limits have expired.
+//
+// This has no effect for non-Code Assist backends.
+func (p *GeminiProvider) ResetDualQuotaState() {
+	if p.dualQuotaManager != nil {
+		p.dualQuotaManager.Reset()
+	}
+}
+
+// IsDualQuotaEnabled returns true if dual quota management is enabled.
+// This is true when using the Code Assist backend.
+func (p *GeminiProvider) IsDualQuotaEnabled() bool {
+	return p.dualQuotaManager != nil
 }

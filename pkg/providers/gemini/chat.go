@@ -139,7 +139,10 @@ func (p *GeminiProvider) makeAPICallWithAPIKeyMessage(ctx context.Context, optio
 	model = p.resolveModel(model, options)
 
 	// Prepare request for standard Gemini API
-	requestBody := p.prepareStandardRequest(options)
+	requestBody, err := p.prepareStandardRequest(options)
+	if err != nil {
+		return types.ChatMessage{}, nil, err
+	}
 
 	// Execute API call
 	responseBody, err := p.executeStandardAPIRequest(ctx, model, apiKey, requestBody)
@@ -169,7 +172,7 @@ func (p *GeminiProvider) resolveModel(_ string, options types.GenerateOptions) s
 }
 
 // prepareStandardRequest prepares request body for standard Gemini API
-func (p *GeminiProvider) prepareStandardRequest(options types.GenerateOptions) GenerateContentRequest {
+func (p *GeminiProvider) prepareStandardRequest(options types.GenerateOptions) (GenerateContentRequest, error) {
 	var contents []Content
 
 	// Handle messages if provided
@@ -232,10 +235,14 @@ func (p *GeminiProvider) prepareStandardRequest(options types.GenerateOptions) G
 
 	// Add tools if provided
 	if len(options.Tools) > 0 {
-		requestBody.Tools = convertToGeminiTools(options.Tools)
+		tools, err := convertToGeminiTools(options.Tools)
+		if err != nil {
+			return GenerateContentRequest{}, err
+		}
+		requestBody.Tools = tools
 	}
 
-	return requestBody
+	return requestBody, nil
 }
 
 // wrapForCodeAssist wraps a GenerateContentRequest in the Code Assist API format
@@ -371,10 +378,72 @@ func (p *GeminiProvider) executeStandardAPIRequest(ctx context.Context, model st
 	return responseBody, nil
 }
 
-// makeStandardAPICallWithOAuth executes a non-streaming standard Gemini API request with OAuth
+// makeStandardAPICallWithOAuth executes a non-streaming standard Gemini API request with OAuth.
+// For Code Assist backend, it uses the dual quota manager to apply header styles and handle fallback.
 func (p *GeminiProvider) makeStandardAPICallWithOAuth(ctx context.Context, model string, accessToken string, options types.GenerateOptions) ([]byte, error) {
+	// For Code Assist backend with dual quota manager, use header style fallback
+	if p.backendRouter.GetBackend() == BackendCodeAssist && p.dualQuotaManager != nil {
+		return p.executeCodeAssistRequestWithFallback(ctx, model, accessToken, options)
+	}
+
+	// Non-Code Assist path - use standard request execution
+	return p.executeOAuthRequest(ctx, model, accessToken, options, HeaderStyleAntigravity)
+}
+
+// executeCodeAssistRequestWithFallback executes a Code Assist request with header style fallback.
+// If the first style gets rate limited, it tries the alternate style.
+func (p *GeminiProvider) executeCodeAssistRequestWithFallback(ctx context.Context, model string, accessToken string, options types.GenerateOptions) ([]byte, error) {
+	// Get the active header style from the dual quota manager
+	activeStyle := p.dualQuotaManager.GetActiveStyle()
+
+	// Try the active style first
+	responseBody, err := p.executeOAuthRequest(ctx, model, accessToken, options, activeStyle)
+	if err == nil {
+		// Success - record it
+		p.dualQuotaManager.RecordSuccess(activeStyle)
+		return responseBody, nil
+	}
+
+	// Check if this is a rate limit error and we should try alternate style
+	if isRateLimitError(err) {
+		// Record the rate limit for the current style
+		retryAfter := extractRetryAfter(err)
+		p.dualQuotaManager.RecordRateLimit(activeStyle, retryAfter)
+
+		// Check if we should try the alternate style
+		if p.dualQuotaManager.ShouldTryAlternateStyle(activeStyle) {
+			alternateStyle := p.dualQuotaManager.GetAlternateStyle(activeStyle)
+
+			// Try the alternate style
+			responseBody, altErr := p.executeOAuthRequest(ctx, model, accessToken, options, alternateStyle)
+			if altErr == nil {
+				// Success with alternate style - record it
+				p.dualQuotaManager.RecordSuccess(alternateStyle)
+				return responseBody, nil
+			}
+
+			// If alternate also failed with rate limit, record it
+			if isRateLimitError(altErr) {
+				altRetryAfter := extractRetryAfter(altErr)
+				p.dualQuotaManager.RecordRateLimit(alternateStyle, altRetryAfter)
+			}
+
+			// Return the alternate error (could be different from original)
+			return nil, altErr
+		}
+	}
+
+	// Return the original error if no fallback was attempted or fallback conditions not met
+	return nil, err
+}
+
+// executeOAuthRequest executes a single OAuth request with the specified header style.
+func (p *GeminiProvider) executeOAuthRequest(ctx context.Context, model string, accessToken string, options types.GenerateOptions, headerStyle HeaderStyle) ([]byte, error) {
 	// Prepare standard request
-	requestBody := p.prepareStandardRequest(options)
+	requestBody, err := p.prepareStandardRequest(options)
+	if err != nil {
+		return nil, err
+	}
 
 	// Check if using Code Assist backend - wrap request if needed
 	var requestToMarshal interface{}
@@ -416,14 +485,22 @@ func (p *GeminiProvider) makeStandardAPICallWithOAuth(ctx context.Context, model
 			WithOriginalErr(err)
 	}
 
-	// Set headers with OAuth bearer token
+	// Set standard headers
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("User-Agent", telemetry.GetUserAgent())
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", accessToken))
+
+	// Apply header style for Code Assist backend
+	if p.backendRouter.GetBackend() == BackendCodeAssist {
+		ApplyHeaderStyle(req, headerStyle)
+	} else {
+		// Use default telemetry user agent for non-Code Assist
+		req.Header.Set("User-Agent", telemetry.GetUserAgent())
+	}
 
 	p.LogRequest("POST", url, map[string]string{
 		"Content-Type":  "application/json",
 		"Authorization": "***",
+		"Header-Style":  string(headerStyle),
 	}, requestBody)
 
 	// Make the request
@@ -466,6 +543,33 @@ func (p *GeminiProvider) makeStandardAPICallWithOAuth(ctx context.Context, model
 	}
 
 	return responseBody, nil
+}
+
+// isRateLimitError checks if an error is a rate limit error.
+func isRateLimitError(err error) bool {
+	if err == nil {
+		return false
+	}
+	// Check for ProviderError with rate limit status code
+	if providerErr, ok := err.(*types.ProviderError); ok {
+		return providerErr.Code == types.ErrCodeRateLimit
+	}
+	return false
+}
+
+// extractRetryAfter extracts the retry-after duration from a rate limit error.
+func extractRetryAfter(err error) time.Duration {
+	if err == nil {
+		return 0
+	}
+	// Check for ProviderError with RetryAfter field
+	if providerErr, ok := err.(*types.ProviderError); ok {
+		if providerErr.RetryAfter > 0 {
+			return time.Duration(providerErr.RetryAfter) * time.Second
+		}
+	}
+	// Default to 60 seconds if we can't extract
+	return 60 * time.Second
 }
 
 // parseStandardGeminiResponse parses a standard Gemini API response

@@ -98,14 +98,17 @@ func NewGeminiProvider(config types.ProviderConfig) *GeminiProvider {
 	}
 	backendRouter := NewBackendRouter(clientConfig)
 
-	// Initialize CodeAssistClient if using BackendCodeAssist
+	// Initialize CodeAssistClient and DualQuotaManager if using BackendCodeAssist
 	var codeAssistClient *CodeAssistClient
+	var dualQuotaManager *DualQuotaManager
 	if backendRouter.GetBackend() == BackendCodeAssist {
 		// Get OAuth token from auth helper for Code Assist API
 		creds := result.AuthHelper.OAuthManager.GetCredentials()
 		if len(creds) > 0 {
 			codeAssistClient = NewCodeAssistClient(result.HTTPClient, creds[0].AccessToken)
 		}
+		// Initialize dual quota manager for header style fallback
+		dualQuotaManager = NewDualQuotaManager()
 	}
 
 	provider := &GeminiProvider{
@@ -121,6 +124,7 @@ func NewGeminiProvider(config types.ProviderConfig) *GeminiProvider {
 		clientSideLimiter: rate.NewLimiter(rate.Every(time.Minute/15), 15),
 		backendRouter:     backendRouter,
 		codeAssist:        codeAssistClient,
+		dualQuotaManager:  dualQuotaManager,
 	}
 
 	// Set project ID if available
@@ -220,14 +224,19 @@ func (p *GeminiProvider) Configure(config types.ProviderConfig) error {
 	}
 	p.backendRouter = NewBackendRouter(clientConfig)
 
-	// Reinitialize CodeAssistClient if using BackendCodeAssist
+	// Reinitialize CodeAssistClient and DualQuotaManager if using BackendCodeAssist
 	if p.backendRouter.GetBackend() == BackendCodeAssist {
 		creds := p.authHelper.OAuthManager.GetCredentials()
 		if len(creds) > 0 {
 			p.codeAssist = NewCodeAssistClient(p.client, creds[0].AccessToken)
 		}
+		// Initialize or keep existing dual quota manager
+		if p.dualQuotaManager == nil {
+			p.dualQuotaManager = NewDualQuotaManager()
+		}
 	} else {
 		p.codeAssist = nil
+		p.dualQuotaManager = nil
 	}
 
 	return p.BaseProvider.Configure(mergedConfig)

@@ -4,9 +4,35 @@ package gemini
 import (
 	"encoding/json"
 	"fmt"
+	"regexp"
 
 	"github.com/cecil-the-coder/ai-provider-kit/pkg/types"
 )
+
+// geminiFunctionNamePattern defines the valid pattern for Gemini function names.
+// Names must start with a letter or underscore, followed by letters, numbers,
+// underscores, dots, colons, or dashes.
+var geminiFunctionNamePattern = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_.\-:]*$`)
+
+// ValidateGeminiFunctionName checks if a function name is valid for the Gemini API.
+// Valid names must:
+//   - Start with a letter (a-z, A-Z) or underscore (_)
+//   - Contain only letters, numbers, underscores, dots, colons, or dashes
+//   - Not be empty
+//   - Not contain slashes, spaces, or other special characters
+//
+// Returns nil if the name is valid, or an error describing the validation failure.
+func ValidateGeminiFunctionName(name string) error {
+	if name == "" {
+		return fmt.Errorf("gemini function name cannot be empty")
+	}
+
+	if !geminiFunctionNamePattern.MatchString(name) {
+		return fmt.Errorf("invalid gemini function name %q: must start with a letter or underscore and contain only letters, numbers, underscores, dots, colons, or dashes", name)
+	}
+
+	return nil
+}
 
 // unsupportedSchemaKeywords contains JSON Schema keywords that Gemini does not support.
 // These will be removed from schemas before sending to the Gemini API.
@@ -116,13 +142,19 @@ func cleanSchemaRecursive(schema map[string]interface{}, insideProperties bool) 
 
 // convertToGeminiTools converts universal tools to Gemini's function_declarations format.
 // It automatically cleans the input schemas to remove unsupported JSON Schema keywords.
-func convertToGeminiTools(tools []types.Tool) []GeminiTool {
+// Returns an error if any tool has an invalid function name.
+func convertToGeminiTools(tools []types.Tool) ([]GeminiTool, error) {
 	if len(tools) == 0 {
-		return nil
+		return nil, nil
 	}
 
 	declarations := make([]GeminiFunctionDeclaration, len(tools))
 	for i, tool := range tools {
+		// Validate function name before conversion
+		if err := ValidateGeminiFunctionName(tool.Name); err != nil {
+			return nil, err
+		}
+
 		// Clean the schema before conversion to remove unsupported keywords
 		cleanedSchema := CleanSchemaForGemini(tool.InputSchema)
 		declarations[i] = GeminiFunctionDeclaration{
@@ -136,7 +168,7 @@ func convertToGeminiTools(tools []types.Tool) []GeminiTool {
 		{
 			FunctionDeclarations: declarations,
 		},
-	}
+	}, nil
 }
 
 // convertToGeminiSchema converts a JSON schema to Gemini's schema format

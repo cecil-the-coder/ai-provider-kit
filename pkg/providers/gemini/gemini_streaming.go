@@ -209,13 +209,67 @@ func (p *GeminiProvider) wrapStreamingRequestForCodeAssist(requestBody GenerateC
 	}, nil
 }
 
-// makeStreamingAPICallWithToken makes a streaming API call with OAuth token using the standard API
+// makeStreamingAPICallWithToken makes a streaming API call with OAuth token using the standard API.
+// For Code Assist backend, it uses the dual quota manager to apply header styles and handle fallback.
 func (p *GeminiProvider) makeStreamingAPICallWithToken(ctx context.Context, options types.GenerateOptions, model string, accessToken string) (types.ChatCompletionStream, error) {
-	return p.makeStreamingStandardAPICallWithOAuth(ctx, options, model, accessToken)
+	// For Code Assist backend with dual quota manager, use header style fallback
+	if p.backendRouter.GetBackend() == BackendCodeAssist && p.dualQuotaManager != nil {
+		return p.executeStreamingCodeAssistRequestWithFallback(ctx, options, model, accessToken)
+	}
+
+	// Non-Code Assist path - use standard streaming request
+	return p.executeStreamingOAuthRequest(ctx, options, model, accessToken, HeaderStyleAntigravity)
 }
 
-// makeStreamingStandardAPICallWithOAuth makes a streaming API call to the standard Gemini API with OAuth
-func (p *GeminiProvider) makeStreamingStandardAPICallWithOAuth(ctx context.Context, options types.GenerateOptions, model string, accessToken string) (types.ChatCompletionStream, error) {
+// executeStreamingCodeAssistRequestWithFallback executes a Code Assist streaming request with header style fallback.
+// If the first style gets rate limited, it tries the alternate style.
+func (p *GeminiProvider) executeStreamingCodeAssistRequestWithFallback(ctx context.Context, options types.GenerateOptions, model string, accessToken string) (types.ChatCompletionStream, error) {
+	// Get the active header style from the dual quota manager
+	activeStyle := p.dualQuotaManager.GetActiveStyle()
+
+	// Try the active style first
+	stream, err := p.executeStreamingOAuthRequest(ctx, options, model, accessToken, activeStyle)
+	if err == nil {
+		// Success - record it
+		p.dualQuotaManager.RecordSuccess(activeStyle)
+		return stream, nil
+	}
+
+	// Check if this is a rate limit error and we should try alternate style
+	if isRateLimitError(err) {
+		// Record the rate limit for the current style
+		retryAfter := extractRetryAfter(err)
+		p.dualQuotaManager.RecordRateLimit(activeStyle, retryAfter)
+
+		// Check if we should try the alternate style
+		if p.dualQuotaManager.ShouldTryAlternateStyle(activeStyle) {
+			alternateStyle := p.dualQuotaManager.GetAlternateStyle(activeStyle)
+
+			// Try the alternate style
+			stream, altErr := p.executeStreamingOAuthRequest(ctx, options, model, accessToken, alternateStyle)
+			if altErr == nil {
+				// Success with alternate style - record it
+				p.dualQuotaManager.RecordSuccess(alternateStyle)
+				return stream, nil
+			}
+
+			// If alternate also failed with rate limit, record it
+			if isRateLimitError(altErr) {
+				altRetryAfter := extractRetryAfter(altErr)
+				p.dualQuotaManager.RecordRateLimit(alternateStyle, altRetryAfter)
+			}
+
+			// Return the alternate error (could be different from original)
+			return nil, altErr
+		}
+	}
+
+	// Return the original error if no fallback was attempted or fallback conditions not met
+	return nil, err
+}
+
+// executeStreamingOAuthRequest executes a single streaming OAuth request with the specified header style.
+func (p *GeminiProvider) executeStreamingOAuthRequest(ctx context.Context, options types.GenerateOptions, model string, accessToken string, headerStyle HeaderStyle) (types.ChatCompletionStream, error) {
 	// Client-side rate limiting (Gemini doesn't provide proactive headers)
 	waitCtx, cancel := context.WithTimeout(ctx, time.Second*10)
 	defer cancel()
@@ -231,7 +285,10 @@ func (p *GeminiProvider) makeStreamingStandardAPICallWithOAuth(ctx context.Conte
 	}
 
 	// Prepare standard request (same as API key path)
-	requestBody := p.prepareStandardRequest(options)
+	requestBody, err := p.prepareStandardRequest(options)
+	if err != nil {
+		return nil, err
+	}
 
 	// Check if using Code Assist backend - wrap request if needed
 	var requestToMarshal interface{}
@@ -275,9 +332,17 @@ func (p *GeminiProvider) makeStreamingStandardAPICallWithOAuth(ctx context.Conte
 			WithOriginalErr(err)
 	}
 
+	// Set standard headers
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("User-Agent", telemetry.GetUserAgent())
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", accessToken))
+
+	// Apply header style for Code Assist backend
+	if p.backendRouter.GetBackend() == BackendCodeAssist {
+		ApplyHeaderStyle(req, headerStyle)
+	} else {
+		// Use default telemetry user agent for non-Code Assist
+		req.Header.Set("User-Agent", telemetry.GetUserAgent())
+	}
 
 	resp, err := p.httpClient.Do(ctx, req)
 	if err != nil {
@@ -380,7 +445,11 @@ func (p *GeminiProvider) makeStreamingAPICallWithAPIKey(ctx context.Context, opt
 
 	// Add tools if provided
 	if len(options.Tools) > 0 {
-		requestBody.Tools = convertToGeminiTools(options.Tools)
+		tools, err := convertToGeminiTools(options.Tools)
+		if err != nil {
+			return nil, err
+		}
+		requestBody.Tools = tools
 	}
 
 	// Check if using Code Assist backend - wrap request if needed

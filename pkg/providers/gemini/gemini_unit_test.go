@@ -515,7 +515,10 @@ func TestPrepareStandardRequest(t *testing.T) {
 		Prompt: "Test prompt",
 	}
 
-	req := provider.prepareStandardRequest(options)
+	req, err := provider.prepareStandardRequest(options)
+	if err != nil {
+		t.Fatalf("prepareStandardRequest() returned unexpected error: %v", err)
+	}
 
 	if len(req.Contents) != 1 {
 		t.Errorf("Expected 1 content, got %d", len(req.Contents))
@@ -545,7 +548,10 @@ func TestPrepareStandardRequest_WithMessages(t *testing.T) {
 		},
 	}
 
-	req := provider.prepareStandardRequest(options)
+	req, err := provider.prepareStandardRequest(options)
+	if err != nil {
+		t.Fatalf("prepareStandardRequest() returned unexpected error: %v", err)
+	}
 
 	if len(req.Contents) != 2 {
 		t.Errorf("Expected 2 contents, got %d", len(req.Contents))
@@ -569,7 +575,10 @@ func TestPrepareStandardRequest_WithTools(t *testing.T) {
 		},
 	}
 
-	req := provider.prepareStandardRequest(options)
+	req, err := provider.prepareStandardRequest(options)
+	if err != nil {
+		t.Fatalf("prepareStandardRequest() returned unexpected error: %v", err)
+	}
 
 	if len(req.Tools) == 0 {
 		t.Error("Expected tools to be included")

@@ -77,7 +77,11 @@ func (e *GeminiExtension) StandardToProvider(request types.StandardRequest) (int
 
 	// Convert tools if provided
 	if len(request.Tools) > 0 {
-		geminiReq.Tools = convertToGeminiTools(request.Tools)
+		tools, err := convertToGeminiTools(request.Tools)
+		if err != nil {
+			return nil, err
+		}
+		geminiReq.Tools = tools
 	}
 
 	// Handle Gemini-specific parameters from metadata
